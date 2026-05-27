@@ -1,0 +1,27 @@
+{
+  "name": "@graphforge/render",
+  "version": "0.0.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./browser": {
+      "types": "./dist/browser.d.ts",
+      "import": "./dist/browser.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json --outDir dist --declaration --emitDeclarationOnly false"
+  },
+  "dependencies": {
+    "@graphforge/core": "0.0.0",
+    "sharp": "^0.33.5"
+  }
+}

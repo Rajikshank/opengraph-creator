@@ -1,0 +1,31 @@
+{
+  "name": "@graphforge/cli",
+  "version": "0.0.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "graphforge": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "codex-skill",
+    "studio-dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json --outDir dist --declaration --emitDeclarationOnly false && node scripts/copy-studio-dist.mjs && node scripts/copy-bundled-workspace-deps.mjs"
+  },
+  "dependencies": {
+    "@graphforge/core": "0.0.0",
+    "@graphforge/render": "0.0.0",
+    "fflate": "^0.8.3"
+  },
+  "bundledDependencies": [
+    "@graphforge/core",
+    "@graphforge/render"
+  ],
+  "bundleDependencies": [
+    "@graphforge/core",
+    "@graphforge/render"
+  ]
+}

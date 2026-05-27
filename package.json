@@ -1,0 +1,35 @@
+{
+  "name": "graphforge-og-studio",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Codex-first local Open Graph image studio with editable layered projects.",
+  "scripts": {
+    "clean": "node scripts/clean.mjs",
+    "build": "npm run clean && npm run build -w @graphforge/core && npm run build -w @graphforge/render && npm run build -w @graphforge/studio && npm run build -w @graphforge/cli",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint .",
+    "smoke:workflow": "node scripts/workflow-smoke.mjs",
+    "smoke:studio": "node scripts/studio-smoke.mjs",
+    "smoke:package": "node scripts/package-install-smoke.mjs",
+    "smoke:agent-handoff": "node scripts/agent-handoff-smoke.mjs",
+    "dev:studio": "npm run dev -w @graphforge/studio",
+    "graphforge": "tsx packages/cli/src/index.ts"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@typescript-eslint/eslint-plugin": "^8.18.1",
+    "@typescript-eslint/parser": "^8.18.1",
+    "eslint": "^9.17.0",
+    "playwright": "^1.60.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^4.0.15"
+  }
+}
