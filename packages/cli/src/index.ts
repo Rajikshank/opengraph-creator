@@ -94,6 +94,8 @@ export interface DoctorReport {
   checks: DoctorCheck[];
 }
 
+type SessionWaitTarget = "default" | "exported" | "publish-preview" | "publish-confirmed" | "agent-request" | "terminal";
+
 export function createProjectFromArgs(args: CreateProjectArgs): OgProject {
   const input = {
     name: args.name,
@@ -245,9 +247,11 @@ export async function runCli(argv: string[]): Promise<void> {
     }
     if (subcommand === "wait") {
       if (!args.id) throw new Error("--id is required");
-      const deadline = Date.now() + Number(args.timeout ?? 0);
+      const waitTarget = parseSessionWaitTarget(args.until);
+      const timeout = parseWaitTimeout(args.timeout);
+      const deadline = Number.isFinite(timeout) ? Date.now() + timeout : Number.POSITIVE_INFINITY;
       let session = await readGraphForgeSession(repo, args.id);
-      while (Date.now() < deadline && !session.publishRequests.length && !session.exports.length) {
+      while (Date.now() < deadline && !sessionMatchesWaitTarget(session, waitTarget)) {
         await new Promise((resolve) => setTimeout(resolve, 250));
         session = await readGraphForgeSession(repo, args.id);
       }
@@ -308,7 +312,7 @@ export async function runCli(argv: string[]): Promise<void> {
       console.log(args.json === "true" ? JSON.stringify(launch, null, 2) : `GraphForge Studio launched at ${url}`);
       return;
     }
-    throw new Error("Unknown session command. Use create, open, wait, or status.");
+    throw new Error("Unknown session command. Use create, open, launch, wait, or status.");
   }
 
   if (command === "document") {
@@ -673,6 +677,42 @@ function parseArgs(args: string[]): Record<string, string> {
   return parsed;
 }
 
+function parseSessionWaitTarget(value?: string): SessionWaitTarget {
+  if (!value) return "default";
+  if (
+    value === "exported" ||
+    value === "publish-preview" ||
+    value === "publish-confirmed" ||
+    value === "agent-request" ||
+    value === "terminal"
+  ) {
+    return value;
+  }
+  throw new Error("--until must be one of exported, publish-preview, publish-confirmed, agent-request, terminal");
+}
+
+function parseWaitTimeout(value?: string): number {
+  if (!value) return 0;
+  if (value === "never" || value === "0") return Number.POSITIVE_INFINITY;
+  const timeout = Number(value);
+  if (!Number.isFinite(timeout) || timeout < 0) throw new Error("--timeout must be a positive number, 0, or never");
+  return timeout;
+}
+
+function sessionMatchesWaitTarget(session: Awaited<ReturnType<typeof readGraphForgeSession>>, target: SessionWaitTarget): boolean {
+  const hasExport = session.exports.length > 0;
+  const hasPreview = session.publishRequests.some((request) => request.status === "preview");
+  const hasConfirmed = session.publishRequests.some((request) => request.status === "confirmed");
+  const hasAgentRequest = (session.agentRequests ?? []).some((request) => request.status === "requested");
+
+  if (target === "exported") return hasExport;
+  if (target === "publish-preview") return hasPreview;
+  if (target === "publish-confirmed") return hasConfirmed;
+  if (target === "agent-request") return hasAgentRequest;
+  if (target === "terminal") return hasConfirmed || session.status === "published";
+  return hasExport || hasPreview || hasConfirmed || hasAgentRequest;
+}
+
 function parseStrategy(value?: string): GenerationStrategy {
   return value === "pages" || value === "hybrid" ? value : "common";
 }
@@ -753,7 +793,7 @@ Commands:
   graphforge session create --repo <path> --agent codex|claude|opencode --strategy common|pages|hybrid
   graphforge session open --repo <path> --id <session-id>
   graphforge session launch --repo <path> --id <session-id> --open true --waitReady true --json
-  graphforge session wait --id <session-id> --timeout 30000
+  graphforge session wait --id <session-id> --until exported|publish-preview|publish-confirmed|agent-request|terminal --timeout 30000|0|never
   graphforge session status --id <session-id>
   graphforge studio --port 5123
   graphforge render --name <name> --out og.svg

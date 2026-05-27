@@ -4,6 +4,7 @@ export interface PlatformPreviewCard {
   id: string;
   title: string;
   chrome: "social" | "chat" | "browser";
+  frameKind: "feed" | "chat" | "mobile" | "browser";
   icon: "twitter" | "linkedin" | "facebook" | "discord" | "slack" | "message-circle" | "messages-square" | "globe";
   aspectLabel: string;
   previewSize: { width: number; height: number };
@@ -17,6 +18,7 @@ export function getPlatformPreviewCards(_project: OgProject): PlatformPreviewCar
       id: "x",
       title: "X / Twitter",
       chrome: "social",
+      frameKind: "feed",
       icon: "twitter",
       aspectLabel: "1.91:1",
       previewSize: { width: 1200, height: 630 },
@@ -27,6 +29,7 @@ export function getPlatformPreviewCards(_project: OgProject): PlatformPreviewCar
       id: "linkedin",
       title: "LinkedIn",
       chrome: "social",
+      frameKind: "feed",
       icon: "linkedin",
       aspectLabel: "1.91:1",
       previewSize: { width: 1200, height: 630 },
@@ -37,6 +40,7 @@ export function getPlatformPreviewCards(_project: OgProject): PlatformPreviewCar
       id: "facebook",
       title: "Facebook",
       chrome: "social",
+      frameKind: "feed",
       icon: "facebook",
       aspectLabel: "1.91:1",
       previewSize: { width: 1200, height: 630 },
@@ -47,6 +51,7 @@ export function getPlatformPreviewCards(_project: OgProject): PlatformPreviewCar
       id: "discord",
       title: "Discord",
       chrome: "chat",
+      frameKind: "chat",
       icon: "discord",
       aspectLabel: "1.91:1",
       previewSize: { width: 1200, height: 630 },
@@ -57,6 +62,7 @@ export function getPlatformPreviewCards(_project: OgProject): PlatformPreviewCar
       id: "slack",
       title: "Slack",
       chrome: "chat",
+      frameKind: "chat",
       icon: "slack",
       aspectLabel: "1.91:1",
       previewSize: { width: 1200, height: 630 },
@@ -67,6 +73,7 @@ export function getPlatformPreviewCards(_project: OgProject): PlatformPreviewCar
       id: "whatsapp",
       title: "WhatsApp",
       chrome: "chat",
+      frameKind: "mobile",
       icon: "message-circle",
       aspectLabel: "1.91:1",
       previewSize: { width: 1200, height: 630 },
@@ -77,6 +84,7 @@ export function getPlatformPreviewCards(_project: OgProject): PlatformPreviewCar
       id: "imessage",
       title: "iMessage",
       chrome: "chat",
+      frameKind: "mobile",
       icon: "messages-square",
       aspectLabel: "compact",
       previewSize: { width: 1200, height: 630 },
@@ -87,6 +95,7 @@ export function getPlatformPreviewCards(_project: OgProject): PlatformPreviewCar
       id: "browser",
       title: "Browser / Search",
       chrome: "browser",
+      frameKind: "browser",
       icon: "globe",
       aspectLabel: "metadata",
       previewSize: { width: 1200, height: 630 },

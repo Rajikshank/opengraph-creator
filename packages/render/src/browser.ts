@@ -66,8 +66,9 @@ function renderLayer(layer: OgLayer, project: OgProject): string {
 function renderImageLayer(layer: Extract<OgLayer, { kind: "image" | "logo" | "screenshot" }>, common: string): string {
   const preserveAspectRatio = getImagePreserveAspectRatio(layer.fit, layer.focalPoint);
   const crop = layer.crop;
+  const clipId = `gf-image-clip-${safeId(layer.id)}`;
   if (!crop) {
-    return `<image href="${escapeXml(layer.src)}" x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" preserveAspectRatio="${preserveAspectRatio}" ${common}/>`;
+    return `<g ${common} clip-path="url(#${clipId})"><image href="${escapeXml(layer.src)}" x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" preserveAspectRatio="${preserveAspectRatio}"/>${renderEffectOverlays(layer)}</g>`;
   }
 
   const cropWidth = Math.max(0.01, clamp(crop.width, 0.01, 1));
@@ -78,9 +79,8 @@ function renderImageLayer(layer: Extract<OgLayer, { kind: "image" | "logo" | "sc
   const cropY = clamp(crop.y, 0, 1 - cropHeight);
   const x = Math.round(layer.x - cropX * width);
   const y = Math.round(layer.y - cropY * height);
-  const clipId = `gf-image-clip-${safeId(layer.id)}`;
 
-  return `<g ${common} clip-path="url(#${clipId})"><image href="${escapeXml(layer.src)}" x="${x}" y="${y}" width="${width}" height="${height}" preserveAspectRatio="${preserveAspectRatio}"/></g>`;
+  return `<g ${common} clip-path="url(#${clipId})"><image href="${escapeXml(layer.src)}" x="${x}" y="${y}" width="${width}" height="${height}" preserveAspectRatio="${preserveAspectRatio}"/>${renderEffectOverlays(layer)}</g>`;
 }
 
 function renderShapeLayer(layer: Extract<OgLayer, { kind: "background" | "shape" }>, project: OgProject, common: string): string {
@@ -166,29 +166,30 @@ function renderEffectDefs(layer: OgLayer, project: OgProject): string[] {
 }
 
 function renderImageDefs(layer: OgLayer): string[] {
-  if (!(layer.kind === "image" || layer.kind === "logo" || layer.kind === "screenshot") || !layer.crop) return [];
+  if (!(layer.kind === "image" || layer.kind === "logo" || layer.kind === "screenshot")) return [];
   return [
     `<clipPath id="gf-image-clip-${safeId(layer.id)}"><rect x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" rx="${layer.borderRadius}"/></clipPath>`
   ];
 }
 
-function renderEffectOverlays(layer: Extract<OgLayer, { kind: "background" | "shape" }>): string {
+function renderEffectOverlays(layer: Extract<OgLayer, { kind: "background" | "shape" | "image" | "logo" | "screenshot" }>): string {
   if (!("effects" in layer)) return "";
   const id = safeId(layer.id);
   const overlays: string[] = [];
+  const radius = "borderRadius" in layer ? layer.borderRadius : layer.radius;
   if (layer.effects.noise) {
     overlays.push(
-      `<rect x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" rx="${layer.radius}" filter="url(#gf-noise-${id})" opacity="${clamp(layer.effects.noise.amount, 0, 1)}" style="mix-blend-mode:${layer.effects.noise.blendMode}"/>`
+      `<rect x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" rx="${radius}" filter="url(#gf-noise-${id})" opacity="${clamp(layer.effects.noise.amount, 0, 1)}" style="mix-blend-mode:${layer.effects.noise.blendMode}"/>`
     );
   }
   if (layer.effects.lighting) {
     overlays.push(
-      `<rect x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" rx="${layer.radius}" fill="url(#gf-lighting-${id})"/>`
+      `<rect x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" rx="${radius}" fill="url(#gf-lighting-${id})"/>`
     );
   }
   if (layer.effects.vignette) {
     overlays.push(
-      `<rect x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" rx="${layer.radius}" fill="url(#gf-vignette-${id})"/>`
+      `<rect x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" rx="${radius}" fill="url(#gf-vignette-${id})"/>`
     );
   }
   return overlays.join("");

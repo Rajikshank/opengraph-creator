@@ -107,6 +107,47 @@ describe("GraphForge renderer", () => {
     expect(svg).not.toContain('id="gf-glow"');
   });
 
+  it("clips image effects to image layer bounds in platform and export SVG", () => {
+    const project = createDefaultProject({ name: "Image Effects", strategy: "common" });
+    const imageLayer: ImageLayer = {
+      id: "hero-image",
+      kind: "image",
+      name: "Hero Image",
+      x: 180,
+      y: 110,
+      width: 420,
+      height: 260,
+      rotation: 0,
+      opacity: 1,
+      locked: false,
+      hidden: false,
+      src: "data:image/png;base64,abc",
+      fit: "contain",
+      borderRadius: 18,
+      effects: {
+        shadow: false,
+        glow: { enabled: true, color: "#f6c36b", radius: 28, intensity: 0.65, spread: 2 },
+        blur: 0,
+        noise: { amount: 0.12, blendMode: "overlay" },
+        lighting: { type: "spotlight", x: 0.42, y: 0.36, intensity: 0.5, color: "#ffffff" },
+        vignette: 0.18
+      }
+    };
+    project.layers = [imageLayer];
+
+    const svg = renderProjectToSvg(project);
+
+    expect(svg).toContain('id="gf-image-clip-hero-image"');
+    expect(svg).toContain('clip-path="url(#gf-image-clip-hero-image)"');
+    expect(svg).toContain('id="gf-noise-hero-image"');
+    expect(svg).toContain('id="gf-lighting-hero-image"');
+    expect(svg).toContain('id="gf-vignette-hero-image"');
+    expect(svg).toContain('id="gf-glow-hero-image"');
+    expect(svg).toContain('filter="url(#gf-glow-hero-image)"');
+    expect(svg).toContain('mix-blend-mode:overlay');
+    expect(svg).toContain('rx="18"');
+  });
+
   it("exports edited text styling attributes seen in the Studio canvas", () => {
     const project = createDefaultProject({ name: "Text Style", strategy: "common" });
     project.layers = project.layers.map((layer) =>

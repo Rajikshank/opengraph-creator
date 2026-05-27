@@ -6,7 +6,7 @@ export type LayerKind = "background" | "text" | "image" | "logo" | "screenshot" 
 export type SourceArtifactKind = "graphforge-json" | "svg" | "html" | "image";
 export type SourceArtifactOrigin = "codex" | "claude" | "manual" | "library";
 export type AgentKind = "codex" | "claude" | "opencode" | "manual" | "unknown";
-export type SessionStatus = "draft" | "waiting-for-agent" | "editing" | "exported" | "publish-requested" | "published" | "stale";
+export type SessionStatus = "draft" | "waiting-for-agent" | "editing" | "exported" | "publish-requested" | "published" | "agent-requested" | "stale";
 
 export * from "./document-package.js";
 
@@ -175,6 +175,15 @@ export interface GraphForgePublishRequest {
   createdAt: string;
 }
 
+export interface GraphForgeAgentRequest {
+  path: string;
+  prompt: string;
+  documentPath: string;
+  expectedOutput: string;
+  status: "requested" | "resolved";
+  createdAt: string;
+}
+
 export interface GraphForgeSession {
   id: string;
   repo: string;
@@ -187,6 +196,7 @@ export interface GraphForgeSession {
   incomingArtifacts: GraphForgeSourceArtifact[];
   exports: GraphForgeSessionExport[];
   publishRequests: GraphForgePublishRequest[];
+  agentRequests?: GraphForgeAgentRequest[];
   lastHeartbeatAt: string;
   pendingAction?: string;
   recoverInstructions: string[];

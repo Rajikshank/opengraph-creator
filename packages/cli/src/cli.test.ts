@@ -505,6 +505,49 @@ describe("GraphForge CLI helpers", () => {
     expect(layout).toContain("/og.png");
   });
 
+  it("waits for confirmed publish instead of treating preview as terminal", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "graphforge-cli-wait-confirm-"));
+
+    await runCli(["session", "create", "--repo", dir, "--id", "wait-session", "--agent", "codex", "--strategy", "common"]);
+    await runCli(["publish", "--preview", "--repo", dir, "--session", "wait-session", "--framework", "vite", "--image", "public/og.png"]);
+    const started = Date.now();
+    await runCli([
+      "session",
+      "wait",
+      "--repo",
+      dir,
+      "--id",
+      "wait-session",
+      "--until",
+      "publish-confirmed",
+      "--timeout",
+      "100"
+    ]);
+    const previewElapsed = Date.now() - started;
+
+    const previewSession = await readFile(join(dir, ".graphforge", "sessions", "wait-session", "session.json"), "utf8");
+    expect(previewElapsed).toBeGreaterThanOrEqual(75);
+    expect(previewSession).toContain('"status": "preview"');
+    expect(previewSession).not.toContain('"status": "confirmed"');
+
+    await runCli(["publish", "--confirm", "--repo", dir, "--session", "wait-session", "--framework", "vite", "--image", "public/og.png"]);
+    await runCli([
+      "session",
+      "wait",
+      "--repo",
+      dir,
+      "--id",
+      "wait-session",
+      "--until",
+      "publish-confirmed",
+      "--timeout",
+      "1000"
+    ]);
+    const confirmedSession = await readFile(join(dir, ".graphforge", "sessions", "wait-session", "session.json"), "utf8");
+
+    expect(confirmedSession).toContain('"status": "confirmed"');
+  });
+
   it("imports generated SVG, HTML, and image assets into editable project wrappers", async () => {
     const dir = await mkdtemp(join(tmpdir(), "graphforge-import-"));
     const svgPath = join(dir, "generated.svg");

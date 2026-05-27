@@ -21,9 +21,20 @@ describe("platform previews", () => {
       title: "X / Twitter",
       aspectLabel: "1.91:1",
       chrome: "social",
+      frameKind: "feed",
       icon: "twitter",
       previewSize: { width: 1200, height: 630 }
     });
+    expect(cards.map((card) => card.frameKind)).toEqual([
+      "feed",
+      "feed",
+      "feed",
+      "chat",
+      "chat",
+      "mobile",
+      "mobile",
+      "browser"
+    ]);
     expect(cards.every((card) => card.previewSize.width > 0 && card.previewSize.height > 0)).toBe(true);
   });
 });

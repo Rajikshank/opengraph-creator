@@ -134,16 +134,32 @@ describe("GraphForge studio local API", () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ repo: root, sessionId: "api-session", imagePath: "public/og.png", framework: "next" })
     });
+    const confirmResponse = await fetch(`${handle.url}/api/session/publish-request`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ repo: root, sessionId: "api-session", imagePath: "public/og.png", framework: "next", confirmed: true })
+    });
+    const agentRequestResponse = await fetch(`${handle.url}/api/session/agent-request`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ repo: root, sessionId: "api-session", prompt: "Revise this layered document." })
+    });
     const readResponse = await fetch(`${handle.url}/api/session?id=api-session&repo=${encodeURIComponent(root)}`);
 
     expect(createResponse.status).toBe(200);
     expect(eventResponse.status).toBe(200);
     expect(exportResponse.status).toBe(200);
     expect(publishResponse.status).toBe(200);
+    expect(confirmResponse.status).toBe(200);
+    expect(agentRequestResponse.status).toBe(200);
     expect((await readResponse.json()).session).toMatchObject({
       id: "api-session",
       exports: [expect.objectContaining({ path: "public/og.png" })],
-      publishRequests: [expect.objectContaining({ imagePath: "public/og.png" })]
+      publishRequests: [
+        expect.objectContaining({ imagePath: "public/og.png", status: "preview" }),
+        expect.objectContaining({ imagePath: "public/og.png", status: "confirmed" })
+      ],
+      agentRequests: [expect.objectContaining({ prompt: "Revise this layered document." })]
     });
   });
 

@@ -28,6 +28,7 @@ import {
 import {
   appendSessionEvent,
   createGraphForgeSession,
+  createAgentRequest,
   createPublishRequest,
   readGraphForgeSession,
   recordSessionExport
@@ -103,6 +104,14 @@ interface PublishRequestBody {
   framework?: "next" | "astro" | "nuxt" | "remix" | "vite" | "html" | "unknown";
   page?: string;
   confirmed?: boolean;
+}
+
+interface AgentRequestBody {
+  repo?: string;
+  sessionId: string;
+  prompt: string;
+  documentPath?: string;
+  expectedOutput?: string;
 }
 
 interface SessionDocumentBody {
@@ -280,6 +289,22 @@ async function handleRequest(input: {
       framework: body.framework,
       page: body.page,
       confirmed: body.confirmed ?? false
+    });
+    sendJson(input.response, 200, { request });
+    return;
+  }
+
+  if (url.pathname === "/api/session/agent-request" && input.request.method === "POST") {
+    const body = (await readJson(input.request)) as AgentRequestBody;
+    const repo = body.repo ?? input.sessionRepo ?? input.library.root;
+    const { getSessionPaths } = await import("./session.js");
+    const paths = getSessionPaths(repo, body.sessionId);
+    const request = await createAgentRequest({
+      repo,
+      sessionId: body.sessionId,
+      prompt: body.prompt,
+      documentPath: body.documentPath ?? paths.documentFile,
+      expectedOutput: body.expectedOutput ?? paths.documentFile
     });
     sendJson(input.response, 200, { request });
     return;

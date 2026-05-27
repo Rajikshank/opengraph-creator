@@ -6,6 +6,7 @@ import { createDefaultProject, unpackStudioDocument } from "@graphforge/core";
 import {
   appendSessionEvent,
   atomicWriteJson,
+  createAgentRequest,
   createGraphForgeSession,
   createPublishRequest,
   getSessionPaths,
@@ -94,5 +95,33 @@ describe("GraphForge durable sessions", () => {
     expect(request).toMatchObject({ imagePath: "public/og.png", status: "preview" });
     expect(await readFile(paths.exportJson, "utf8")).toContain("public/og.png");
     expect(await readFile(paths.publishRequestJson, "utf8")).toContain("preview");
+  });
+
+  it("records confirmed publish and agent revision requests for deterministic waits", async () => {
+    const repo = await mkdtemp(join(tmpdir(), "graphforge-session-confirm-"));
+    await createGraphForgeSession({ repo, id: "session-4" });
+    const paths = getSessionPaths(repo, "session-4");
+
+    const confirmed = await createPublishRequest({
+      repo,
+      sessionId: "session-4",
+      imagePath: "public/og.png",
+      framework: "vite",
+      page: "/",
+      confirmed: true
+    });
+    const agentRequest = await createAgentRequest({
+      repo,
+      sessionId: "session-4",
+      prompt: "Revise the lighting and keep editable text.",
+      documentPath: paths.documentFile
+    });
+    const session = await readGraphForgeSession(repo, "session-4");
+
+    expect(confirmed.status).toBe("confirmed");
+    expect(agentRequest).toMatchObject({ status: "requested", expectedOutput: paths.documentFile });
+    expect(session.publishRequests.some((request) => request.status === "confirmed")).toBe(true);
+    expect(session.agentRequests?.[0]).toMatchObject({ prompt: "Revise the lighting and keep editable text." });
+    expect(await readFile(paths.agentRequestJson, "utf8")).toContain("Revise the lighting");
   });
 });

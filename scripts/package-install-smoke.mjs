@@ -19,6 +19,9 @@ const projectPath = join(workspace, "installed.og.json");
 const documentPath = join(workspace, "installed.ogdoc");
 const svgPath = join(workspace, "public", "og.svg");
 const jpgPath = join(appDir, "public", "og.jpg");
+const cliOnlyProjectPath = join(cliOnlyAppDir, "cli-only.og.json");
+const cliOnlyDocumentPath = join(cliOnlyAppDir, "cli-only.ogdoc");
+const cliOnlyPngPath = join(cliOnlyAppDir, "public", "og.png");
 
 await mkdir(appDir, { recursive: true });
 await mkdir(cliOnlyAppDir, { recursive: true });
@@ -31,6 +34,10 @@ await writeFile(
 );
 await runNpm(["install", cliTarball, "--no-audit", "--no-fund"], { cwd: cliOnlyAppDir });
 await runCommand(["doctor", "--json"], cliOnlyAppDir);
+await runCommand(["new", "--name", "CliOnly", "--strategy", "common", "--mode", "template", "--out", cliOnlyProjectPath], cliOnlyAppDir);
+await runCommand(["document", "pack", "--project", cliOnlyProjectPath, "--out", cliOnlyDocumentPath], cliOnlyAppDir);
+await runCommand(["document", "validate", "--source", cliOnlyDocumentPath], cliOnlyAppDir);
+await runCommand(["export", "--project", cliOnlyProjectPath, "--format", "png", "--out", cliOnlyPngPath], cliOnlyAppDir);
 await runNpm(["install", coreTarball, renderTarball, cliTarball, "--no-audit", "--no-fund"], { cwd: appDir });
 await runCommand(["doctor", "--json"]);
 await runCommand(["install-skill", "--agent", "all", "--home", homeDir]);
@@ -49,6 +56,9 @@ const svgInfo = await stat(svgPath);
 const jpgInfo = await stat(jpgPath);
 const jpgMetadata = await sharp(jpgPath).metadata();
 const jpgPixels = await sharp(jpgPath).raw().toBuffer();
+const cliOnlyPngInfo = await stat(cliOnlyPngPath);
+const cliOnlyPngMetadata = await sharp(cliOnlyPngPath).metadata();
+const cliOnlyPngPixels = await sharp(cliOnlyPngPath).raw().toBuffer();
 const session = JSON.parse(await readFile(join(appDir, ".graphforge", "sessions", sessionId, "session.json"), "utf8"));
 const publishRequest = JSON.parse(await readFile(join(appDir, ".graphforge", "sessions", sessionId, "publish-request.json"), "utf8"));
 const html = await readFile(join(appDir, "index.html"), "utf8");
@@ -65,6 +75,9 @@ assert((await stat(join(homeDir, ".opencode", "skills", "graphforge-og-studio", 
 assert(jpgMetadata.width === 1200 && jpgMetadata.height === 630 && jpgMetadata.format === "jpeg", "JPEG export did not preserve exact OG dimensions");
 assert(jpgInfo.size > 10_000 && jpgInfo.size < 1_000_000, `JPEG export size is outside the expected compressed range: ${jpgInfo.size}`);
 assert(new Set(jpgPixels.subarray(0, Math.min(jpgPixels.length, 5000))).size > 1, "JPEG export appears blank");
+assert(cliOnlyPngMetadata.width === 1200 && cliOnlyPngMetadata.height === 630 && cliOnlyPngMetadata.format === "png", "CLI-only PNG export did not preserve exact OG dimensions");
+assert(cliOnlyPngInfo.size > 10_000 && cliOnlyPngInfo.size < 1_000_000, `CLI-only PNG export size is outside the expected compressed range: ${cliOnlyPngInfo.size}`);
+assert(new Set(cliOnlyPngPixels.subarray(0, Math.min(cliOnlyPngPixels.length, 5000))).size > 1, "CLI-only PNG export appears blank");
 assert(session.exports.some((item) => item.path === jpgPath && item.format === "jpg"), "session did not record the JPEG export");
 assert(publishRequest.status === "preview", "publish preview request was not recorded");
 assert(!html.includes("og:image"), "publish preview mutated app metadata");
@@ -79,10 +92,13 @@ console.log(
       packages,
       project: projectPath,
       document: documentPath,
+      cliOnlyDocument: cliOnlyDocumentPath,
       render: svgPath,
       renderBytes: svgInfo.size,
       jpeg: jpgPath,
       jpegBytes: jpgInfo.size,
+      cliOnlyPng: cliOnlyPngPath,
+      cliOnlyPngBytes: cliOnlyPngInfo.size,
       publishStatus: publishRequest.status
     },
     null,

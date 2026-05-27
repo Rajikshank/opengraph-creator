@@ -874,7 +874,7 @@ input[type="range"] {
   height: 100%;
   min-height: 0;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 12px;
   padding: 12px;
   border-left: 1px solid var(--line);
@@ -886,11 +886,6 @@ input[type="range"] {
   padding: 68px 22px 18px;
   background: var(--stage-bg);
   overflow: hidden;
-}
-
-.platform-stage .platform-frame {
-  width: min(860px, 100%);
-  justify-self: center;
 }
 
 .preview-dock-header {
@@ -907,20 +902,30 @@ input[type="range"] {
   gap: 4px;
 }
 
+.platform-preview-shell {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 142px minmax(0, 1fr);
+  gap: 12px;
+  overflow: hidden;
+}
+
 .platform-preview-body {
   min-height: 0;
   display: grid;
   place-items: center;
   overflow: auto;
-  padding: 4px 2px;
+  padding: 8px;
   scrollbar-width: thin;
   scrollbar-color: #4a4136 #111214;
 }
 
 .platform-frame {
+  width: min(820px, 100%);
+  height: min(520px, 100%);
+  min-height: 340px;
   display: grid;
   place-items: center;
-  min-height: 498px;
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -930,7 +935,8 @@ input[type="range"] {
 
 .platform-frame-shell {
   width: min(640px, 100%);
-  min-height: 456px;
+  height: 100%;
+  min-height: 0;
   display: grid;
   align-content: center;
   gap: 10px;
@@ -942,7 +948,7 @@ input[type="range"] {
 }
 
 .platform-preview-image-slot {
-  width: min(560px, 100%);
+  width: min(494px, 100%);
   justify-self: center;
   aspect-ratio: 1200 / 630;
   display: grid;
@@ -1177,9 +1183,15 @@ input[type="range"] {
 
 .platform-switcher {
   min-width: 0;
+  min-height: 0;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: 1fr;
+  align-content: start;
   gap: 7px;
+  overflow: auto;
+  padding-right: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: #4a4136 #111214;
 }
 
 .platform-switcher button {
@@ -1271,6 +1283,26 @@ input[type="range"] {
     height: auto;
   }
 
+  .platform-preview-shell {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .platform-switcher {
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(132px, 1fr);
+    grid-template-columns: none;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 0 0 2px;
+  }
+
+  .platform-frame {
+    width: 100%;
+    height: auto;
+    min-height: 320px;
+  }
+
   .tool-palette {
     position: static;
     flex-direction: row;
@@ -1302,6 +1334,6 @@ input[type="range"] {
   }
 
   .platform-preview-image-slot {
-    width: min(252px, 100%);
+    width: min(241px, 100%);
   }
 }

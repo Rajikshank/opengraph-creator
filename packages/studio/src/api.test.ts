@@ -4,6 +4,7 @@ import {
   appendSessionEventViaApi,
   createAgentHandoffViaApi,
   createPublishRequestViaApi,
+  createSessionAgentRequestViaApi,
   createSessionViaApi,
   exportProjectViaApi,
   importSourceViaApi,
@@ -114,7 +115,9 @@ describe("studio API client", () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({ session: { id: "s1", status: "editing" } })))
       .mockResolvedValueOnce(new Response(JSON.stringify({ event: { id: "e1", sessionId: "s1", type: "agent.waiting" } })))
       .mockResolvedValueOnce(new Response(JSON.stringify({ session: { id: "s1", status: "exported" } })))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ request: { imagePath: "public/og.png", status: "preview" } })));
+      .mockResolvedValueOnce(new Response(JSON.stringify({ request: { imagePath: "public/og.png", status: "preview" } })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ request: { imagePath: "public/og.png", status: "confirmed" } })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ request: { prompt: "Revise lighting", status: "requested" } })));
 
     await expect(createSessionViaApi(fetchMock, { id: "s1", agent: "codex", strategy: "common" })).resolves.toMatchObject({
       id: "s1"
@@ -135,6 +138,12 @@ describe("studio API client", () => {
     await expect(
       createPublishRequestViaApi(fetchMock, { sessionId: "s1", imagePath: "public/og.png", framework: "next" })
     ).resolves.toMatchObject({ status: "preview" });
+    await expect(
+      createPublishRequestViaApi(fetchMock, { sessionId: "s1", imagePath: "public/og.png", framework: "next", confirmed: true })
+    ).resolves.toMatchObject({ status: "confirmed" });
+    await expect(
+      createSessionAgentRequestViaApi(fetchMock, { sessionId: "s1", prompt: "Revise lighting" })
+    ).resolves.toMatchObject({ status: "requested" });
   });
 
   it("retries transient local API failures before returning data", async () => {

@@ -5,6 +5,7 @@ import {
   type AgentKind,
   type ExportFormat,
   type Framework,
+  type GraphForgeAgentRequest,
   type GenerationMode,
   type GenerationStrategy,
   type GraphForgePublishRequest,
@@ -23,6 +24,7 @@ export interface SessionPaths {
   projectJson: string;
   exportJson: string;
   publishRequestJson: string;
+  agentRequestJson: string;
 }
 
 export interface CreateSessionInput {
@@ -52,6 +54,14 @@ export interface CreatePublishRequestInput {
   confirmed: boolean;
 }
 
+export interface CreateAgentRequestInput {
+  repo: string;
+  sessionId: string;
+  prompt: string;
+  documentPath: string;
+  expectedOutput?: string;
+}
+
 export function getSessionPaths(repo: string, sessionId: string): SessionPaths {
   const root = join(repo, ".graphforge", "sessions");
   const sessionDir = join(root, sessionId);
@@ -64,7 +74,8 @@ export function getSessionPaths(repo: string, sessionId: string): SessionPaths {
     documentFile: join(sessionDir, "document.ogdoc"),
     projectJson: join(sessionDir, "project.og.json"),
     exportJson: join(sessionDir, "export.json"),
-    publishRequestJson: join(sessionDir, "publish-request.json")
+    publishRequestJson: join(sessionDir, "publish-request.json"),
+    agentRequestJson: join(sessionDir, "agent-request.json")
   };
 }
 
@@ -85,6 +96,7 @@ export async function createGraphForgeSession(input: CreateSessionInput): Promis
     incomingArtifacts: [],
     exports: [],
     publishRequests: [],
+    agentRequests: [],
     lastHeartbeatAt: now,
     pendingAction: "agent-generate-og-source",
     recoverInstructions: [
@@ -179,6 +191,34 @@ export async function createPublishRequest(input: CreatePublishRequestInput): Pr
   await appendSessionEvent(input.repo, input.sessionId, {
     type: input.confirmed ? "session.publish.confirmed" : "session.publish.preview",
     message: input.confirmed ? "Publish confirmed" : "Publish preview requested",
+    data: request as unknown as Record<string, unknown>
+  });
+  return request;
+}
+
+export async function createAgentRequest(input: CreateAgentRequestInput): Promise<GraphForgeAgentRequest> {
+  const paths = getSessionPaths(input.repo, input.sessionId);
+  const session = await readGraphForgeSession(input.repo, input.sessionId);
+  const request: GraphForgeAgentRequest = {
+    path: paths.agentRequestJson,
+    prompt: input.prompt,
+    documentPath: input.documentPath,
+    expectedOutput: input.expectedOutput ?? paths.documentFile,
+    status: "requested",
+    createdAt: new Date().toISOString()
+  };
+  const next: GraphForgeSession = {
+    ...session,
+    status: "agent-requested",
+    agentRequests: [...(session.agentRequests ?? []), request],
+    lastHeartbeatAt: new Date().toISOString(),
+    pendingAction: "agent-revise-document"
+  };
+  await atomicWriteJson(paths.agentRequestJson, request);
+  await writeGraphForgeSession(next);
+  await appendSessionEvent(input.repo, input.sessionId, {
+    type: "agent.requested",
+    message: "Agent revision requested",
     data: request as unknown as Record<string, unknown>
   });
   return request;

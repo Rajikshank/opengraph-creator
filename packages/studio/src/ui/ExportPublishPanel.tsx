@@ -21,6 +21,9 @@ export function ExportPublishPanel() {
   const [framework, setFramework] = useState<Framework>("unknown");
   const [quality, setQuality] = useState(82);
   const [target, setTarget] = useState("public/og.png");
+  const [hasExported, setHasExported] = useState(false);
+  const [hasPreviewRequest, setHasPreviewRequest] = useState(false);
+  const [hasConfirmedPublish, setHasConfirmedPublish] = useState(false);
 
   const exportProject = async () => {
     if (!project) return;
@@ -29,6 +32,9 @@ export function ExportPublishPanel() {
       await saveProjectViaApi(fetch, project);
       const result = await exportProjectViaApi(fetch, { projectId: project.projectId, format, target, quality, repo: session?.repo });
       setLastExportSizeBytes(result.fileSizeBytes);
+      setHasExported(true);
+      setHasPreviewRequest(false);
+      setHasConfirmedPublish(false);
       if (session) {
         await recordSessionExportViaApi(fetch, {
           repo: session.repo,
@@ -53,9 +59,34 @@ export function ExportPublishPanel() {
     }
     try {
       await createPublishRequestViaApi(fetch, { repo: session.repo, sessionId: session.id, imagePath: target, framework, confirmed: false });
+      setHasPreviewRequest(true);
+      setHasConfirmedPublish(false);
       toast.success("Publish preview request created");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Publish request failed");
+    }
+  };
+
+  const confirmPublishHandoff = async () => {
+    if (!session) {
+      toast.error("Open an agent session before confirming publish");
+      return;
+    }
+    if (!hasExported) {
+      toast.error("Export the OG image before confirming publish");
+      return;
+    }
+    if (!hasPreviewRequest) {
+      toast.error("Create a publish preview before confirming handoff");
+      return;
+    }
+    try {
+      await createPublishRequestViaApi(fetch, { repo: session.repo, sessionId: session.id, imagePath: target, framework, confirmed: true });
+      setHasPreviewRequest(true);
+      setHasConfirmedPublish(true);
+      toast.success("Publish confirmed for agent handoff");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Publish confirmation failed");
     }
   };
 
@@ -116,6 +147,24 @@ export function ExportPublishPanel() {
       <button type="button" className="secondary-action" onClick={createPublishPreview}>
         <Send size={15} /> Create publish preview
       </button>
+      <button
+        type="button"
+        className="secondary-action"
+        disabled={!hasExported || !hasPreviewRequest || hasConfirmedPublish}
+        title={
+          !hasExported
+            ? "Export first"
+            : !hasPreviewRequest
+              ? "Create publish preview first"
+              : hasConfirmedPublish
+                ? "Publish already confirmed"
+                : "Confirm publish handoff for the coding agent"
+        }
+        onClick={confirmPublishHandoff}
+      >
+        <Send size={15} /> Confirm publish handoff
+      </button>
+      {hasConfirmedPublish ? <p className="quiet-copy">Waiting for agent to wire metadata.</p> : hasPreviewRequest ? <p className="quiet-copy">Preview ready. Confirm when the metadata handoff is approved.</p> : null}
       <button type="button" className="secondary-action" onClick={askAgentToWire}>
         <Send size={15} /> Ask agent to wire exports
       </button>

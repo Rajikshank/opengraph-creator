@@ -24,30 +24,32 @@ export function PreviewDock({ variant = "dock" }: { variant?: "dock" | "stage" }
         </div>
         <PlatformMeta card={active} />
       </header>
-      <div className="platform-preview-body">
-        <ActivePlatformPreview card={active} projectName={project.name} svg={svg} />
+      <div className={`platform-preview-shell platform-preview-${active.frameKind}`}>
+        <div className="platform-switcher" role="tablist" aria-label="Preview platform">
+          {cards.map((card) => (
+            <button
+              type="button"
+              key={card.id}
+              role="tab"
+              aria-selected={active.id === card.id}
+              className={active.id === card.id ? "active" : ""}
+              onClick={() => setActiveId(card.id)}
+            >
+              <PlatformIcon card={card} />
+              <span>{card.title}</span>
+              <small>{card.aspectLabel}</small>
+            </button>
+          ))}
+        </div>
+        <div className="platform-preview-body">
+          <ActivePlatformPreview card={active} projectName={project.name} svg={svg} />
+        </div>
       </div>
       <div className="platform-insight-row">
         <p className="preview-hint">{active.cropHint}</p>
         <small className={warnings.length ? "preview-warning" : "preview-ok"}>
           {warnings.length ? `${warnings.length} warning${warnings.length === 1 ? "" : "s"}` : "No crop warnings"}
         </small>
-      </div>
-      <div className="platform-switcher" role="tablist" aria-label="Preview platform">
-        {cards.map((card) => (
-          <button
-            type="button"
-            key={card.id}
-            role="tab"
-            aria-selected={active.id === card.id}
-            className={active.id === card.id ? "active" : ""}
-            onClick={() => setActiveId(card.id)}
-          >
-            <PlatformIcon card={card} />
-            <span>{card.title}</span>
-            <small>{card.aspectLabel}</small>
-          </button>
-        ))}
       </div>
     </section>
   );
@@ -60,7 +62,7 @@ function ActivePlatformPreview({ card, projectName, svg }: { card: PlatformPrevi
     </div>
   );
 
-  if (card.id === "discord" || card.id === "slack") {
+  if (card.frameKind === "chat") {
     return (
       <div className={`platform-frame ${card.chrome} ${card.id}`}>
         <div className="platform-frame-shell">
@@ -84,7 +86,7 @@ function ActivePlatformPreview({ card, projectName, svg }: { card: PlatformPrevi
     );
   }
 
-  if (card.id === "whatsapp" || card.id === "imessage") {
+  if (card.frameKind === "mobile") {
     return (
       <div className={`platform-frame ${card.chrome} ${card.id}`}>
         <div className="platform-frame-shell mobile-shell">
@@ -104,7 +106,7 @@ function ActivePlatformPreview({ card, projectName, svg }: { card: PlatformPrevi
     );
   }
 
-  if (card.id === "browser") {
+  if (card.frameKind === "browser") {
     return (
       <div className={`platform-frame ${card.chrome} ${card.id}`}>
         <div className="platform-frame-shell browser-shell">

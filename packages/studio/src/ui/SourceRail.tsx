@@ -2,7 +2,7 @@ import { useState, type ChangeEvent } from "react";
 import { FileCode2, PanelLeftClose, Send, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { unpackStudioDocument, type GraphForgeSourceArtifact, type SourceArtifactKind } from "@graphforge/core";
-import { createAgentHandoffViaApi, importSourceViaApi, saveProjectViaApi, uploadSessionAssetViaApi } from "../api";
+import { createSessionAgentRequestViaApi, importSourceViaApi, saveSessionDocumentViaApi, uploadSessionAssetViaApi } from "../api";
 import { createManualProject, createProjectWithImportedAsset, useStudio } from "./studio-store";
 
 export function SourceRail({ onClose }: { onClose?: () => void }) {
@@ -12,7 +12,7 @@ export function SourceRail({ onClose }: { onClose?: () => void }) {
   const attachSourceArtifact = useStudio((state) => state.attachSourceArtifact);
   const [source, setSource] = useState(".graphforge/sessions/<id>/document.ogdoc");
   const [kind, setKind] = useState<SourceArtifactKind>("svg");
-  const [prompt, setPrompt] = useState("Generate or revise the OG document. Keep text and layout objects editable; use image generation only for asset layers unless pure-image mode was selected.");
+  const [prompt, setPrompt] = useState("Revise the current OG document. Keep text and layout objects editable; use generated images only as asset layers unless pure-image mode was selected.");
 
   const attachArtifact = (artifact: GraphForgeSourceArtifact) => {
     if (artifact.inline && (artifact.kind === "svg" || artifact.kind === "image")) {
@@ -117,22 +117,23 @@ export function SourceRail({ onClose }: { onClose?: () => void }) {
       toast.success(`Attached ${file.name}`);
   };
 
-  const createHandoff = async () => {
-    if (!project) {
-      toast.error("Open or import a project before creating a handoff");
+  const requestAgentRevision = async () => {
+    if (!session || !project) {
+      toast.error("Open through an agent session before requesting a revision");
       return;
     }
     try {
-      await saveProjectViaApi(fetch, project);
-      const result = await createAgentHandoffViaApi(fetch, {
-        project,
+      await saveSessionDocumentViaApi(fetch, { repo: session.repo, sessionId: session.id, project });
+      const result = await createSessionAgentRequestViaApi(fetch, {
+        repo: session.repo,
+        sessionId: session.id,
         prompt,
-        target: "public/og.png",
-        format: "png"
+        documentPath: session.activeDocumentPath,
+        expectedOutput: session.activeDocumentPath
       });
-      toast.success(`Agent handoff saved: ${result.path}`);
+      toast.success(`Agent revision requested: ${result.path}`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Agent handoff failed");
+      toast.error(error instanceof Error ? error.message : "Agent revision request failed");
     }
   };
 
@@ -173,13 +174,21 @@ export function SourceRail({ onClose }: { onClose?: () => void }) {
         <button type="button" className="primary-action" onClick={importGeneratedAsset}>
           <Upload size={15} /> Import into document
         </button>
-        <label>
-          Agent request
-          <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} />
-        </label>
-        <button type="button" className="secondary-action" onClick={createHandoff}>
-          <Send size={15} /> Create agent handoff
-        </button>
+        {session ? (
+          <>
+            <label>
+              Agent revision
+              <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} />
+            </label>
+            <button type="button" className="secondary-action" onClick={requestAgentRevision}>
+              <Send size={15} /> Request agent revision
+            </button>
+          </>
+        ) : (
+          <button type="button" className="secondary-action" disabled title="Open through an agent session to request revisions">
+            <Send size={15} /> Agent revision unavailable
+          </button>
+        )}
       </section>
     </aside>
   );

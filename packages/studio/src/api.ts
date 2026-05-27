@@ -2,6 +2,7 @@ import type {
   AgentKind,
   ExportFormat,
   Framework,
+  GraphForgeAgentRequest,
   GenerationMode,
   GenerationStrategy,
   GraphForgePublishRequest,
@@ -114,6 +115,14 @@ export interface PublishRequestInput {
   framework?: Framework;
   page?: string;
   confirmed?: boolean;
+}
+
+export interface AgentRevisionRequestInput {
+  repo?: string;
+  sessionId: string;
+  prompt: string;
+  documentPath?: string;
+  expectedOutput?: string;
 }
 
 type FetchLike = typeof fetch;
@@ -301,6 +310,22 @@ export async function createPublishRequestViaApi(
   const body = await requestJson<{ request: GraphForgePublishRequest }>(fetcher, {
     url: "/api/session/publish-request",
     label: "Could not create publish request",
+    init: {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(request)
+    }
+  });
+  return body.request;
+}
+
+export async function createSessionAgentRequestViaApi(
+  fetcher: FetchLike = fetch,
+  request: AgentRevisionRequestInput
+): Promise<GraphForgeAgentRequest> {
+  const body = await requestJson<{ request: GraphForgeAgentRequest }>(fetcher, {
+    url: "/api/session/agent-request",
+    label: "Could not create agent revision request",
     init: {
       method: "POST",
       headers: { "content-type": "application/json" },

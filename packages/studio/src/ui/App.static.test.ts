@@ -42,7 +42,7 @@ describe("reengineered studio UI contract", () => {
       "PreviewDock",
       "ExportPublishPanel",
       "Import into document",
-      "Create agent handoff",
+      "Request agent revision",
       "No agent detected",
       "?session",
       "Ask agent to wire exports",

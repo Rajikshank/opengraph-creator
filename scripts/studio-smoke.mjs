@@ -105,8 +105,7 @@ async function verifyStudioViewport(page, url, viewport, screenshotPath, options
     await page.getByRole("button", { name: /^Save$/ }).click();
     await page.getByText(/Saved /).waitFor({ timeout: 5_000 });
     await assertGraphForgeToast(page);
-    await page.getByRole("button", { name: /Create agent handoff/i }).click();
-    await page.getByText(/Agent handoff saved/).waitFor({ timeout: 5_000 });
+    await assertManualStudioHasNoSessionAgentRequest(page);
 
     await page.getByRole("tab", { name: /Layers/i }).click();
     await page.getByTitle("Add text layer").click();
@@ -323,8 +322,37 @@ async function assertImageNoiseClippedToContainedImage(page) {
   if (metrics.outsideImageStrip > 8 || metrics.insideImageStrip < metrics.outsideImageStrip + 5) {
     throw new Error(`Image noise is not clipped to the rendered image bounds: ${JSON.stringify(metrics)}`);
   }
+  await assertPlatformPreviewUsesImageEffects(page);
   await setRangeValue(page, "Noise", "0");
   await page.getByRole("tab", { name: /Edit/i }).click();
+}
+
+async function assertPlatformPreviewUsesImageEffects(page) {
+  await page.getByRole("radio", { name: /Platform Preview/i }).click();
+  await page.locator(".preview-image-large svg").waitFor({ timeout: 5_000 });
+  const previewState = await page.evaluate(() => {
+    const svg = document.querySelector(".preview-image-large svg");
+    const imageSlot = document.querySelector(".platform-preview-image-slot");
+    if (!svg || !imageSlot) throw new Error("Platform preview SVG or image slot missing.");
+    const rect = imageSlot.getBoundingClientRect();
+    const markup = svg.outerHTML;
+    return {
+      width: Math.round(rect.width),
+      height: Math.round(rect.height),
+      hasNoise: markup.includes("gf-noise-"),
+      hasImageClip: markup.includes("gf-image-clip-"),
+      hasClippedGroup: markup.includes('clip-path="url(#gf-image-clip-')
+    };
+  });
+  if (!previewState.hasNoise || !previewState.hasImageClip || !previewState.hasClippedGroup) {
+    throw new Error(`Platform preview is not using the current image effects SVG: ${JSON.stringify(previewState)}`);
+  }
+  if (previewState.width < 240 || previewState.height < 120) {
+    throw new Error(`Platform preview image slot is too small after effects: ${JSON.stringify(previewState)}`);
+  }
+  await assertPlatformPreviewContained(page);
+  await page.getByRole("radio", { name: /^Canvas$/i }).click();
+  await page.locator("canvas").waitFor({ timeout: 5_000 });
 }
 
 async function assertSourceToggleInToolbar(page) {
@@ -365,6 +393,14 @@ async function assertGraphForgeToast(page) {
   });
   if (styles.borderRadius === "0px" || styles.boxShadow === "none") {
     throw new Error(`GraphForge toast still looks like an unstyled default toast: ${JSON.stringify(styles)}`);
+  }
+}
+
+async function assertManualStudioHasNoSessionAgentRequest(page) {
+  const button = page.getByRole("button", { name: /Agent revision unavailable/i });
+  await button.waitFor({ timeout: 5_000 });
+  if (await button.isEnabled()) {
+    throw new Error("Manual Studio mode should not expose a live session-scoped agent request.");
   }
 }
 
