@@ -138,6 +138,9 @@ describe("reengineered studio UI contract", () => {
     expect(buttonsWithoutType).toEqual([]);
     expect(uiSource).toContain("KonvaImage");
     expect(uiSource).toContain("useLayerImage");
+    expect(uiSource).toContain("ImagePlaceholderThumbnail");
+    expect(uiSource).toContain("Replace with source art");
+    expect(uiSource).not.toContain('fill="#292e33"');
   });
 
   it("uses owned controls instead of raw default form elements for studio editing", () => {

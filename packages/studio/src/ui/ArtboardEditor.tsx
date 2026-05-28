@@ -302,10 +302,71 @@ function ImageLayerNode({ layer, accent }: { layer: ImageLayer; accent: string }
     );
   }
   return (
-    <EffectfulNode effects={layer.effects} accent={accent} cacheKey={`${layer.width}:${layer.height}:${layer.name}`}>
-      <Rect width={layer.width} height={layer.height} fill="#292e33" cornerRadius={layer.borderRadius} stroke="#58616b" />
-      <KonvaText x={12} y={12} width={Math.max(20, layer.width - 24)} text={layer.name} fontSize={18} fill="#c8d0d8" />
+    <EffectfulNode effects={layer.effects} accent={accent} cacheKey={`image-placeholder:${layer.width}:${layer.height}:${layer.name}:${accent}`}>
+      <ImagePlaceholderThumbnail layer={layer} accent={accent} />
     </EffectfulNode>
+  );
+}
+
+function ImagePlaceholderThumbnail({ layer, accent }: { layer: ImageLayer; accent: string }) {
+  const radius = Math.max(0, layer.borderRadius);
+  const padding = Math.max(14, Math.min(28, Math.min(layer.width, layer.height) * 0.09));
+  const labelSize = Math.max(12, Math.min(18, layer.height * 0.09));
+  const captionSize = Math.max(10, Math.min(13, layer.height * 0.065));
+  const artworkX = padding;
+  const artworkY = padding;
+  const artworkWidth = Math.max(24, layer.width - padding * 2);
+  const artworkHeight = Math.max(18, layer.height - padding * 2);
+  const midY = artworkY + artworkHeight * 0.58;
+  const title = layer.kind === "screenshot" ? "Screenshot slot" : layer.kind === "logo" ? "Logo slot" : "Image slot";
+
+  return (
+    <Group clipX={0} clipY={0} clipWidth={layer.width} clipHeight={layer.height}>
+      <Rect width={layer.width} height={layer.height} cornerRadius={radius} fill="#161412" stroke="#6c604d" strokeWidth={1.2} />
+      <Rect x={artworkX} y={artworkY} width={artworkWidth} height={artworkHeight} cornerRadius={Math.min(18, Math.max(6, radius - 4))} fill="#211d18" stroke="#4b4134" strokeWidth={1} />
+      <Rect x={artworkX + 1} y={artworkY + 1} width={artworkWidth - 2} height={Math.max(22, artworkHeight * 0.22)} cornerRadius={Math.min(14, Math.max(4, radius - 6))} fill="#2a251d" opacity={0.86} />
+      <Line
+        points={[
+          artworkX + artworkWidth * 0.1,
+          midY + artworkHeight * 0.2,
+          artworkX + artworkWidth * 0.34,
+          midY - artworkHeight * 0.22,
+          artworkX + artworkWidth * 0.5,
+          midY + artworkHeight * 0.03,
+          artworkX + artworkWidth * 0.66,
+          midY - artworkHeight * 0.28,
+          artworkX + artworkWidth * 0.9,
+          midY + artworkHeight * 0.2
+        ]}
+        stroke="#d9b06b"
+        strokeWidth={Math.max(2, Math.min(5, layer.height * 0.018))}
+        lineCap="round"
+        lineJoin="round"
+        opacity={0.88}
+      />
+      <Rect x={artworkX + artworkWidth * 0.1} y={midY + artworkHeight * 0.2} width={artworkWidth * 0.8} height={Math.max(2, artworkHeight * 0.018)} cornerRadius={2} fill={accent} opacity={0.76} />
+      <Rect x={artworkX + artworkWidth * 0.08} y={artworkY + artworkHeight * 0.08} width={artworkWidth * 0.18} height={Math.max(5, artworkHeight * 0.035)} cornerRadius={2} fill="#f5d593" opacity={0.92} />
+      <Rect x={artworkX + artworkWidth * 0.31} y={artworkY + artworkHeight * 0.08} width={artworkWidth * 0.1} height={Math.max(5, artworkHeight * 0.035)} cornerRadius={2} fill="#6d6253" opacity={0.8} />
+      <KonvaText
+        x={artworkX + artworkWidth * 0.08}
+        y={artworkY + artworkHeight - labelSize * 2.4}
+        width={artworkWidth * 0.72}
+        text={title}
+        fontFamily="Inter, ui-sans-serif, system-ui"
+        fontSize={labelSize}
+        fontStyle="600"
+        fill="#f5efe4"
+      />
+      <KonvaText
+        x={artworkX + artworkWidth * 0.08}
+        y={artworkY + artworkHeight - captionSize * 1.25}
+        width={artworkWidth * 0.78}
+        text="Replace with source art"
+        fontFamily="Inter, ui-sans-serif, system-ui"
+        fontSize={captionSize}
+        fill="#a99d8b"
+      />
+    </Group>
   );
 }
 

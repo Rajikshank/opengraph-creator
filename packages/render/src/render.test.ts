@@ -50,6 +50,36 @@ describe("GraphForge renderer", () => {
     expect(fillSvg).toContain('preserveAspectRatio="none"');
   });
 
+  it("renders internal image placeholders as real SVG artwork instead of leaking graphforge URLs", () => {
+    const project = createDefaultProject({ name: "Placeholder Render", strategy: "common" });
+    const imageLayer: ImageLayer = {
+      id: "image-slot",
+      kind: "image",
+      name: "Image Slot",
+      x: 140,
+      y: 120,
+      width: 420,
+      height: 260,
+      rotation: 0,
+      opacity: 1,
+      locked: false,
+      hidden: false,
+      src: "graphforge://image-placeholder",
+      fit: "cover",
+      borderRadius: 18,
+      effects: { shadow: false, glow: false, blur: 0 }
+    };
+    project.layers = [imageLayer];
+
+    const svg = renderProjectToSvg(project);
+
+    expect(svg).toContain("Image slot");
+    expect(svg).toContain("Replace with source art");
+    expect(svg).toContain('id="gf-image-clip-image-slot"');
+    expect(svg).toContain('id="gf-image-mask-image-slot"');
+    expect(svg).not.toContain("href=\"graphforge://image-placeholder\"");
+  });
+
   it("renders rich layer effects as SVG defs and overlays", () => {
     const project = createDefaultProject({ name: "Effects Render", strategy: "common" });
     project.layers = project.layers.map((layer) =>

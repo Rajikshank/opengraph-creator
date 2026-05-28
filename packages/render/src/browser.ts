@@ -1,4 +1,4 @@
-import { isGlowEffectEnabled, normalizeGlowEffect, type OgLayer, type OgProject } from "@graphforge/core";
+import { isGlowEffectEnabled, normalizeGlowEffect, type ImageLayer, type OgLayer, type OgProject } from "@graphforge/core";
 
 export function renderProjectToSvg(project: OgProject): string {
   const visibleLayers = project.layers.filter((layer) => !layer.hidden);
@@ -55,6 +55,10 @@ function renderLayer(layer: OgLayer, project: OgProject): string {
     return `<g ${commonWithFilter}><rect x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" rx="${layer.borderRadius}" fill="${project.brand.text}"/><path d="M ${layer.x + 20} ${layer.y + 42} L ${layer.x + 32} ${layer.y + 21} L ${layer.x + 44} ${layer.y + 42} Z" fill="${project.brand.surface}"/></g>`;
   }
 
+  if ((layer.kind === "image" || layer.kind === "screenshot") && layer.src === "graphforge://image-placeholder") {
+    return renderImagePlaceholderLayer(layer, project, common, filter);
+  }
+
   if (layer.kind === "image" || layer.kind === "logo" || layer.kind === "screenshot") {
     return renderImageLayer(layer, common, filter);
   }
@@ -62,7 +66,7 @@ function renderLayer(layer: OgLayer, project: OgProject): string {
   return "";
 }
 
-function renderImageLayer(layer: Extract<OgLayer, { kind: "image" | "logo" | "screenshot" }>, common: string, filter: string): string {
+function renderImageLayer(layer: ImageLayer, common: string, filter: string): string {
   const preserveAspectRatio = getImagePreserveAspectRatio(layer.fit, layer.focalPoint);
   const crop = layer.crop;
   const clipId = `gf-image-clip-${safeId(layer.id)}`;
@@ -83,6 +87,37 @@ function renderImageLayer(layer: Extract<OgLayer, { kind: "image" | "logo" | "sc
   const y = Math.round(layer.y - cropY * height);
 
   return `<g ${common}><g${filterAttr} clip-path="url(#${clipId})"><image href="${escapeXml(layer.src)}" x="${x}" y="${y}" width="${width}" height="${height}" preserveAspectRatio="${preserveAspectRatio}"/></g>${overlays}</g>`;
+}
+
+function renderImagePlaceholderLayer(layer: ImageLayer, project: OgProject, common: string, filter: string): string {
+  const id = safeId(layer.id);
+  const clipId = `gf-image-clip-${id}`;
+  const maskId = `gf-image-mask-${id}`;
+  const filterAttr = filter ? ` filter="${filter}"` : "";
+  const overlays = renderEffectOverlays(layer, { maskId });
+  const radius = layer.borderRadius;
+  const padding = Math.max(14, Math.min(28, Math.min(layer.width, layer.height) * 0.09));
+  const artworkX = layer.x + padding;
+  const artworkY = layer.y + padding;
+  const artworkWidth = Math.max(24, layer.width - padding * 2);
+  const artworkHeight = Math.max(18, layer.height - padding * 2);
+  const labelSize = Math.max(12, Math.min(18, layer.height * 0.09));
+  const captionSize = Math.max(10, Math.min(13, layer.height * 0.065));
+  const midY = artworkY + artworkHeight * 0.58;
+  const title = layer.kind === "screenshot" ? "Screenshot slot" : "Image slot";
+  const mountainStroke = Math.max(2, Math.min(5, layer.height * 0.018));
+
+  return `<g ${common}><g${filterAttr} clip-path="url(#${clipId})">` +
+    `<rect x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" rx="${radius}" fill="#161412" stroke="#6c604d" stroke-width="1.2"/>` +
+    `<rect x="${artworkX}" y="${artworkY}" width="${artworkWidth}" height="${artworkHeight}" rx="${Math.min(18, Math.max(6, radius - 4))}" fill="#211d18" stroke="#4b4134" stroke-width="1"/>` +
+    `<rect x="${artworkX + 1}" y="${artworkY + 1}" width="${Math.max(1, artworkWidth - 2)}" height="${Math.max(22, artworkHeight * 0.22)}" rx="${Math.min(14, Math.max(4, radius - 6))}" fill="#2a251d" opacity="0.86"/>` +
+    `<path d="M ${artworkX + artworkWidth * 0.1} ${midY + artworkHeight * 0.2} L ${artworkX + artworkWidth * 0.34} ${midY - artworkHeight * 0.22} L ${artworkX + artworkWidth * 0.5} ${midY + artworkHeight * 0.03} L ${artworkX + artworkWidth * 0.66} ${midY - artworkHeight * 0.28} L ${artworkX + artworkWidth * 0.9} ${midY + artworkHeight * 0.2}" fill="none" stroke="#d9b06b" stroke-width="${mountainStroke}" stroke-linecap="round" stroke-linejoin="round" opacity="0.88"/>` +
+    `<rect x="${artworkX + artworkWidth * 0.1}" y="${midY + artworkHeight * 0.2}" width="${artworkWidth * 0.8}" height="${Math.max(2, artworkHeight * 0.018)}" rx="2" fill="${escapeXml(project.brand.accent)}" opacity="0.76"/>` +
+    `<rect x="${artworkX + artworkWidth * 0.08}" y="${artworkY + artworkHeight * 0.08}" width="${artworkWidth * 0.18}" height="${Math.max(5, artworkHeight * 0.035)}" rx="2" fill="#f5d593" opacity="0.92"/>` +
+    `<rect x="${artworkX + artworkWidth * 0.31}" y="${artworkY + artworkHeight * 0.08}" width="${artworkWidth * 0.1}" height="${Math.max(5, artworkHeight * 0.035)}" rx="2" fill="#6d6253" opacity="0.8"/>` +
+    `<text x="${artworkX + artworkWidth * 0.08}" y="${artworkY + artworkHeight - labelSize * 1.55}" width="${artworkWidth * 0.72}" font-family="Inter, ui-sans-serif, system-ui" font-size="${labelSize}" font-weight="600" fill="#f5efe4">${title}</text>` +
+    `<text x="${artworkX + artworkWidth * 0.08}" y="${artworkY + artworkHeight - captionSize * 0.45}" width="${artworkWidth * 0.78}" font-family="Inter, ui-sans-serif, system-ui" font-size="${captionSize}" fill="#a99d8b">Replace with source art</text>` +
+    `</g>${overlays}</g>`;
 }
 
 function renderShapeLayer(layer: Extract<OgLayer, { kind: "background" | "shape" }>, project: OgProject, common: string): string {
@@ -206,7 +241,9 @@ function renderImageDefs(layer: OgLayer): string[] {
   if (!(layer.kind === "image" || layer.kind === "logo" || layer.kind === "screenshot")) return [];
   const preserveAspectRatio = getImagePreserveAspectRatio(layer.fit, layer.focalPoint);
   const crop = layer.crop;
-  const image = crop
+  const image = layer.src.startsWith("graphforge://")
+    ? `<rect x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" rx="${layer.borderRadius}" fill="#ffffff"/>`
+    : crop
     ? getCroppedImageGeometry(layer, preserveAspectRatio)
     : `<image href="${escapeXml(layer.src)}" x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" preserveAspectRatio="${preserveAspectRatio}"/>`;
   return [
