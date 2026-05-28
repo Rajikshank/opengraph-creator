@@ -33,7 +33,8 @@ import {
   createAgentRequest,
   createPublishRequest,
   readGraphForgeSession,
-  recordSessionExport
+  recordSessionExport,
+  restartGraphForgeSession
 } from "./session.js";
 
 export interface CreateStudioServerOptions {
@@ -124,6 +125,12 @@ interface AgentRequestBody {
   prompt: string;
   documentPath?: string;
   expectedOutput?: string;
+}
+
+interface SessionRestartBody {
+  repo?: string;
+  sessionId: string;
+  reason?: string;
 }
 
 interface SessionDocumentBody {
@@ -327,6 +334,15 @@ async function handleRequest(input: {
       expectedOutput: body.expectedOutput ?? paths.documentFile
     });
     sendJson(input.response, 200, { request });
+    return;
+  }
+
+  if (url.pathname === "/api/session/restart" && input.request.method === "POST") {
+    const body = (await readJson(input.request)) as SessionRestartBody;
+    const repo = body.repo ?? input.sessionRepo ?? input.library.root;
+    const session = await restartGraphForgeSession(repo, body.sessionId, body.reason);
+    const request = session.agentRequests?.at(-1);
+    sendJson(input.response, 200, { session, request });
     return;
   }
 

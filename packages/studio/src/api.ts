@@ -146,6 +146,17 @@ export interface AgentRevisionRequestInput {
   expectedOutput?: string;
 }
 
+export interface RestartSessionRequestInput {
+  repo?: string;
+  sessionId: string;
+  reason?: string;
+}
+
+export interface RestartSessionResponse {
+  session: GraphForgeSession;
+  request: GraphForgeAgentRequest;
+}
+
 type FetchLike = typeof fetch;
 const maxApiAttempts = 3;
 
@@ -379,6 +390,21 @@ export async function createSessionAgentRequestViaApi(
     }
   });
   return body.request;
+}
+
+export async function restartSessionViaApi(
+  fetcher: FetchLike = fetch,
+  request: RestartSessionRequestInput
+): Promise<RestartSessionResponse> {
+  return requestJson<RestartSessionResponse>(fetcher, {
+    url: "/api/session/restart",
+    label: "Could not restart OG generation",
+    init: {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(request)
+    }
+  });
 }
 
 async function requestJson<T>(

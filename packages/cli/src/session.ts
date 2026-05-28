@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
   packStudioDocument,
@@ -25,6 +25,8 @@ export interface SessionPaths {
   exportJson: string;
   publishRequestJson: string;
   agentRequestJson: string;
+  generationBriefJson: string;
+  restartsDir: string;
 }
 
 export interface CreateSessionInput {
@@ -77,7 +79,9 @@ export function getSessionPaths(repo: string, sessionId: string): SessionPaths {
     projectJson: join(sessionDir, "project.og.json"),
     exportJson: join(sessionDir, "export.json"),
     publishRequestJson: join(sessionDir, "publish-request.json"),
-    agentRequestJson: join(sessionDir, "agent-request.json")
+    agentRequestJson: join(sessionDir, "agent-request.json"),
+    generationBriefJson: join(sessionDir, "generation-brief.json"),
+    restartsDir: join(sessionDir, "restarts")
   };
 }
 
@@ -246,6 +250,58 @@ export async function cancelGraphForgeSession(repo: string, sessionId: string, r
   return next;
 }
 
+export async function restartGraphForgeSession(
+  repo: string,
+  sessionId: string,
+  reason = "User requested a fresh OG generation"
+): Promise<GraphForgeSession> {
+  const paths = getSessionPaths(repo, sessionId);
+  const session = await readGraphForgeSession(repo, sessionId);
+  const archiveDir = join(paths.restartsDir, new Date().toISOString().replace(/[:.]/g, "-"));
+  await mkdir(archiveDir, { recursive: true });
+  await archiveSessionFile(paths.documentFile, join(archiveDir, "document.ogdoc"), { removeOriginal: true });
+  await archiveSessionFile(paths.exportJson, join(archiveDir, "export.json"), { removeOriginal: true });
+  await archiveSessionFile(paths.publishRequestJson, join(archiveDir, "publish-request.json"), { removeOriginal: true });
+  await archiveSessionFile(paths.agentRequestJson, join(archiveDir, "agent-request.json"), { removeOriginal: false });
+  await archiveSessionFile(paths.generationBriefJson, join(archiveDir, "generation-brief.json"), { removeOriginal: true });
+
+  const request: GraphForgeAgentRequest = {
+    path: paths.agentRequestJson,
+    prompt:
+      "Restart OG generation from the question gate. Ask the user fresh setup questions before creating a new document. Do not reuse the previous visual brief unless the user explicitly chooses to keep it.",
+    documentPath: paths.documentFile,
+    expectedOutput: paths.documentFile,
+    status: "requested",
+    createdAt: new Date().toISOString()
+  };
+  const next: GraphForgeSession = {
+    ...session,
+    status: "agent-requested",
+    activeProjectId: undefined,
+    activeDocumentPath: undefined,
+    exports: [],
+    publishRequests: [],
+    agentRequests: [...(session.agentRequests ?? []), request],
+    lastHeartbeatAt: new Date().toISOString(),
+    pendingAction: "agent-restart-from-question-gate",
+    recoverInstructions: [
+      `Read ${paths.sessionJson}.`,
+      `Review restart archive ${archiveDir} only if the user asks to recover old work.`,
+      "Ask the GraphForge Question Gate setup questions again.",
+      `Generate a fresh editable Studio document package at ${paths.documentFile}.`,
+      "Validate, launch Studio, and wait for the next user decision."
+    ]
+  };
+  await atomicWriteJson(paths.agentRequestJson, request);
+  await writeGraphForgeSession(next);
+  await appendSessionEvent(repo, sessionId, {
+    type: "session.restart.requested",
+    message: reason,
+    data: { archiveDir, request } as unknown as Record<string, unknown>
+  });
+  return next;
+}
+
 export async function atomicWriteJson(path: string, value: unknown): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   const tmp = `${path}.${Date.now().toString(36)}.tmp`;
@@ -280,5 +336,14 @@ export async function fileExists(path: string): Promise<boolean> {
     return (await stat(path)).isFile();
   } catch {
     return false;
+  }
+}
+
+async function archiveSessionFile(source: string, target: string, options: { removeOriginal: boolean }): Promise<void> {
+  if (!(await fileExists(source))) return;
+  await mkdir(dirname(target), { recursive: true });
+  await copyFile(source, target);
+  if (options.removeOriginal) {
+    await unlink(source);
   }
 }

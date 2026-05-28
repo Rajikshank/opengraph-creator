@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Download, Send } from "lucide-react";
+import { Download, RotateCcw, Send } from "lucide-react";
 import type { ExportFormat, Framework } from "@graphforge/core";
 import {
   createAgentHandoffViaApi,
@@ -8,6 +8,7 @@ import {
   exportProjectPagesViaApi,
   exportProjectViaApi,
   recordSessionExportViaApi,
+  restartSessionViaApi,
   saveProjectViaApi,
   saveSessionDocumentViaApi
 } from "../api";
@@ -29,7 +30,8 @@ export function ExportPublishPanel() {
   const [hasExported, setHasExported] = useState(false);
   const [hasPreviewRequest, setHasPreviewRequest] = useState(false);
   const [hasConfirmedPublish, setHasConfirmedPublish] = useState(false);
-  const [busyAction, setBusyAction] = useState<"export" | "preview" | "confirm" | "handoff" | null>(null);
+  const [restartConfirmOpen, setRestartConfirmOpen] = useState(false);
+  const [busyAction, setBusyAction] = useState<"export" | "preview" | "confirm" | "handoff" | "restart" | null>(null);
   const isBusy = busyAction !== null;
 
   const runGuardedOperation = async (action: NonNullable<typeof busyAction>, operation: () => Promise<void>) => {
@@ -231,6 +233,32 @@ export function ExportPublishPanel() {
     }
   };
 
+  const restartOgGeneration = async () => {
+    if (!session) return;
+    try {
+      if (project) await saveSessionDocumentViaApi(fetch, { repo: session.repo, sessionId: session.id, project });
+      await restartSessionViaApi(fetch, {
+        repo: session.repo,
+        sessionId: session.id,
+        reason: "User requested Restart OG generation from Studio"
+      });
+      setPageImages([]);
+      setHasExported(false);
+      setHasPreviewRequest(false);
+      setHasConfirmedPublish(false);
+      setRestartConfirmOpen(false);
+      notifyStudioSuccess("Restart requested. The agent will ask fresh OG setup questions.");
+    } catch (error) {
+      notifyStudioError(
+        normalizeStudioError(error, {
+          kind: "agent-handoff",
+          title: "Restart request failed",
+          recovery: "Your current document remains open. Retry restart after checking the local session connection."
+        })
+      );
+    }
+  };
+
   return (
     <section className="studio-section">
       <h2 className="section-heading">
@@ -300,6 +328,39 @@ export function ExportPublishPanel() {
       <button type="button" className="secondary-action" disabled={isBusy} onClick={() => void runGuardedOperation("handoff", askAgentToWire)}>
         <Send size={15} /> {busyAction === "handoff" ? "Saving handoff..." : "Ask agent to wire exports"}
       </button>
+      <button
+        type="button"
+        className="secondary-action danger-action"
+        disabled={isBusy || !session}
+        title={session ? "Restart from question gate" : "Open through an agent session to restart generation"}
+        onClick={() => setRestartConfirmOpen(true)}
+      >
+        <RotateCcw size={15} /> Restart OG generation
+      </button>
+      {restartConfirmOpen ? (
+        <div className="modal-scrim" role="presentation">
+          <section className="restart-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="restart-confirm-title">
+            <h3 id="restart-confirm-title">Restart from question gate</h3>
+            <p>
+              GraphForge will archive the current generated document and hand the session back to the agent. The agent must ask fresh
+              setup questions before creating a new OG document.
+            </p>
+            <div className="dialog-actions">
+              <button type="button" className="secondary-action" disabled={isBusy} onClick={() => setRestartConfirmOpen(false)}>
+                Keep current design
+              </button>
+              <button
+                type="button"
+                className="primary-action danger-action"
+                disabled={isBusy}
+                onClick={() => void runGuardedOperation("restart", restartOgGeneration)}
+              >
+                <RotateCcw size={15} /> {busyAction === "restart" ? "Requesting restart..." : "Restart OG generation"}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </section>
   );
 }

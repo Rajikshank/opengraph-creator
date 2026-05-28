@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, stat } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -12,7 +12,8 @@ import {
   createPublishRequest,
   getSessionPaths,
   readGraphForgeSession,
-  recordSessionExport
+  recordSessionExport,
+  restartGraphForgeSession
 } from "./session";
 
 describe("GraphForge durable sessions", () => {
@@ -171,5 +172,58 @@ describe("GraphForge durable sessions", () => {
     expect(cancelled.pendingAction).toBeUndefined();
     expect(eventLog).toContain("session.cancelled");
     expect(eventLog).toContain("User stopped the handoff from Studio");
+  });
+
+  it("archives generated files and asks the agent to restart from the question gate", async () => {
+    const repo = await mkdtemp(join(tmpdir(), "graphforge-session-restart-"));
+    const project = createDefaultProject({ name: "Restart Me", strategy: "hybrid" });
+    await createGraphForgeSession({ repo, id: "session-restart", agent: "codex", project });
+    const paths = getSessionPaths(repo, "session-restart");
+
+    await recordSessionExport(repo, "session-restart", {
+      path: "public/og.png",
+      format: "png",
+      width: 1200,
+      height: 630,
+      fileSizeBytes: 42_000,
+      createdAt: "2026-05-26T00:00:00.000Z"
+    });
+    await createPublishRequest({
+      repo,
+      sessionId: "session-restart",
+      imagePath: "public/og.png",
+      framework: "next",
+      page: "/",
+      confirmed: false
+    });
+    await createAgentRequest({
+      repo,
+      sessionId: "session-restart",
+      prompt: "Previous revision",
+      documentPath: paths.documentFile
+    });
+
+    const restarted = await restartGraphForgeSession(repo, "session-restart", "User requested a fresh OG direction");
+    const archives = await readdir(paths.restartsDir);
+    const archiveDir = join(paths.restartsDir, archives[0]);
+    const request = JSON.parse(await readFile(paths.agentRequestJson, "utf8"));
+    const eventLog = await readFile(paths.eventsJsonl, "utf8");
+
+    expect(restarted).toMatchObject({
+      status: "agent-requested",
+      pendingAction: "agent-restart-from-question-gate",
+      exports: [],
+      publishRequests: []
+    });
+    expect(restarted.agentRequests?.at(-1)?.prompt).toContain("Restart OG generation from the question gate");
+    expect(request.prompt).toContain("Ask the user fresh setup questions before creating a new document");
+    await expect(stat(join(archiveDir, "document.ogdoc"))).resolves.toMatchObject({ size: expect.any(Number) });
+    await expect(stat(join(archiveDir, "export.json"))).resolves.toMatchObject({ size: expect.any(Number) });
+    await expect(stat(join(archiveDir, "publish-request.json"))).resolves.toMatchObject({ size: expect.any(Number) });
+    await expect(stat(join(archiveDir, "agent-request.json"))).resolves.toMatchObject({ size: expect.any(Number) });
+    await expect(stat(paths.documentFile)).rejects.toThrow();
+    await expect(stat(paths.exportJson)).rejects.toThrow();
+    await expect(stat(paths.publishRequestJson)).rejects.toThrow();
+    expect(eventLog).toContain("session.restart.requested");
   });
 });

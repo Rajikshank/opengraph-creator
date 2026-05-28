@@ -3,7 +3,7 @@ import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createAgentRequest, getSessionPaths } from "../packages/cli/dist/session.js";
+import { createAgentRequest, getSessionPaths, restartGraphForgeSession } from "../packages/cli/dist/session.js";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const cli = join(root, "packages", "cli", "dist", "index.js");
@@ -32,14 +32,25 @@ if (!publishWaitOutput.includes('"status": "published"') || !publishWaitOutput.i
   throw new Error(`Expected published next action, got:\n${publishWaitOutput}`);
 }
 
+await runCli(["session", "create", "--repo", repo, "--id", "restart-loop", "--agent", "opencode", "--strategy", "hybrid"]);
+const restartWait = waitCli(["session", "wait", "--repo", repo, "--id", "restart-loop", "--until", "next-action", "--timeout", "30000"]);
+await delay(250);
+await restartGraphForgeSession(repo, "restart-loop", "Smoke test restart");
+const restartWaitOutput = await restartWait;
+if (!restartWaitOutput.includes('"status": "agent-requested"') || !restartWaitOutput.includes('"pendingAction": "agent-restart-from-question-gate"')) {
+  throw new Error(`Expected restart next action, got:\n${restartWaitOutput}`);
+}
+
 const request = await readFile(join(repo, ".graphforge", "sessions", "agent-loop", "agent-request.json"), "utf8");
 const publish = await readFile(join(repo, ".graphforge", "sessions", "publish-loop", "publish-request.json"), "utf8");
+const restart = await readFile(join(repo, ".graphforge", "sessions", "restart-loop", "agent-request.json"), "utf8");
 
 console.log(JSON.stringify({
   ok: true,
   repo,
   agentRequest: JSON.parse(request).status,
-  publishRequest: JSON.parse(publish).status
+  publishRequest: JSON.parse(publish).status,
+  restartRequest: JSON.parse(restart).status
 }, null, 2));
 
 function runCli(args) {

@@ -52,6 +52,7 @@ When the GraphForge Skill is invoked inside a user app:
 8. If the wait returns `agent-requested`, read `agent-request.json`, revise `document.ogdoc`, validate, relaunch Studio, and wait again. If it returns `published`, read confirmed `publish-request.json` and wire metadata. If it returns `cancelled` or `terminal`, stop without metadata mutation.
 9. Resume from `session.json`, `events.jsonl`, `document.ogdoc`, `export.json`, `publish-request.json`, and `agent-request.json` if interrupted.
 10. Publish only after preview and user confirmation.
+11. If Studio requests `pendingAction: "agent-restart-from-question-gate"`, restart from the setup questions. Do not reuse the previous brief unless the user explicitly asks for it.
 
 ## UI And UX Rules
 

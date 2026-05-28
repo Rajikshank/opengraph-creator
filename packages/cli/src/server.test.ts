@@ -207,6 +207,30 @@ describe("GraphForge studio local API", () => {
     });
   });
 
+  it("restarts a session through the local API and wakes the waiting agent", async () => {
+    const root = await mkdtemp(join(tmpdir(), "graphforge-api-session-restart-"));
+    const library = createLibrary({ root });
+    handle = await createStudioServer({ library, port: 0 });
+
+    await fetch(`${handle.url}/api/session`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ repo: root, id: "api-restart", agent: "codex", strategy: "hybrid", mode: "template" })
+    });
+    const restartResponse = await fetch(`${handle.url}/api/session/restart`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ repo: root, sessionId: "api-restart", reason: "Need a fresh designer brief" })
+    });
+    const body = await restartResponse.json();
+    const request = JSON.parse(await readFile(join(root, ".graphforge", "sessions", "api-restart", "agent-request.json"), "utf8"));
+
+    expect(restartResponse.status).toBe(200);
+    expect(body.session).toMatchObject({ id: "api-restart", status: "agent-requested", pendingAction: "agent-restart-from-question-gate" });
+    expect(body.request.prompt).toContain("Restart OG generation from the question gate");
+    expect(request.prompt).toContain("fresh setup questions");
+  });
+
   it("opens a session from the repo bound to session open without a repo query parameter", async () => {
     const root = await mkdtemp(join(tmpdir(), "graphforge-api-session-bound-repo-"));
     const library = createLibrary({ root: join(root, "library") });

@@ -13,6 +13,7 @@ import {
   readConnectRecipeViaApi,
   readSessionViaApi,
   recordSessionExportViaApi,
+  restartSessionViaApi,
   saveProjectViaApi
 } from "./api";
 
@@ -187,6 +188,33 @@ describe("studio API client", () => {
     await expect(
       createSessionAgentRequestViaApi(fetchMock, { sessionId: "s1", prompt: "Revise lighting" })
     ).resolves.toMatchObject({ status: "requested" });
+  });
+
+  it("requests a question-gate restart through the local API", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          session: { id: "s1", status: "agent-requested", pendingAction: "agent-restart-from-question-gate" },
+          request: { prompt: "Restart OG generation from the question gate.", status: "requested" }
+        })
+      )
+    );
+
+    await expect(
+      restartSessionViaApi(fetchMock, {
+        repo: "D:/app",
+        sessionId: "s1",
+        reason: "Fresh OG direction"
+      })
+    ).resolves.toMatchObject({
+      session: { status: "agent-requested", pendingAction: "agent-restart-from-question-gate" },
+      request: { status: "requested" }
+    });
+    expect(fetchMock).toHaveBeenCalledWith("/api/session/restart", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ repo: "D:/app", sessionId: "s1", reason: "Fresh OG direction" })
+    });
   });
 
   it("retries transient local API failures before returning data", async () => {

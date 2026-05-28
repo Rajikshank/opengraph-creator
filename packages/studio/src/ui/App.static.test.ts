@@ -87,7 +87,11 @@ describe("reengineered studio UI contract", () => {
       "Depth",
       "OG Pages",
       "Apply style to all",
-      "Export all pages"
+      "Export all pages",
+      "Restart OG generation",
+      "Restart from question gate",
+      "restartSessionViaApi",
+      "restart-confirm-dialog"
     ].forEach((token) => expect(uiSource).toContain(token));
 
     expect(uiSource).toContain("readSessionBundleViaApi");
