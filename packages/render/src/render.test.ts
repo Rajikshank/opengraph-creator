@@ -174,6 +174,42 @@ describe("GraphForge renderer", () => {
     expect(svg).toContain('rx="18"');
   });
 
+  it("masks image-only effect overlays to the actual image content for contained transparent assets", () => {
+    const project = createDefaultProject({ name: "Masked Image Effects", strategy: "common" });
+    const imageLayer: ImageLayer = {
+      id: "transparent-logo",
+      kind: "image",
+      name: "Transparent Logo",
+      x: 160,
+      y: 120,
+      width: 420,
+      height: 280,
+      rotation: 0,
+      opacity: 1,
+      locked: false,
+      hidden: false,
+      src: "data:image/png;base64,transparent",
+      fit: "contain",
+      borderRadius: 12,
+      effects: {
+        shadow: false,
+        glow: false,
+        blur: 0,
+        noise: { amount: 0.1, blendMode: "overlay" },
+        lighting: { type: "spotlight", x: 0.5, y: 0.38, intensity: 0.45, color: "#ffffff" },
+        vignette: 0.16
+      }
+    };
+    project.layers = [imageLayer];
+
+    const svg = renderProjectToSvg(project);
+
+    expect(svg).toContain('id="gf-image-mask-transparent-logo"');
+    expect(svg).toContain('mask="url(#gf-image-mask-transparent-logo)"');
+    expect(svg).toContain('style="mix-blend-mode:overlay" mask="url(#gf-image-mask-transparent-logo)"');
+    expect(svg).not.toContain('style="mix-blend-mode:overlay"/>');
+  });
+
   it("exports edited text styling attributes seen in the Studio canvas", () => {
     const project = createDefaultProject({ name: "Text Style", strategy: "common" });
     project.layers = project.layers.map((layer) =>

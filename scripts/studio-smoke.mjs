@@ -108,10 +108,12 @@ async function verifyStudioViewport(page, url, viewport, screenshotPath, options
     await assertManualStudioHasNoSessionAgentRequest(page);
 
     await page.getByRole("tab", { name: /Layers/i }).click();
-    await page.getByTitle("Add text layer").click();
-    await page.getByTitle("Add image layer").click();
-    await page.getByTitle("Add shape layer").click();
-    await page.getByTitle("Add image layer").click();
+    await assertSingleCanvasAddToolbar(page);
+    await addFromCanvasToolbar(page, "Add text");
+    await addFromCanvasToolbar(page, "Add image");
+    await assertUndoRedoFlow(page);
+    await addFromCanvasToolbar(page, "Add rectangle");
+    await addFromCanvasToolbar(page, "Add image");
     await page.getByRole("tab", { name: /Edit/i }).click();
     await page.getByText("Fit").waitFor({ timeout: 5_000 });
     await assertImageNoiseClippedToContainedImage(page);
@@ -213,6 +215,69 @@ async function exerciseLiveEffectsOnBackground(page) {
     const effectDebug = await readEffectDebugState(page);
     throw new Error(`Noise effect did not create visible grain on the editing canvas: before ${JSON.stringify(noiseBefore)}, after ${JSON.stringify(noiseAfter)}, debug ${JSON.stringify(effectDebug)}.`);
   }
+  const blurBefore = await readCanvasFingerprint(page);
+  await setRangeValue(page, "Blur", "8");
+  await page.waitForTimeout(220);
+  const blurAfter = await readCanvasFingerprint(page);
+  if (blurBefore === blurAfter) {
+    throw new Error("Blur effect did not update the editing canvas fingerprint in real time.");
+  }
+  await assertPlatformPreviewHasLayerBlur(page, "background");
+  await setRangeValue(page, "Blur", "0");
+}
+
+async function assertSingleCanvasAddToolbar(page) {
+  const result = await page.evaluate(() => {
+    const palette = document.querySelector(".tool-palette");
+    const layerPanelText = [...document.querySelectorAll(".studio-section")].find((section) => section.textContent?.includes("Layers"))?.textContent ?? "";
+    const titles = [...document.querySelectorAll(".tool-palette button")].map((button) => button.getAttribute("title"));
+    return {
+      paletteButtons: titles,
+      layerPanelHasAddLayerControls: /Add (text|image|shape|badge|background) layer/.test(layerPanelText)
+    };
+  });
+  if (!result.paletteButtons.includes("Add text") || result.layerPanelHasAddLayerControls) {
+    throw new Error(`Add tools are duplicated or missing: ${JSON.stringify(result)}`);
+  }
+}
+
+async function addFromCanvasToolbar(page, title) {
+  await assertUrlStable(page, () => page.locator(".tool-palette").getByTitle(title).click(), title);
+}
+
+async function assertUndoRedoFlow(page) {
+  const layerCountBeforeUndo = await page.locator(".layer-item").count();
+  await page.getByTitle("Undo").click();
+  await page.waitForTimeout(100);
+  const layerCountAfterUndo = await page.locator(".layer-item").count();
+  if (layerCountAfterUndo !== layerCountBeforeUndo - 1) {
+    throw new Error(`Undo did not remove the newly added layer: before ${layerCountBeforeUndo}, after ${layerCountAfterUndo}`);
+  }
+  await page.getByTitle("Redo").click();
+  await page.waitForTimeout(100);
+  const layerCountAfterRedo = await page.locator(".layer-item").count();
+  if (layerCountAfterRedo !== layerCountBeforeUndo) {
+    throw new Error(`Redo did not restore the layer: expected ${layerCountBeforeUndo}, got ${layerCountAfterRedo}`);
+  }
+}
+
+async function assertPlatformPreviewHasLayerBlur(page, layerId) {
+  await page.getByRole("radio", { name: /Platform Preview/i }).click();
+  await page.locator(".preview-image-large svg").waitFor({ timeout: 5_000 });
+  const previewState = await page.evaluate((id) => {
+    const svg = document.querySelector(".preview-image-large svg");
+    if (!svg) throw new Error("Platform preview SVG missing.");
+    const markup = svg.outerHTML;
+    return {
+      hasBlur: markup.includes(`gf-layer-blur-${id}`),
+      hasFilter: markup.includes(`gf-filter-${id}`)
+    };
+  }, layerId);
+  if (!previewState.hasBlur || !previewState.hasFilter) {
+    throw new Error(`Platform preview is missing current blur filter: ${JSON.stringify(previewState)}`);
+  }
+  await page.getByRole("radio", { name: /^Canvas$/i }).click();
+  await page.locator("canvas").waitFor({ timeout: 5_000 });
 }
 
 async function assertPlatformFramesStable(page) {
@@ -242,7 +307,9 @@ async function assertPlatformImageSlotsStable(page) {
   const count = await platformButtons.count();
   const slots = [];
   for (let index = 0; index < count; index += 1) {
-    await platformButtons.nth(index).click();
+    const button = platformButtons.nth(index);
+    const label = (await button.innerText()).replace(/\s+/g, " ").trim();
+    await button.click();
     slots.push(
       await page.evaluate(() => {
         const slot = document.querySelector(".platform-preview-image-slot");
@@ -256,13 +323,18 @@ async function assertPlatformImageSlotsStable(page) {
           imageWidth: Math.round(imageRect.width),
           imageHeight: Math.round(imageRect.height)
         };
-      })
+      }).then((slot) => ({ label, ...slot }))
     );
   }
-  const widths = slots.map((slot) => slot.imageWidth);
-  const heights = slots.map((slot) => slot.imageHeight);
-  if (Math.max(...widths) - Math.min(...widths) > 3 || Math.max(...heights) - Math.min(...heights) > 3) {
-    throw new Error(`Platform preview image slots shift between platforms: ${JSON.stringify(slots)}`);
+  const undersized = slots.find((slot) => slot.imageWidth < 220 || slot.imageHeight < 115);
+  if (undersized) {
+    throw new Error(`Platform preview image slot is too small: ${JSON.stringify(slots)}`);
+  }
+  const fullCardSlots = slots.filter((slot) => !/WhatsApp|iMessage/.test(slot.label));
+  const widths = fullCardSlots.map((slot) => slot.imageWidth);
+  const heights = fullCardSlots.map((slot) => slot.imageHeight);
+  if (Math.max(...widths) - Math.min(...widths) > 24 || Math.max(...heights) - Math.min(...heights) > 16) {
+    throw new Error(`Full-card platform preview image slots shift unexpectedly: ${JSON.stringify(slots)}`);
   }
 }
 

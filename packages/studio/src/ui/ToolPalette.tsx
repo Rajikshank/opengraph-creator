@@ -1,4 +1,4 @@
-import { Circle, ImagePlus, Minus, Square, Type } from "lucide-react";
+import { Circle, ImagePlus, Layers, Minus, Square, Tag, Type } from "lucide-react";
 import { useStudio } from "./studio-store";
 
 export function ToolPalette() {
@@ -13,10 +13,10 @@ export function ToolPalette() {
         <ImagePlus size={15} />
       </button>
       <button type="button" title="Add badge" onClick={() => addLayer("badge")}>
-        <Type size={15} />
+        <Tag size={15} />
       </button>
       <button type="button" title="Add background" onClick={() => addLayer("background")}>
-        <Square size={15} />
+        <Layers size={15} />
       </button>
       <button type="button" title="Add rectangle" onClick={() => addLayer("rectangle")}>
         <Square size={15} />

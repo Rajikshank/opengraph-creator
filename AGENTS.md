@@ -94,6 +94,31 @@ Studio must support:
 
 Konva handles editing interactions. The GraphForge renderer remains the export source of truth, so every supported Studio edit must serialize and export correctly.
 
+## Canvas, Preview, And Export Parity
+
+GraphForge has three visual surfaces: Studio canvas, platform preview, and export. Do not change one surface without proving the other two still reflect the same `.ogdoc` state.
+
+- Preview and export use the GraphForge SVG renderer as the source of truth.
+- Canvas uses Konva for interaction and must stay visually honest with the renderer.
+- Blur must use a real canvas filter with cache invalidation. Do not approximate blur with shadow props.
+- Glow, shadow, noise, lighting, and vignette must remain clipped to the intended layer or rendered asset bounds.
+- Effects work is incomplete until browser smoke proves live canvas changes and platform preview/export SVG changes.
+- If an effect cannot be represented on a layer type, disable or hide that control instead of showing a fake-functional UI.
+
+## History And Fault Tolerance
+
+- Undo/redo must use bounded history so slider and transform edits do not grow memory without limit.
+- Redo history must clear after a new edit.
+- Keyboard shortcuts must ignore text inputs, textareas, selects, and contenteditable fields.
+- Error toasts must use Studio error normalization with a recovery action. Do not show raw stack text or unexplained HTTP codes as the primary message.
+- Safe self-healing may retry, preserve in-memory state, keep inline assets, or show recovery commands. It must not auto-publish, silently flatten `.ogdoc`, or overwrite target app metadata.
+
+## Tool Surface Rules
+
+- Object creation belongs to the canvas tool palette.
+- The layer panel manages existing layers only: select, reorder, hide, lock, duplicate, delete, align, and distribute.
+- Do not reintroduce duplicate add buttons in the layer panel unless the product explicitly changes the tool model and browser smoke is updated.
+
 ## Verification Gates
 
 Before claiming completion, run and inspect:
@@ -104,6 +129,7 @@ Before claiming completion, run and inspect:
 - `npm run lint`
 - `npm run smoke:workflow`
 - `npm run smoke:agent-handoff`
+- `npm run smoke:agent-next-action`
 - `npm run smoke:package`
 - `npm run smoke:studio`
 - `npm pack -w @graphforge/cli --dry-run`
@@ -114,6 +140,9 @@ Also verify:
 - no default generic template loads on normal startup
 - no button click refreshes the UI
 - platform previews use the current rendered image
+- blur, glow, noise, lighting, and vignette update live where supported
+- undo/redo works through toolbar controls and keyboard shortcuts
+- only one object creation toolbar is visible
 - exported PNG/WebP/JPEG are exactly `1200x630`
 - exported raster output is nonblank
 - visual screenshots show no horizontal overflow or broken scrollbars

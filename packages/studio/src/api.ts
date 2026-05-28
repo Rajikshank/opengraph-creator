@@ -361,7 +361,12 @@ async function requestJson<T>(
   for (let attempt = 1; attempt <= maxApiAttempts; attempt += 1) {
     try {
       const response = await fetcher(input.url, input.init);
-      if (response.ok) return (await response.json()) as T;
+      if (response.ok) {
+        if (!isJsonResponse(response)) {
+          throw new Error(`${input.label}: Local Studio API returned HTML instead of JSON. Launch Studio through graphforge studio, not the frontend-only dev server.`);
+        }
+        return (await response.json()) as T;
+      }
       if (!isRetryableStatus(response.status) || attempt === maxApiAttempts) {
         throw new Error(`${input.label}: ${response.status}`);
       }
@@ -378,4 +383,10 @@ async function requestJson<T>(
 
 function isRetryableStatus(status: number): boolean {
   return status === 408 || status === 429 || status >= 500;
+}
+
+function isJsonResponse(response: Response): boolean {
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType) return true;
+  return !contentType.toLowerCase().includes("text/html");
 }

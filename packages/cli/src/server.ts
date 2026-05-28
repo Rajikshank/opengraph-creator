@@ -389,6 +389,11 @@ async function handleRequest(input: {
     return;
   }
 
+  if (url.pathname.startsWith("/api/")) {
+    sendJson(input.response, 404, { error: "Unknown Studio API route." });
+    return;
+  }
+
   await serveStatic(input.response, input.staticDir, url.pathname);
 }
 

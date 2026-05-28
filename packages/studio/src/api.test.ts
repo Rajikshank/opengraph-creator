@@ -195,4 +195,17 @@ describe("studio API client", () => {
     await expect(listProjectsViaApi(clientErrorFetch)).rejects.toThrow("Could not list projects: 404");
     expect(clientErrorFetch).toHaveBeenCalledTimes(1);
   });
+
+  it("reports frontend fallback HTML as a local API launch problem", async () => {
+    const htmlFallbackFetch = vi.fn().mockResolvedValue(
+      new Response("<html lang=\"en\"><body>Studio shell</body></html>", {
+        status: 200,
+        headers: { "content-type": "text/html; charset=utf-8" }
+      })
+    );
+
+    await expect(listProjectsViaApi(htmlFallbackFetch)).rejects.toThrow(
+      "Could not list projects: Local Studio API returned HTML instead of JSON. Launch Studio through graphforge studio, not the frontend-only dev server."
+    );
+  });
 });

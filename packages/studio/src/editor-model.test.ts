@@ -43,6 +43,24 @@ describe("editor model", () => {
     expect(redone.project.layers.find((layer) => layer.id === "headline")).toMatchObject({ width: 640, height: 160 });
   });
 
+  it("keeps undo history bounded and clears redo after a new edit", () => {
+    const project = createDefaultProject({ name: "Editor", strategy: "common" });
+    let session = selectLayer(createEditorSession(project), "headline");
+
+    for (let index = 0; index < 80; index += 1) {
+      session = nudgeSelectedLayer(session, { dx: 1, dy: 0 });
+    }
+
+    expect(session.past).toHaveLength(60);
+
+    const undone = undo(session);
+    expect(undone.future).toHaveLength(1);
+
+    const editedAfterUndo = nudgeSelectedLayer(undone, { dx: 8, dy: 0 });
+    expect(editedAfterUndo.future).toHaveLength(0);
+    expect(editedAfterUndo.past).toHaveLength(60);
+  });
+
   it("updates the selected text layer without losing history", () => {
     const project = createDefaultProject({ name: "Editor", strategy: "common" });
     const session = selectLayer(createEditorSession(project), "headline");
@@ -135,7 +153,8 @@ describe("editor model", () => {
       id: "image-layer",
       kind: "image",
       name: "Image Layer",
-      src: "graphforge://image-placeholder"
+      src: "graphforge://image-placeholder",
+      fit: "contain"
     });
     expect(withBadge.project.layers.at(-1)).toMatchObject({
       id: "badge-layer",

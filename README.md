@@ -1,16 +1,16 @@
 # GraphForge OG Studio
 
-GraphForge is a local, agent-first Open Graph finishing studio for app repositories. A coding agent such as Codex, Claude Code, or OpenCode scans the user's app, generates an editable `.ogdoc` document, opens Studio, waits for the user's decision, then resumes to wire the final image into the app after confirmation.
+GraphForge is a local, agent-first Open Graph finishing studio for app repositories. Codex, Claude Code, OpenCode, or another coding agent inspects the user's app, creates an editable `.ogdoc` document, opens Studio, waits for the user's decision, and resumes only after the user confirms the publish handoff.
 
-GraphForge is not an AI provider client. It does not require OpenAI, Anthropic, or image-generation API keys. The agent does the generation work; Studio handles editing, preview, export, compression, and durable handoff.
+GraphForge is not an AI provider client. It does not require OpenAI, Anthropic, or image-generation API keys. The coding agent owns generation. Studio owns editing, preview, export quality, compression, recovery, and handoff files.
 
-## Core Model
+## Product Model
 
-- `.ogdoc` is the editable master document, similar to a lightweight PSD-style package.
-- PNG, WebP, JPEG, SVG, and HTML can be imported as assets or exported as final output.
-- The bridge between agent and Studio is file-based under `.graphforge/sessions/<id>/`.
-- The agent waits with `graphforge session wait --until next-action`, so the same flow works across Codex, Claude Code, and OpenCode.
-- Metadata is changed only after preview and explicit confirmation.
+- `.ogdoc` is the editable master document and the only default session source of truth.
+- PNG, WebP, JPEG, SVG, HTML, and JSON can be imported as assets or exported outputs, but they do not replace `.ogdoc` unless the user chooses pure-image fallback.
+- Sessions are file-based under `.graphforge/sessions/<id>/` so Codex, Claude Code, and OpenCode can recover from the same state.
+- Metadata is never changed by Studio alone. The agent wires metadata only after preview and explicit confirmation.
+- Platform preview and export use the same renderer path. The editing canvas must keep effect parity with that renderer.
 
 ## Install And Launch
 
@@ -33,16 +33,16 @@ npx @graphforge/cli install-skill --agent claude
 npx @graphforge/cli install-skill --agent opencode
 ```
 
-Manual Studio launch opens a Project Hub. Agent launch opens the generated `.ogdoc` directly.
+Manual launch opens the Project Hub. Agent launch opens the generated session `.ogdoc` directly.
 
 ## Agent Workflow
 
 The installed skill should:
 
-1. Inspect the app framework, routes, metadata, brand assets, screenshots, and copy.
-2. Ask only relevant design questions: strategy, pages, tone, source mode, references, and output format.
+1. Inspect framework, routes, metadata, brand assets, screenshots, and copy.
+2. Ask only relevant designer-style questions: common/per-page/hybrid strategy, output mode, visual tone, pages, references, and final format.
 3. Create a durable session.
-4. Generate an editable `.ogdoc` at `.graphforge/sessions/<id>/document.ogdoc`.
+4. Generate `.graphforge/sessions/<id>/document.ogdoc` with editable layers by default.
 5. Validate the document.
 6. Launch Studio.
 7. Wait for the next Studio decision.
@@ -57,12 +57,10 @@ graphforge session wait --repo . --id "<id>" --until next-action --timeout 0
 When `next-action` returns:
 
 - `agent-requested`: read `agent-request.json`, revise `document.ogdoc`, validate, relaunch Studio, and wait again.
-- `published`: read confirmed `publish-request.json`, then wire metadata into the app.
-- `cancelled` or `terminal`: stop without mutating metadata.
+- `published`: read confirmed `publish-request.json`, preview the metadata change, then wire it into the app.
+- `cancelled` or `terminal`: stop without metadata mutation.
 
 ## Session Files
-
-Each session is recoverable from:
 
 ```text
 .graphforge/sessions/<id>/
@@ -76,20 +74,33 @@ Each session is recoverable from:
   studio.json
 ```
 
-These files are the cross-agent contract. If an agent process stops, rerun the skill and resume from the session files.
+These files are the recovery contract. If an agent process stops, rerun the skill and resume from the session folder.
 
-## Studio Features
+## Studio Capabilities
 
-- State-aware Project Hub for direct CLI launch, repo launch, recovery, and recent documents.
+- Project Hub for direct CLI launch, repo launch, recovery, and recent documents.
 - Layered Konva canvas for text, image, logo, screenshot, shape, badge, and background layers.
-- Image upload, crop, focal point, fit mode, and asset packaging.
+- One canvas-side object toolbar for adding elements.
+- Layer panel for selecting, reordering, hiding, locking, duplicating, deleting, aligning, and distributing layers.
+- Undo/redo with bounded lightweight history and keyboard shortcuts.
+- Image upload, replacement, crop, focal point, fit mode, and asset packaging.
 - Typography controls for font, size, weight, style, color, line height, letter spacing, stroke, and stroke width.
-- Shape controls for fill, border, radius, opacity, rotation, skew, align, distribute, snap, duplicate, lock, hide, reorder, and delete.
-- Effect controls for supported glow, shadow, blur, gradient, noise, lighting, vignette, and blend modes.
-- Platform preview inspector for X/Twitter, LinkedIn, Facebook, Discord, Slack, WhatsApp, iMessage, and browser/search.
+- Shape controls for fill, border, radius, opacity, rotation, skew/perspective, snap, and transform.
+- Effects for supported layer types: blur, shadow, glow, gradient, noise/grain, lighting, vignette, and blend mode.
+- Platform previews for X/Twitter, LinkedIn, Facebook, Discord, Slack, WhatsApp, iMessage, and browser/search.
 - Export to exact `1200x630` PNG, WebP, JPEG, or SVG source.
 
-Unsupported effect/layer combinations are hidden or disabled instead of shown as fake-functional controls.
+Unsupported layer/effect combinations must be hidden or disabled with a clear reason. They must not appear as fake-functional controls.
+
+## Effect Parity Contract
+
+GraphForge has three visual surfaces: Studio canvas, platform preview, and export. A supported effect is complete only when all three surfaces reflect the same serialized `.ogdoc` state.
+
+- Preview/export use the GraphForge SVG renderer as the source of truth.
+- Canvas uses Konva for interaction, but must not silently approximate blur as a shadow.
+- Blur must use real canvas filtering with cache invalidation.
+- Glow, shadow, noise, lighting, and vignette must be clipped to the intended layer bounds.
+- Browser smoke tests must cover live effect changes before a fix is considered complete.
 
 ## Export And Publish
 
@@ -99,7 +110,7 @@ Default final output:
 graphforge export --project project.og.json --format png --out public/og.png
 ```
 
-Optional formats:
+Optional outputs:
 
 ```bash
 graphforge export --project project.og.json --format webp --quality 82 --out public/og.webp
@@ -114,20 +125,20 @@ graphforge publish --preview --repo . --session "<id>" --framework next --image 
 graphforge publish --confirm --repo . --session "<id>" --framework next --image public/og.png
 ```
 
-Preview writes a handoff request only. Confirm writes metadata and preserves backups where applicable.
+Preview writes a handoff request only. Confirm writes the agent handoff state. The coding agent is responsible for applying metadata safely.
 
 ## Package Layout
 
-- `packages/core`: schema, presets, validation, platform warnings, effect capabilities, document package support.
+- `packages/core`: schema, presets, validation, platform warnings, effect capabilities, and `.ogdoc` package support.
 - `packages/render`: SVG renderer and PNG/WebP/JPEG export pipeline.
 - `packages/studio`: React/Vite creative-tool interface.
-- `packages/cli`: local CLI, Studio server, sessions, packaging, skill install, publish helpers.
-- `packages/codex-skill` and `packages/cli/codex-skill`: bundled agent skill source and packaged copy.
-- `scripts`: workflow, package, handoff, and Studio smoke tests.
+- `packages/cli`: CLI, local Studio server, sessions, packaging, skill install, publish helpers.
+- `packages/codex-skill` and `packages/cli/codex-skill`: agent skill source and packaged copy.
+- `scripts`: workflow, package, handoff, agent, and Studio smoke tests.
 
-## Quality Gate
+## Release Gate
 
-Before release or claiming a workflow is fixed:
+Before release or before claiming a workflow fix:
 
 ```bash
 npm run build
@@ -142,11 +153,11 @@ npm run smoke:studio
 npm pack -w @graphforge/cli --dry-run
 ```
 
-Smoke coverage verifies npx-style packaging, skill install, session handoff, Studio startup, browser interaction, platform preview layout, export dimensions, nonblank raster output, and no provider-key requirement.
+The gate must prove: no provider-key requirement, packed/npx-style install works, agent session handoff works, Studio opens the generated `.ogdoc`, effects update live, platform previews stay stable, final raster exports are exact `1200x630`, and output is nonblank.
 
 ## Boundaries
 
-- GraphForge coordinates agent workflows; it does not generate images through provider APIs.
-- Studio is an OG finishing tool, not a full general-purpose design suite.
-- Platform previews are careful local simulations. Deployed URLs should still be checked with live social validators before launch.
-- Dynamic framework metadata may require manual review even after GraphForge writes a safe preview or confirmed handoff.
+- GraphForge coordinates agent workflows; it does not call provider APIs.
+- Studio is an OG finishing tool, not a general-purpose design suite.
+- Platform previews are local simulations. Deployed URLs should still be checked with live social validators before launch.
+- Dynamic framework metadata may still require human review after GraphForge writes a preview or confirmed handoff.

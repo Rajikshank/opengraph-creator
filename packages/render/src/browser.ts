@@ -27,10 +27,11 @@ function renderLayer(layer: OgLayer, project: OgProject): string {
     layer.skewY ? `skewY(${layer.skewY})` : ""
   ].filter(Boolean).join(" ");
   const filter = getFilter(layer);
-  const common = `opacity="${layer.opacity}" transform="${transform}"${filter ? ` filter="${filter}"` : ""}`;
+  const common = `opacity="${layer.opacity}" transform="${transform}"`;
+  const commonWithFilter = `${common}${filter ? ` filter="${filter}"` : ""}`;
 
   if (layer.kind === "background" || layer.kind === "shape") {
-    return renderShapeLayer(layer, project, common);
+    return renderShapeLayer(layer, project, commonWithFilter);
   }
 
   if (layer.kind === "text" || layer.kind === "badge") {
@@ -47,26 +48,29 @@ function renderLayer(layer: OgLayer, project: OgProject): string {
     const strokeWidth = layer.strokeWidth ? ` stroke-width="${layer.strokeWidth}"` : "";
     const fontStyle = layer.fontStyle ? ` font-style="${layer.fontStyle}"` : "";
     const letterSpacing = layer.letterSpacing ? ` letter-spacing="${layer.letterSpacing}"` : "";
-    return `<text x="${x}" y="${layer.y + layer.fontSize}" width="${layer.width}" font-family="${escapeXml(layer.fontFamily)}" font-size="${layer.fontSize}" font-weight="${layer.fontWeight}"${fontStyle}${letterSpacing} fill="${layer.color}"${stroke}${strokeWidth} text-anchor="${anchor}" ${common}>${tspans}</text>`;
+    return `<text x="${x}" y="${layer.y + layer.fontSize}" width="${layer.width}" font-family="${escapeXml(layer.fontFamily)}" font-size="${layer.fontSize}" font-weight="${layer.fontWeight}"${fontStyle}${letterSpacing} fill="${layer.color}"${stroke}${strokeWidth} text-anchor="${anchor}" ${commonWithFilter}>${tspans}</text>`;
   }
 
   if (layer.kind === "logo" && layer.src === "graphforge://logo-placeholder") {
-    return `<g ${common}><rect x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" rx="${layer.borderRadius}" fill="${project.brand.text}"/><path d="M ${layer.x + 20} ${layer.y + 42} L ${layer.x + 32} ${layer.y + 21} L ${layer.x + 44} ${layer.y + 42} Z" fill="${project.brand.surface}"/></g>`;
+    return `<g ${commonWithFilter}><rect x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" rx="${layer.borderRadius}" fill="${project.brand.text}"/><path d="M ${layer.x + 20} ${layer.y + 42} L ${layer.x + 32} ${layer.y + 21} L ${layer.x + 44} ${layer.y + 42} Z" fill="${project.brand.surface}"/></g>`;
   }
 
   if (layer.kind === "image" || layer.kind === "logo" || layer.kind === "screenshot") {
-    return renderImageLayer(layer, common);
+    return renderImageLayer(layer, common, filter);
   }
 
   return "";
 }
 
-function renderImageLayer(layer: Extract<OgLayer, { kind: "image" | "logo" | "screenshot" }>, common: string): string {
+function renderImageLayer(layer: Extract<OgLayer, { kind: "image" | "logo" | "screenshot" }>, common: string, filter: string): string {
   const preserveAspectRatio = getImagePreserveAspectRatio(layer.fit, layer.focalPoint);
   const crop = layer.crop;
   const clipId = `gf-image-clip-${safeId(layer.id)}`;
+  const maskId = `gf-image-mask-${safeId(layer.id)}`;
+  const filterAttr = filter ? ` filter="${filter}"` : "";
+  const overlays = renderEffectOverlays(layer, { maskId });
   if (!crop) {
-    return `<g ${common} clip-path="url(#${clipId})"><image href="${escapeXml(layer.src)}" x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" preserveAspectRatio="${preserveAspectRatio}"/>${renderEffectOverlays(layer)}</g>`;
+    return `<g ${common}><g${filterAttr} clip-path="url(#${clipId})"><image href="${escapeXml(layer.src)}" x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" preserveAspectRatio="${preserveAspectRatio}"/></g>${overlays}</g>`;
   }
 
   const cropWidth = Math.max(0.01, clamp(crop.width, 0.01, 1));
@@ -78,7 +82,7 @@ function renderImageLayer(layer: Extract<OgLayer, { kind: "image" | "logo" | "sc
   const x = Math.round(layer.x - cropX * width);
   const y = Math.round(layer.y - cropY * height);
 
-  return `<g ${common} clip-path="url(#${clipId})"><image href="${escapeXml(layer.src)}" x="${x}" y="${y}" width="${width}" height="${height}" preserveAspectRatio="${preserveAspectRatio}"/>${renderEffectOverlays(layer)}</g>`;
+  return `<g ${common}><g${filterAttr} clip-path="url(#${clipId})"><image href="${escapeXml(layer.src)}" x="${x}" y="${y}" width="${width}" height="${height}" preserveAspectRatio="${preserveAspectRatio}"/></g>${overlays}</g>`;
 }
 
 function renderShapeLayer(layer: Extract<OgLayer, { kind: "background" | "shape" }>, project: OgProject, common: string): string {
@@ -200,32 +204,61 @@ function renderComposedFilter(layer: OgLayer, project: OgProject): string {
 
 function renderImageDefs(layer: OgLayer): string[] {
   if (!(layer.kind === "image" || layer.kind === "logo" || layer.kind === "screenshot")) return [];
+  const preserveAspectRatio = getImagePreserveAspectRatio(layer.fit, layer.focalPoint);
+  const crop = layer.crop;
+  const image = crop
+    ? getCroppedImageGeometry(layer, preserveAspectRatio)
+    : `<image href="${escapeXml(layer.src)}" x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" preserveAspectRatio="${preserveAspectRatio}"/>`;
   return [
-    `<clipPath id="gf-image-clip-${safeId(layer.id)}"><rect x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" rx="${layer.borderRadius}"/></clipPath>`
+    `<clipPath id="gf-image-clip-${safeId(layer.id)}"><rect x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" rx="${layer.borderRadius}"/></clipPath>`,
+    `<mask id="gf-image-mask-${safeId(layer.id)}" maskUnits="userSpaceOnUse" x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" style="mask-type:alpha">${image}</mask>`
   ];
 }
 
-function renderEffectOverlays(layer: Extract<OgLayer, { kind: "background" | "shape" | "image" | "logo" | "screenshot" }>): string {
+function renderEffectOverlays(
+  layer: Extract<OgLayer, { kind: "background" | "shape" | "image" | "logo" | "screenshot" }>,
+  options: { maskId?: string } = {}
+): string {
   if (!("effects" in layer)) return "";
   const id = safeId(layer.id);
   const overlays: string[] = [];
   const radius = "borderRadius" in layer ? layer.borderRadius : layer.radius;
+  const mask = options.maskId ? ` mask="url(#${options.maskId})"` : "";
   if (layer.effects.noise && layer.effects.noise.amount > 0) {
     overlays.push(
-      `<rect x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" rx="${radius}" filter="url(#gf-noise-${id})" opacity="${clamp(layer.effects.noise.amount, 0, 1)}" style="mix-blend-mode:${layer.effects.noise.blendMode}"/>`
+      `<rect x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" rx="${radius}" filter="url(#gf-noise-${id})" opacity="${clamp(layer.effects.noise.amount, 0, 1)}" style="mix-blend-mode:${layer.effects.noise.blendMode}"${mask}/>`
     );
   }
   if (layer.effects.lighting && layer.effects.lighting.intensity > 0) {
     overlays.push(
-      `<rect x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" rx="${radius}" fill="url(#gf-lighting-${id})"/>`
+      `<rect x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" rx="${radius}" fill="url(#gf-lighting-${id})"${mask}/>`
     );
   }
   if (layer.effects.vignette && layer.effects.vignette > 0) {
     overlays.push(
-      `<rect x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" rx="${radius}" fill="url(#gf-vignette-${id})"/>`
+      `<rect x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" rx="${radius}" fill="url(#gf-vignette-${id})"${mask}/>`
     );
   }
   return overlays.join("");
+}
+
+function getCroppedImageGeometry(
+  layer: Extract<OgLayer, { kind: "image" | "logo" | "screenshot" }>,
+  preserveAspectRatio: string
+): string {
+  const crop = layer.crop;
+  if (!crop) {
+    return `<image href="${escapeXml(layer.src)}" x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" preserveAspectRatio="${preserveAspectRatio}"/>`;
+  }
+  const cropWidth = Math.max(0.01, clamp(crop.width, 0.01, 1));
+  const cropHeight = Math.max(0.01, clamp(crop.height, 0.01, 1));
+  const width = Math.round(layer.width / cropWidth);
+  const height = Math.round(layer.height / cropHeight);
+  const cropX = clamp(crop.x, 0, 1 - cropWidth);
+  const cropY = clamp(crop.y, 0, 1 - cropHeight);
+  const x = Math.round(layer.x - cropX * width);
+  const y = Math.round(layer.y - cropY * height);
+  return `<image href="${escapeXml(layer.src)}" x="${x}" y="${y}" width="${width}" height="${height}" preserveAspectRatio="${preserveAspectRatio}"/>`;
 }
 
 function getGradientId(layer: OgLayer): string | undefined {

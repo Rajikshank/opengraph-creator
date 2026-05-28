@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { AlertTriangle, FileArchive, FolderOpen, Link2, PencilRuler, RefreshCw, Sparkles } from "lucide-react";
-import { toast } from "sonner";
 import { unpackStudioDocument } from "@graphforge/core";
 import { readConnectRecipeViaApi, type ConnectRecipe, type ProjectSummary } from "../api";
+import { normalizeStudioError } from "../lib/studio-errors";
+import { notifyStudioError, notifyStudioSuccess, notifyStudioWarning } from "../lib/studio-toast";
 import { createManualProject, useStudio } from "./studio-store";
 
 export type StartupMode = "global-hub" | "repo-hub" | "recovery";
@@ -40,9 +41,15 @@ export function ProjectPicker({ mode = "global-hub", repo, recoveryMessage, onOp
         if (!bytes) throw new Error("Could not read document bytes.");
         const document = await unpackStudioDocument(bytes);
         replaceProject(document.project);
-        toast.success(`Opened ${file.name}`);
+        notifyStudioSuccess(`Opened ${file.name}`);
       } catch (error) {
-        toast.error(error instanceof Error ? error.message : "Could not open .ogdoc document");
+        notifyStudioError(
+          normalizeStudioError(error, {
+            kind: "validation",
+            title: "Could not open .ogdoc document",
+            recovery: "Choose a valid Studio document package or ask the agent to regenerate it."
+          })
+        );
       }
     });
     reader.readAsArrayBuffer(file);
@@ -51,9 +58,9 @@ export function ProjectPicker({ mode = "global-hub", repo, recoveryMessage, onOp
   const copyRecipe = async (value: string, label: string) => {
     try {
       await navigator.clipboard.writeText(value);
-      toast.success(`${label} copied`);
+      notifyStudioSuccess(`${label} copied`);
     } catch {
-      toast.warning(`${label}: ${value}`);
+      notifyStudioWarning(`${label}: ${value}`);
     }
   };
 

@@ -23,7 +23,9 @@ import {
   snapLayer as snapSessionLayer,
   toggleLayerHidden as toggleSessionLayerHidden,
   toggleLayerLocked as toggleSessionLayerLocked,
+  undo as undoSession,
   updateLayer as updateSessionLayer,
+  redo as redoSession,
   type EditorSession
 } from "../editor-model";
 import type { ProjectSummary } from "../api";
@@ -55,6 +57,8 @@ interface StudioStore {
   addLayer: (kind: AddableLayerKind) => void;
   duplicateLayer: (id: string) => void;
   deleteLayer: (id: string) => void;
+  undo: () => void;
+  redo: () => void;
   reorderLayers: (activeId: string, overId: string) => void;
   toggleLayerHidden: (id: string) => void;
   toggleLayerLocked: (id: string) => void;
@@ -103,6 +107,8 @@ export const useStudio = create<StudioStore>((set) => ({
   addLayer: (kind) => set((state) => (state.project ? addSessionLayer(state as EditorSession, kind) : state)),
   duplicateLayer: (id) => set((state) => (state.project ? duplicateSessionLayer(state as EditorSession, id) : state)),
   deleteLayer: (id) => set((state) => (state.project ? deleteSessionLayer(state as EditorSession, id) : state)),
+  undo: () => set((state) => (state.project ? undoSession(state as EditorSession) : state)),
+  redo: () => set((state) => (state.project ? redoSession(state as EditorSession) : state)),
   reorderLayers: (activeId, overId) =>
     set((state) => (state.project ? reorderSessionLayers(state as EditorSession, activeId, overId) : state)),
   toggleLayerHidden: (id) =>

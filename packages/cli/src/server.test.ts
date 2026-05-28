@@ -47,6 +47,19 @@ describe("GraphForge studio local API", () => {
     expect(await readFile(exportTarget, "utf8")).toContain("<svg");
   });
 
+  it("does not serve the Studio HTML shell for unknown API routes", async () => {
+    const root = await mkdtemp(join(tmpdir(), "graphforge-api-fallback-"));
+    const library = createLibrary({ root });
+    handle = await createStudioServer({ library, port: 0 });
+
+    const response = await fetch(`${handle.url}/api/unknown-route`);
+    const body = await response.json();
+
+    expect(response.status).toBe(404);
+    expect(response.headers.get("content-type")).toContain("application/json");
+    expect(body).toEqual({ error: "Unknown Studio API route." });
+  });
+
   it("exports relative session targets inside the user repo", async () => {
     const root = await mkdtemp(join(tmpdir(), "graphforge-api-export-repo-"));
     const library = createLibrary({ root: join(root, "library") });

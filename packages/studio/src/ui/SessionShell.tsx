@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { gsap } from "gsap";
-import { GalleryHorizontalEnd, Menu, PencilRuler, Save } from "lucide-react";
+import { GalleryHorizontalEnd, Menu, PencilRuler, Redo2, Save, Undo2 } from "lucide-react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
-import { Toaster, toast } from "sonner";
+import { Toaster } from "sonner";
 import { listProjectsViaApi, readProjectViaApi, readSessionBundleViaApi, saveProjectViaApi, saveSessionDocumentViaApi } from "../api";
 import { StudioSegmentedControl } from "../design-system/StudioControls";
 import { StudioTooltipProvider } from "../design-system/StudioTooltip";
+import { normalizeStudioError } from "../lib/studio-errors";
+import { notifyStudioError, notifyStudioSuccess, notifyStudioWarning } from "../lib/studio-toast";
 import { ArtboardEditor } from "./ArtboardEditor";
 import { InspectorTabs } from "./InspectorTabs";
 import { PreviewDock } from "./PlatformPreviewPanel";
@@ -25,12 +27,26 @@ export function SessionShell() {
   const setSession = useStudio((state) => state.setSession);
   const session = useStudio((state) => state.session);
   const setProjects = useStudio((state) => state.setProjects);
+  const canUndo = useStudio((state) => state.past.length > 0);
+  const canRedo = useStudio((state) => state.future.length > 0);
+  const undo = useStudio((state) => state.undo);
+  const redo = useStudio((state) => state.redo);
   const [startupMode, setStartupMode] = useState<StartupMode>("global-hub");
   const [startupRepo, setStartupRepo] = useState<string | undefined>();
   const [recoveryMessage, setRecoveryMessage] = useState<string | undefined>();
 
   useEffect(() => {
-    listProjectsViaApi().then(setProjects).catch(() => toast.warning("Local API unavailable; manual editing still works"));
+    listProjectsViaApi()
+      .then(setProjects)
+      .catch((error) =>
+        notifyStudioError(
+          normalizeStudioError(error, {
+            kind: "api-unavailable",
+            title: "Project library unavailable",
+            recovery: "Manual editing still works. Restart the local Studio service if the library is needed."
+          })
+        )
+      );
     const params = new URLSearchParams(window.location.search);
     const sessionId = params.get("session");
     const repo = params.get("repo") ?? undefined;
@@ -46,12 +62,20 @@ export function SessionShell() {
             setRecoveryMessage(undefined);
           } else {
             setRecoveryMessage("Session opened, but no editable .ogdoc document exists yet.");
-            toast.warning("Session opened, but no editable .ogdoc document exists yet");
+            notifyStudioWarning(
+              "Session document missing",
+              "Ask the coding agent to regenerate the editable .ogdoc document, then reopen this session."
+            );
           }
         })
         .catch((error) => {
-          setRecoveryMessage(error instanceof Error ? error.message : "Could not open session");
-          toast.error(error instanceof Error ? error.message : "Could not open session");
+          const info = normalizeStudioError(error, {
+            kind: "session-missing",
+            title: "Could not open session",
+            recovery: "Use the session recovery files or ask the coding agent to reopen the Studio session."
+          });
+          setRecoveryMessage(info.technical);
+          notifyStudioError(info);
         });
     } else if (projectId) {
       setStartupMode("global-hub");
@@ -60,6 +84,32 @@ export function SessionShell() {
       setStartupMode(repo ? "repo-hub" : "global-hub");
     }
   }, []);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target;
+      const editableTarget =
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        (target instanceof HTMLElement && target.isContentEditable);
+      if (editableTarget || (!event.metaKey && !event.ctrlKey)) return;
+
+      const key = event.key.toLowerCase();
+      if (key === "z" && event.shiftKey) {
+        event.preventDefault();
+        redo();
+      } else if (key === "z") {
+        event.preventDefault();
+        undo();
+      } else if (key === "y") {
+        event.preventDefault();
+        redo();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [redo, undo]);
 
   useEffect(() => {
     if (hasPlayedEntranceRef.current || !shellRef.current || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
@@ -77,9 +127,15 @@ export function SessionShell() {
   const openProject = async (projectId: string) => {
     try {
       replaceProject(await readProjectViaApi(fetch, projectId));
-      toast.success("Project opened");
+      notifyStudioSuccess("Project opened");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Open project failed");
+      notifyStudioError(
+        normalizeStudioError(error, {
+          kind: "validation",
+          title: "Open project failed",
+          recovery: "Choose another project or reopen the source .ogdoc document."
+        })
+      );
     }
   };
 
@@ -88,14 +144,20 @@ export function SessionShell() {
     try {
       if (session) {
         const result = await saveSessionDocumentViaApi(fetch, { repo: session.repo, sessionId: session.id, project });
-        toast.success(`Saved ${result.path}`);
+        notifyStudioSuccess(`Saved ${result.path}`);
         return;
       }
       const result = await saveProjectViaApi(fetch, project);
-      toast.success(`Saved ${result.path}`);
+      notifyStudioSuccess(`Saved ${result.path}`);
       setProjects(await listProjectsViaApi());
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Save failed");
+      notifyStudioError(
+        normalizeStudioError(error, {
+          kind: "document-save",
+          title: "Save failed",
+          recovery: "The current editor state is still in memory. Retry save before closing Studio."
+        })
+      );
     }
   };
 
@@ -124,6 +186,12 @@ export function SessionShell() {
           </div>
         </div>
         <div className="command-actions">
+          <button type="button" title="Undo" disabled={!project || !canUndo} onClick={undo}>
+            <Undo2 size={15} /> Undo
+          </button>
+          <button type="button" title="Redo" disabled={!project || !canRedo} onClick={redo}>
+            <Redo2 size={15} /> Redo
+          </button>
           <button type="button" title="Save project" disabled={!project} onClick={saveProject}>
             <Save size={15} /> Save
           </button>

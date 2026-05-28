@@ -11,12 +11,9 @@ import {
   ArrowUp,
   Eye,
   EyeOff,
-  FileImage,
   Layers,
   Lock,
-  Shapes,
   Trash2,
-  Type,
   Unlock
 } from "lucide-react";
 import { useStudio } from "./studio-store";
@@ -25,7 +22,6 @@ export function LayerTree() {
   const project = useStudio((state) => state.project);
   const selectedLayerId = useStudio((state) => state.selectedLayerId);
   const setSelectedLayerId = useStudio((state) => state.setSelectedLayerId);
-  const addLayer = useStudio((state) => state.addLayer);
   const alignLayers = useStudio((state) => state.alignLayers);
   const distributeLayers = useStudio((state) => state.distributeLayers);
   const duplicateLayer = useStudio((state) => state.duplicateLayer);
@@ -44,23 +40,6 @@ export function LayerTree() {
         <Layers size={15} />
         <span>Layers</span>
       </h2>
-      <div className="tool-row">
-        <button type="button" title="Add text layer" onClick={() => addLayer("text")}>
-          <Type size={14} />
-        </button>
-        <button type="button" title="Add image layer" onClick={() => addLayer("image")}>
-          <FileImage size={14} />
-        </button>
-        <button type="button" title="Add badge layer" onClick={() => addLayer("badge")}>
-          <Type size={14} />
-        </button>
-        <button type="button" title="Add background layer" onClick={() => addLayer("background")}>
-          <Shapes size={14} />
-        </button>
-        <button type="button" title="Add shape layer" onClick={() => addLayer("rectangle")}>
-          <Shapes size={14} />
-        </button>
-      </div>
       <div className="arrange-tools" aria-label="Arrange unlocked layers">
         <button type="button" title="Align left" disabled={!canAlign} onClick={() => alignLayers(arrangeLayerIds, "left")}>
           <AlignStartVertical size={14} />

@@ -20,6 +20,8 @@ export interface EditorSession {
   future: OgProject[];
 }
 
+const maxHistoryEntries = 60;
+
 export function createEditorSession(project: OgProject): EditorSession {
   return {
     project,
@@ -345,7 +347,7 @@ export function redo(session: EditorSession): EditorSession {
   return {
     project: next,
     selectedLayerId: next.layers.find((layer) => layer.id === session.selectedLayerId)?.id ?? next.layers[0]?.id ?? "",
-    past: [...session.past, session.project],
+    past: keepRecentHistory([...session.past, session.project]),
     future: session.future.slice(1)
   };
 }
@@ -355,9 +357,13 @@ function pushHistory(session: EditorSession, project: OgProject, selectedLayerId
     ...session,
     project,
     selectedLayerId,
-    past: [...session.past, session.project],
+    past: keepRecentHistory([...session.past, session.project]),
     future: []
   };
+}
+
+function keepRecentHistory(history: OgProject[]): OgProject[] {
+  return history.length > maxHistoryEntries ? history.slice(history.length - maxHistoryEntries) : history;
 }
 
 function getSelectedLayer(session: EditorSession): OgLayer | undefined {
@@ -457,7 +463,7 @@ function createLayer(project: OgProject, kind: AddableLayerKind): OgLayer {
       width: 280,
       height: 180,
       src: "graphforge://image-placeholder",
-      fit: "cover",
+      fit: "contain",
       borderRadius: 8,
       effects: { shadow: true, glow: false, blur: 0 }
     };

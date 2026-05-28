@@ -21,6 +21,22 @@ const uiSource = [
 ]
   .map((file) => readFileSync(join(uiDir, file), "utf8"))
   .join("\n");
+const previewDir = join(process.cwd(), "packages", "studio", "src", "ui", "platform-preview");
+const previewFrameSource = [
+  "PreviewFrame.tsx",
+  "PlatformTabs.tsx",
+  "PlatformPreviewImage.tsx",
+  "frames/XFrame.tsx",
+  "frames/FacebookFrame.tsx",
+  "frames/LinkedInFrame.tsx",
+  "frames/SlackFrame.tsx",
+  "frames/DiscordFrame.tsx",
+  "frames/WhatsAppFrame.tsx",
+  "frames/IMessageFrame.tsx",
+  "frames/BrowserFrame.tsx"
+]
+  .map((file) => readFileSync(join(previewDir, file), "utf8"))
+  .join("\n");
 const designSystemDir = join(process.cwd(), "packages", "studio", "src", "design-system");
 const designSystemSource = ["StudioSlider.tsx", "StudioControls.tsx", "StudioSelect.tsx", "StudioSwitch.tsx", "StudioTooltip.tsx", "StudioField.tsx"]
   .map((file) => readFileSync(join(designSystemDir, file), "utf8"))
@@ -66,7 +82,9 @@ describe("reengineered studio UI contract", () => {
       "Move layer up",
       "Glow intensity",
       "Glow radius",
-      "Glow color"
+      "Glow color",
+      "Texture",
+      "Depth"
     ].forEach((token) => expect(uiSource).toContain(token));
 
     expect(uiSource).toContain("readSessionBundleViaApi");
@@ -89,10 +107,14 @@ describe("reengineered studio UI contract", () => {
     expect(stylesSource).toContain(".platform-switcher");
     expect(stylesSource).toContain(".platform-preview-body");
     expect(stylesSource).toContain(".studio-slider");
+    expect(stylesSource).toContain(".effect-control-section");
+    expect(stylesSource).toContain(".color-swatch-field");
     expect(stylesSource).toContain(".toolbar-source-action");
     expect(stylesSource).toContain(".graphforge-toast");
     expect(stylesSource).toContain(".platform-frame-shell");
     expect(stylesSource).toContain(".platform-preview-image-slot");
+    expect(stylesSource).toContain(".platform-tab-list");
+    expect(stylesSource).toContain(".platform-preview-viewport");
     expect(stylesSource).toContain(".stage-mode-tabs");
     expect(stylesSource).toContain(".platform-stage");
     expect(stylesSource).toContain("oklch");
@@ -129,6 +151,8 @@ describe("reengineered studio UI contract", () => {
     expect(uiSource).toContain("StudioSegmentedControl");
     expect(uiSource).toContain("toolbar-source-action");
     expect(uiSource).toContain("graphforge-toast");
+    expect(`${uiSource}\n${previewFrameSource}`).toContain("platform-tab-list");
+    expect(uiSource).toContain("platform-preview-viewport");
     expect(uiSource).toContain('value: "canvas"');
     expect(uiSource).toContain('value: "preview"');
     expect(uiSource).toContain('title="Add ellipse"');
@@ -152,9 +176,69 @@ describe("reengineered studio UI contract", () => {
     expect(stylesSource).toContain("pointer-events: none;");
   });
 
+  it("keeps canvas effects, history controls, and tool ownership guarded", () => {
+    const artboardSource = readFileSync(join(uiDir, "ArtboardEditor.tsx"), "utf8");
+    const layerTreeSource = readFileSync(join(uiDir, "LayerTree.tsx"), "utf8");
+    const sessionShell = readFileSync(join(uiDir, "SessionShell.tsx"), "utf8");
+
+    expect(artboardSource).toContain("EffectfulNode");
+    expect(artboardSource).toContain("Konva.Filters.Blur");
+    expect(artboardSource).toContain("node.cache");
+    expect(artboardSource).not.toContain("effects.blur * 1.5");
+    expect(layerTreeSource).not.toContain("Add text layer");
+    expect(layerTreeSource).not.toContain("Add image layer");
+    expect(layerTreeSource).not.toContain("Add shape layer");
+    expect(sessionShell).toContain("Undo2");
+    expect(sessionShell).toContain("Redo2");
+    expect(sessionShell).toContain("canUndo");
+    expect(sessionShell).toContain("event.key.toLowerCase()");
+    expect(sessionShell).toContain("key === \"z\"");
+  });
+
+  it("normalizes Studio error messages before showing toasts", () => {
+    const sessionShell = readFileSync(join(uiDir, "SessionShell.tsx"), "utf8");
+    const exportPanel = readFileSync(join(uiDir, "ExportPublishPanel.tsx"), "utf8");
+
+    expect(uiSource).toContain("notifyStudioError");
+    expect(uiSource).toContain("normalizeStudioError");
+    expect(sessionShell).not.toContain("toast.error(error instanceof Error ? error.message");
+    expect(exportPanel).not.toContain("toast.error(error instanceof Error ? error.message");
+  });
+
   it("does not rerun global shell entrance animation for every project edit", () => {
     const sessionShell = readFileSync(join(uiDir, "SessionShell.tsx"), "utf8");
     expect(sessionShell).toContain("hasPlayedEntranceRef");
     expect(sessionShell).not.toContain("}, [project]);");
+  });
+
+  it("uses dedicated platform preview frames with a stable inspector viewport", () => {
+    expect(uiSource).toContain("PreviewFrame");
+    expect(uiSource).toContain("PlatformTabs");
+    expect(uiSource).toContain("getPlatformPreviewSpecs");
+    [
+      "function XFrame",
+      "function FacebookFrame",
+      "function LinkedInFrame",
+      "function SlackFrame",
+      "function DiscordFrame",
+      "function WhatsAppFrame",
+      "function IMessageFrame",
+      "function BrowserFrame"
+    ].forEach((token) => expect(previewFrameSource).toContain(token));
+    expect(previewFrameSource).toContain("platform-preview-inspector");
+    expect(previewFrameSource).toContain("platform-preview-device");
+    expect(previewFrameSource).toContain("PlatformPreviewImage");
+    expect(previewFrameSource).not.toContain("GenericPlatformPreview");
+  });
+
+  it("themes Konva transform handles to the Studio accent instead of default blue", () => {
+    const artboardSource = readFileSync(join(uiDir, "ArtboardEditor.tsx"), "utf8");
+
+    expect(artboardSource).toContain("STUDIO_TRANSFORM_ACCENT");
+    expect(artboardSource).toContain("anchorFill");
+    expect(artboardSource).toContain("anchorStroke");
+    expect(artboardSource).toContain("borderStroke");
+    expect(artboardSource).toContain("rotateAnchorOffset");
+    expect(artboardSource).not.toContain("#0000ff");
   });
 });

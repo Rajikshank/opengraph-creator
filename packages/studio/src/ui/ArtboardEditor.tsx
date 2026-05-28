@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Konva from "konva";
 import { Ellipse, Group, Image as KonvaImage, Layer as KonvaLayer, Line, Rect, Stage, Text as KonvaText, Transformer } from "react-konva";
 import { isGlowEffectEnabled, normalizeGlowEffect, type ImageLayer, type LayerEffects, type NoiseEffect, type OgLayer, type ShapeLayer, type TextLayer } from "@graphforge/core";
@@ -6,6 +6,8 @@ import { useStudio } from "./studio-store";
 
 const canvasWidth = 1200;
 const canvasHeight = 630;
+const STUDIO_TRANSFORM_ACCENT = "#ecb052";
+const STUDIO_TRANSFORM_HANDLE = "#171511";
 
 interface ArtboardEditorProps {
   sourceRailOpen?: boolean;
@@ -132,6 +134,17 @@ export function ArtboardEditor({ sourceRailOpen = true, onOpenSourceRail }: Artb
               <Transformer
                 ref={transformerRef}
                 rotateEnabled
+                borderStroke={STUDIO_TRANSFORM_ACCENT}
+                borderStrokeWidth={1.4}
+                borderDash={[7, 5]}
+                anchorFill={STUDIO_TRANSFORM_HANDLE}
+                anchorStroke={STUDIO_TRANSFORM_ACCENT}
+                anchorStrokeWidth={1.6}
+                anchorCornerRadius={3}
+                anchorSize={9}
+                rotateAnchorOffset={28}
+                rotateAnchorCursor="grab"
+                rotationSnaps={[0, 45, 90, 135, 180, 225, 270, 315]}
                 enabledAnchors={["top-left", "top-right", "bottom-left", "bottom-right", "middle-left", "middle-right"]}
                 boundBoxFunc={(oldBox, newBox) => (newBox.width < 12 || newBox.height < 12 ? oldBox : newBox)}
               />
@@ -144,24 +157,24 @@ export function ArtboardEditor({ sourceRailOpen = true, onOpenSourceRail }: Artb
 }
 
 function KonvaLayerNode({ layer, accent }: { layer: OgLayer; accent: string }) {
-  const effectProps = "effects" in layer ? getKonvaEffectProps(layer.effects, accent) : {};
   if (isTextLayer(layer)) {
     return (
-      <KonvaText
-        width={layer.width}
-        height={layer.height}
-        text={layer.text}
-        fontFamily={layer.fontFamily}
-        fontSize={layer.fontSize}
-        fontStyle={`${layer.fontStyle ?? "normal"} ${layer.fontWeight}`}
-        fill={layer.color}
-        align={layer.align}
-        lineHeight={layer.lineHeight}
-        letterSpacing={layer.letterSpacing ?? 0}
-        stroke={layer.stroke}
-        strokeWidth={layer.strokeWidth ?? 0}
-        {...effectProps}
-      />
+      <EffectfulNode effects={layer.effects} accent={accent} cacheKey={`${layer.text}:${layer.width}:${layer.height}:${layer.fontSize}:${layer.color}`}>
+        <KonvaText
+          width={layer.width}
+          height={layer.height}
+          text={layer.text}
+          fontFamily={layer.fontFamily}
+          fontSize={layer.fontSize}
+          fontStyle={`${layer.fontStyle ?? "normal"} ${layer.fontWeight}`}
+          fill={layer.color}
+          align={layer.align}
+          lineHeight={layer.lineHeight}
+          letterSpacing={layer.letterSpacing ?? 0}
+          stroke={layer.stroke}
+          strokeWidth={layer.strokeWidth ?? 0}
+        />
+      </EffectfulNode>
     );
   }
   if (isShapeLayer(layer)) {
@@ -169,23 +182,31 @@ function KonvaLayerNode({ layer, accent }: { layer: OgLayer; accent: string }) {
     const overlays = <EffectOverlays width={layer.width} height={layer.height} radius={layer.radius} effects={layer.effects} />;
     if (layer.shapeType === "ellipse") {
       return (
-        <Fragment>
-          <Ellipse x={layer.width / 2} y={layer.height / 2} radiusX={layer.width / 2} radiusY={layer.height / 2} stroke={layer.stroke} strokeWidth={layer.strokeWidth ?? 0} {...fillProps} {...effectProps} />
+        <EffectfulNode effects={layer.effects} accent={accent} cacheKey={`${layer.shapeType}:${layer.width}:${layer.height}:${layer.fill}:${layer.stroke}`}>
+          <Ellipse x={layer.width / 2} y={layer.height / 2} radiusX={layer.width / 2} radiusY={layer.height / 2} stroke={layer.stroke} strokeWidth={layer.strokeWidth ?? 0} {...fillProps} />
           {overlays}
-        </Fragment>
+        </EffectfulNode>
       );
     }
     if (layer.shapeType === "line") {
-      return <Line points={[0, layer.height / 2, layer.width, layer.height / 2]} stroke={layer.fill} strokeWidth={Math.max(1, layer.height)} lineCap="square" {...effectProps} />;
+      return (
+        <EffectfulNode effects={layer.effects} accent={accent} cacheKey={`${layer.shapeType}:${layer.width}:${layer.height}:${layer.fill}`}>
+          <Line points={[0, layer.height / 2, layer.width, layer.height / 2]} stroke={layer.fill} strokeWidth={Math.max(1, layer.height)} lineCap="square" />
+        </EffectfulNode>
+      );
     }
     if (layer.shapeType === "frame") {
-      return <Rect width={layer.width} height={layer.height} fill="transparent" cornerRadius={layer.radius} stroke={layer.stroke ?? layer.fill} strokeWidth={Math.max(1, layer.strokeWidth ?? 2)} {...effectProps} />;
+      return (
+        <EffectfulNode effects={layer.effects} accent={accent} cacheKey={`${layer.shapeType}:${layer.width}:${layer.height}:${layer.stroke}:${layer.strokeWidth}`}>
+          <Rect width={layer.width} height={layer.height} fill="transparent" cornerRadius={layer.radius} stroke={layer.stroke ?? layer.fill} strokeWidth={Math.max(1, layer.strokeWidth ?? 2)} />
+        </EffectfulNode>
+      );
     }
     return (
-      <Fragment>
-        <Rect width={layer.width} height={layer.height} cornerRadius={layer.radius} stroke={layer.stroke} strokeWidth={layer.strokeWidth ?? 0} {...fillProps} {...effectProps} />
+      <EffectfulNode effects={layer.effects} accent={accent} cacheKey={`${layer.shapeType}:${layer.width}:${layer.height}:${layer.fill}:${layer.stroke}:${layer.radius}`}>
+        <Rect width={layer.width} height={layer.height} cornerRadius={layer.radius} stroke={layer.stroke} strokeWidth={layer.strokeWidth ?? 0} {...fillProps} />
         {overlays}
-      </Fragment>
+      </EffectfulNode>
     );
   }
   if (isImageLayer(layer)) {
@@ -196,28 +217,63 @@ function KonvaLayerNode({ layer, accent }: { layer: OgLayer; accent: string }) {
 
 function ImageLayerNode({ layer, accent }: { layer: ImageLayer; accent: string }) {
   const image = useLayerImage(layer.src);
-  const effectProps = getKonvaEffectProps(layer.effects, accent);
   if (image) {
     const placement = getImagePlacement(layer, image);
     return (
-      <Group clipX={0} clipY={0} clipWidth={layer.width} clipHeight={layer.height}>
-        <KonvaImage image={image} {...placement} cornerRadius={layer.borderRadius} {...effectProps} />
-        <EffectOverlays
-          x={placement.x ?? 0}
-          y={placement.y ?? 0}
-          width={placement.width}
-          height={placement.height}
-          radius={layer.borderRadius}
-          effects={layer.effects}
-        />
-      </Group>
+      <EffectfulNode effects={layer.effects} accent={accent} cacheKey={`${layer.src}:${layer.fit}:${layer.width}:${layer.height}:${JSON.stringify(layer.crop)}:${JSON.stringify(layer.focalPoint)}`}>
+        <Group clipX={0} clipY={0} clipWidth={layer.width} clipHeight={layer.height}>
+          <KonvaImage image={image} {...placement} cornerRadius={layer.borderRadius} />
+          <EffectOverlays
+            x={placement.x ?? 0}
+            y={placement.y ?? 0}
+            width={placement.width}
+            height={placement.height}
+            radius={layer.borderRadius}
+            effects={layer.effects}
+          />
+        </Group>
+      </EffectfulNode>
     );
   }
   return (
-    <>
-      <Rect width={layer.width} height={layer.height} fill="#292e33" cornerRadius={layer.borderRadius} stroke="#58616b" {...effectProps} />
+    <EffectfulNode effects={layer.effects} accent={accent} cacheKey={`${layer.width}:${layer.height}:${layer.name}`}>
+      <Rect width={layer.width} height={layer.height} fill="#292e33" cornerRadius={layer.borderRadius} stroke="#58616b" />
       <KonvaText x={12} y={12} width={Math.max(20, layer.width - 24)} text={layer.name} fontSize={18} fill="#c8d0d8" />
-    </>
+    </EffectfulNode>
+  );
+}
+
+function EffectfulNode({ effects, accent, cacheKey, children }: { effects: LayerEffects; accent: string; cacheKey: string; children: ReactNode }) {
+  const groupRef = useRef<Konva.Group>(null);
+  const blur = Math.max(0, effects.blur ?? 0);
+  const hasBlur = blur > 0;
+  const shadowProps = getKonvaShadowProps(effects, accent);
+  const effectCacheKey = `${cacheKey}:${blur}:${effects.shadow}:${JSON.stringify(effects.glow)}:${JSON.stringify(effects.noise)}:${JSON.stringify(effects.lighting)}:${effects.vignette ?? 0}`;
+
+  useEffect(() => {
+    const node = groupRef.current;
+    if (!node) return;
+    if (hasBlur) {
+      node.cache({ pixelRatio: 1 });
+    } else {
+      node.clearCache();
+    }
+    node.getLayer()?.batchDraw();
+    return () => {
+      node.clearCache();
+      node.getLayer()?.batchDraw();
+    };
+  }, [effectCacheKey, hasBlur]);
+
+  return (
+    <Group
+      ref={groupRef}
+      filters={hasBlur ? [Konva.Filters.Blur] : undefined}
+      blurRadius={blur}
+      {...shadowProps}
+    >
+      {children}
+    </Group>
   );
 }
 
@@ -279,13 +335,13 @@ function NoiseOverlay({ x, y, width, height, radius, noise }: { x: number; y: nu
   );
 }
 
-function getKonvaEffectProps(effects: LayerEffects, accent: string) {
+function getKonvaShadowProps(effects: LayerEffects, accent: string) {
   const glow = normalizeGlowEffect(effects.glow, accent);
   const glowEnabled = isGlowEffectEnabled(effects.glow);
   return {
-    shadowEnabled: Boolean(effects.shadow || glowEnabled || effects.blur > 0),
+    shadowEnabled: Boolean(effects.shadow || glowEnabled),
     shadowColor: glowEnabled ? (glow.color ?? accent) : "#020617",
-    shadowBlur: glowEnabled ? glow.radius : effects.shadow ? 22 : effects.blur > 0 ? effects.blur * 1.5 : 0,
+    shadowBlur: glowEnabled ? glow.radius : effects.shadow ? 22 : 0,
     shadowOpacity: glowEnabled ? glow.intensity : effects.shadow ? 0.18 : 0,
     shadowOffsetY: effects.shadow ? 12 : 0
   };

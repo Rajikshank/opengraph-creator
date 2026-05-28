@@ -1,9 +1,10 @@
 import { useState, type ChangeEvent } from "react";
 import { FileCode2, PanelLeftClose, Send, Upload } from "lucide-react";
-import { toast } from "sonner";
 import { unpackStudioDocument, type GraphForgeSourceArtifact, type SourceArtifactKind } from "@graphforge/core";
 import { createSessionAgentRequestViaApi, importSourceViaApi, saveSessionDocumentViaApi, uploadSessionAssetViaApi } from "../api";
 import { StudioSelect } from "../design-system/StudioSelect";
+import { normalizeStudioError } from "../lib/studio-errors";
+import { notifyStudioError, notifyStudioSuccess, notifyStudioWarning } from "../lib/studio-toast";
 import { createManualProject, createProjectWithImportedAsset, useStudio } from "./studio-store";
 
 export function SourceRail({ onClose }: { onClose?: () => void }) {
@@ -36,10 +37,10 @@ export function SourceRail({ onClose }: { onClose?: () => void }) {
         origin: "codex"
       });
       replaceProject(imported);
-      toast.success(`Imported ${kind} source`);
-    } catch (error) {
+      notifyStudioSuccess(`Imported ${kind} source`);
+    } catch {
       attachArtifact({ kind, origin: "manual", path: source, createdAt: new Date().toISOString() });
-      toast.warning(error instanceof Error ? `Attached locally: ${error.message}` : "Attached source locally");
+      notifyStudioWarning("Attached source locally", "The local import API was unavailable, so Studio kept the source as a recoverable artifact.");
     }
   };
 
@@ -60,10 +61,16 @@ export function SourceRail({ onClose }: { onClose?: () => void }) {
         try {
           const document = await unpackStudioDocument(new Uint8Array(result));
           replaceProject(document.project);
-          toast.success("Opened .ogdoc document");
+          notifyStudioSuccess("Opened .ogdoc document");
           return;
         } catch (error) {
-          toast.error(error instanceof Error ? error.message : "Studio document could not be opened");
+          notifyStudioError(
+            normalizeStudioError(error, {
+              kind: "validation",
+              title: "Studio document could not be opened",
+              recovery: "Choose a valid .ogdoc package or ask the agent to regenerate the session document."
+            })
+          );
           return;
         }
       }
@@ -78,10 +85,16 @@ export function SourceRail({ onClose }: { onClose?: () => void }) {
       if (fileKind === "graphforge-json") {
         try {
           replaceProject(JSON.parse(loaded));
-          toast.success("Opened editable project JSON");
+          notifyStudioSuccess("Opened editable project JSON");
           return;
         } catch {
-          toast.error("Project JSON could not be parsed");
+          notifyStudioError(
+            normalizeStudioError("Project JSON could not be parsed", {
+              kind: "validation",
+              title: "Project JSON could not be parsed",
+              recovery: "Import a valid .ogdoc package when possible. JSON is a fallback format only."
+            })
+          );
         }
       }
       let artifactPath = file.name;
@@ -95,8 +108,8 @@ export function SourceRail({ onClose }: { onClose?: () => void }) {
             dataUrl: loaded
           });
           artifactPath = uploaded.assetPath;
-        } catch (error) {
-          toast.warning(error instanceof Error ? `Using inline asset: ${error.message}` : "Using inline asset");
+        } catch {
+          notifyStudioWarning("Using inline asset", "The asset upload failed, so Studio kept the image inline for recovery.");
         }
       }
       const artifact = {
@@ -108,19 +121,25 @@ export function SourceRail({ onClose }: { onClose?: () => void }) {
       };
       if (project) {
         replaceProject(createProjectWithImportedAsset(project, artifact));
-        toast.success(`Imported ${file.name}`);
+        notifyStudioSuccess(`Imported ${file.name}`);
         return;
       }
       attachArtifact({
         ...artifact,
         inline: inline ?? loaded
       });
-      toast.success(`Attached ${file.name}`);
+      notifyStudioSuccess(`Attached ${file.name}`);
   };
 
   const requestAgentRevision = async () => {
     if (!session || !project) {
-      toast.error("Open through an agent session before requesting a revision");
+      notifyStudioError(
+        normalizeStudioError("Open through an agent session before requesting a revision", {
+          kind: "agent-handoff",
+          title: "No agent session connected",
+          recovery: "Open Studio from Codex, Claude Code, or OpenCode before requesting an agent revision."
+        })
+      );
       return;
     }
     try {
@@ -132,9 +151,15 @@ export function SourceRail({ onClose }: { onClose?: () => void }) {
         documentPath: session.activeDocumentPath,
         expectedOutput: session.activeDocumentPath
       });
-      toast.success(`Agent revision requested: ${result.path}`);
+      notifyStudioSuccess(`Agent revision requested: ${result.path}`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Agent revision request failed");
+      notifyStudioError(
+        normalizeStudioError(error, {
+          kind: "agent-handoff",
+          title: "Agent revision request failed",
+          recovery: "The current .ogdoc remains editable. Save it and retry the revision request."
+        })
+      );
     }
   };
 
