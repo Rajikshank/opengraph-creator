@@ -6,6 +6,7 @@ import {
   createPublishRequestViaApi,
   createSessionAgentRequestViaApi,
   createSessionViaApi,
+  exportProjectPagesViaApi,
   exportProjectViaApi,
   importSourceViaApi,
   listProjectsViaApi,
@@ -48,6 +49,38 @@ describe("studio API client", () => {
     });
 
     expect(result).toEqual({ format: "png", target: "public/og.png" });
+  });
+
+  it("exports every page variant through the local API", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          exports: [
+            { page: "/", format: "png", target: "public/og/home.png", width: 1200, height: 630 },
+            { page: "/pricing", format: "png", target: "public/og/pricing.png", width: 1200, height: 630 }
+          ]
+        })
+      )
+    );
+
+    const result = await exportProjectPagesViaApi(fetchMock, {
+      projectId: "project-1",
+      format: "png",
+      outDir: "public/og",
+      quality: 82
+    });
+
+    expect(result.exports).toHaveLength(2);
+    expect(fetchMock).toHaveBeenCalledWith("/api/export-pages", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        projectId: "project-1",
+        format: "png",
+        outDir: "public/og",
+        quality: 82
+      })
+    });
   });
 
   it("creates an agent handoff through the local API without provider credentials", async () => {
@@ -116,8 +149,12 @@ describe("studio API client", () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({ session: { id: "s1", status: "editing" } })))
       .mockResolvedValueOnce(new Response(JSON.stringify({ event: { id: "e1", sessionId: "s1", type: "agent.waiting" } })))
       .mockResolvedValueOnce(new Response(JSON.stringify({ session: { id: "s1", status: "exported" } })))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ request: { imagePath: "public/og.png", status: "preview" } })))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ request: { imagePath: "public/og.png", status: "confirmed" } })))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ request: { imagePath: "public/og.png", status: "preview", pageImages: [{ page: "/", imagePath: "public/og/home.png" }] } }))
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ request: { imagePath: "public/og.png", status: "confirmed", pageImages: [{ page: "/", imagePath: "public/og/home.png" }] } }))
+      )
       .mockResolvedValueOnce(new Response(JSON.stringify({ request: { prompt: "Revise lighting", status: "requested" } })));
 
     await expect(createSessionViaApi(fetchMock, { id: "s1", agent: "codex", strategy: "common" })).resolves.toMatchObject({
@@ -137,7 +174,12 @@ describe("studio API client", () => {
       })
     ).resolves.toMatchObject({ status: "exported" });
     await expect(
-      createPublishRequestViaApi(fetchMock, { sessionId: "s1", imagePath: "public/og.png", framework: "next" })
+      createPublishRequestViaApi(fetchMock, {
+        sessionId: "s1",
+        imagePath: "public/og.png",
+        framework: "next",
+        pageImages: [{ page: "/", imagePath: "public/og/home.png" }]
+      })
     ).resolves.toMatchObject({ status: "preview" });
     await expect(
       createPublishRequestViaApi(fetchMock, { sessionId: "s1", imagePath: "public/og.png", framework: "next", confirmed: true })

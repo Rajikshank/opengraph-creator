@@ -1,6 +1,6 @@
 import { useState, type ChangeEvent } from "react";
-import { FileCode2, PanelLeftClose, Send, Upload } from "lucide-react";
-import { unpackStudioDocument, type GraphForgeSourceArtifact, type SourceArtifactKind } from "@graphforge/core";
+import { FileCode2, Layers3, PanelLeftClose, Send, Upload } from "lucide-react";
+import { unpackStudioDocument, type GraphForgeSourceArtifact, type OgLayer, type OgProject, type SourceArtifactKind } from "@graphforge/core";
 import { createSessionAgentRequestViaApi, importSourceViaApi, saveSessionDocumentViaApi, uploadSessionAssetViaApi } from "../api";
 import { StudioSelect } from "../design-system/StudioSelect";
 import { normalizeStudioError } from "../lib/studio-errors";
@@ -12,6 +12,7 @@ export function SourceRail({ onClose }: { onClose?: () => void }) {
   const session = useStudio((state) => state.session);
   const replaceProject = useStudio((state) => state.replaceProject);
   const attachSourceArtifact = useStudio((state) => state.attachSourceArtifact);
+  const selectPageVariant = useStudio((state) => state.selectPageVariant);
   const [source, setSource] = useState(".graphforge/sessions/<id>/document.ogdoc");
   const [kind, setKind] = useState<SourceArtifactKind>("svg");
   const [prompt, setPrompt] = useState("Revise the current OG document. Keep text and layout objects editable; use generated images only as asset layers unless pure-image mode was selected.");
@@ -202,6 +203,33 @@ export function SourceRail({ onClose }: { onClose?: () => void }) {
         <button type="button" className="primary-action" onClick={importGeneratedAsset}>
           <Upload size={15} /> Import into document
         </button>
+        {project?.pages?.length ? (
+          <section className="og-pages-panel" aria-label="OG Pages">
+            <h3 className="section-heading">
+              <Layers3 size={14} />
+              <span>OG Pages</span>
+            </h3>
+            <div className="og-page-list">
+              {project.pages.map((page) => (
+                <button
+                  key={page.id}
+                  type="button"
+                  className={`og-page-row ${page.id === project.activePageId ? "active" : ""}`}
+                  onClick={() => selectPageVariant(page.id)}
+                >
+                  <span>
+                    <strong>{page.route}</strong>
+                    <small>{page.title}</small>
+                  </span>
+                  <em>{page.status}</em>
+                </button>
+              ))}
+            </div>
+            <button type="button" className="secondary-action" onClick={() => applyStyleToAllPages(project, replaceProject)}>
+              Apply style to all
+            </button>
+          </section>
+        ) : null}
         {session ? (
           <>
             <label>
@@ -220,4 +248,29 @@ export function SourceRail({ onClose }: { onClose?: () => void }) {
       </section>
     </aside>
   );
+}
+
+function applyStyleToAllPages(project: OgProject, replaceProject: (project: OgProject) => void) {
+  if (!project.pages?.length) return;
+  const currentLayers = project.layers;
+  const pages = project.pages.map((page) => ({
+    ...page,
+    layers: currentLayers.map((layer) => preservePageCopy(layer, page.layers.find((item) => item.id === layer.id)))
+  }));
+  replaceProject({
+    ...project,
+    pages,
+    updatedAt: new Date().toISOString()
+  });
+  notifyStudioSuccess("Applied current style to all page variants");
+}
+
+function preservePageCopy(templateLayer: OgLayer, existingLayer: OgLayer | undefined): OgLayer {
+  if ((templateLayer.kind === "text" || templateLayer.kind === "badge") && existingLayer && (existingLayer.kind === "text" || existingLayer.kind === "badge")) {
+    return {
+      ...templateLayer,
+      text: existingLayer.text
+    };
+  }
+  return JSON.parse(JSON.stringify(templateLayer)) as OgLayer;
 }

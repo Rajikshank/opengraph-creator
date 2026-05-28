@@ -1,14 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
   createDefaultProject,
+  createMultiPageProject,
   createProjectFromPreset,
   createPageVariantProjects,
   detectFramework,
+  getActivePage,
   getExportPath,
   getLayerEffectCapabilities,
+  getRenderableProject,
   getPlatformWarnings,
   isGlowEffectEnabled,
   normalizeGlowEffect,
+  setActivePage,
+  updateActivePageLayers,
   validateProject
 } from "./index";
 
@@ -300,6 +305,74 @@ describe("GraphForge core", () => {
     expect(variants[2].layers.find((layer) => layer.id === "headline")).toMatchObject({
       kind: "text",
       text: "Get Started"
+    });
+  });
+
+  it("stores per-page OG variants inside one document without breaking common-mode projects", () => {
+    const common = createDefaultProject({ name: "Common App", strategy: "common" });
+    const multipage = createMultiPageProject(
+      createDefaultProject({
+        name: "Docs",
+        strategy: "pages",
+        pages: ["/", "/pricing", "/blog/get-started"]
+      }),
+      [
+        { route: "/", detectedTitle: "Home", detectedDescription: "Welcome home", routeFile: "app/page.tsx", confidence: "high" },
+        { route: "/pricing", detectedTitle: "Pricing", detectedDescription: "Simple pricing", routeFile: "app/pricing/page.tsx", confidence: "high" },
+        { route: "/blog/get-started", detectedTitle: "Get Started", detectedDescription: "Start here", routeFile: "app/blog/get-started/page.tsx", confidence: "medium" }
+      ]
+    );
+
+    expect(common.pages).toBeUndefined();
+    expect(getActivePage(common)).toBeUndefined();
+    expect(getRenderableProject(common).layers).toBe(common.layers);
+    expect(multipage.pages).toHaveLength(3);
+    expect(multipage.activePageId).toBe("page-home");
+    expect(multipage.layers).toEqual(multipage.pages?.[0].layers);
+    expect(multipage.pages?.map((page) => [page.route, page.exportPath, page.status])).toEqual([
+      ["/", "public/og.png", "draft"],
+      ["/pricing", "public/og/pricing.png", "draft"],
+      ["/blog/get-started", "public/og/blog-get-started.png", "draft"]
+    ]);
+    expect(multipage.pages?.[1].sourceContext).toMatchObject({
+      routeFile: "app/pricing/page.tsx",
+      detectedTitle: "Pricing",
+      confidence: "high"
+    });
+  });
+
+  it("switches and edits active page variants while keeping the common visual system materialized", () => {
+    const project = createMultiPageProject(
+      createDefaultProject({ name: "SaaS", strategy: "hybrid", pages: ["/", "/features"] }),
+      [
+        { route: "/", detectedTitle: "Home", confidence: "high" },
+        { route: "/features", detectedTitle: "Features", detectedDescription: "Everything teams need", confidence: "high" }
+      ]
+    );
+
+    const features = setActivePage(project, "page-features");
+    const renderable = getRenderableProject(features);
+    const editedLayers = renderable.layers.map((layer) =>
+      layer.id === "headline" && layer.kind === "text" ? { ...layer, text: "Feature depth" } : layer
+    );
+    const edited = updateActivePageLayers(features, editedLayers);
+
+    expect(renderable.targetPages).toEqual(["/features"]);
+    expect(renderable.layers.find((layer) => layer.id === "headline")).toMatchObject({
+      kind: "text",
+      text: "Features"
+    });
+    expect(edited.layers.find((layer) => layer.id === "headline")).toMatchObject({
+      kind: "text",
+      text: "Feature depth"
+    });
+    expect(edited.pages?.find((page) => page.id === "page-features")).toMatchObject({
+      status: "edited",
+      layers: expect.arrayContaining([expect.objectContaining({ id: "headline", text: "Feature depth" })])
+    });
+    expect(edited.pages?.find((page) => page.id === "page-home")?.layers.find((layer) => layer.id === "headline")).toMatchObject({
+      kind: "text",
+      text: "Home"
     });
   });
 });

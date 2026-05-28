@@ -98,6 +98,39 @@ describe("GraphForge durable sessions", () => {
     expect(await readFile(paths.publishRequestJson, "utf8")).toContain("preview");
   });
 
+  it("records page-aware export and publish mappings for per-page handoff", async () => {
+    const repo = await mkdtemp(join(tmpdir(), "graphforge-session-pages-"));
+    await createGraphForgeSession({ repo, id: "session-pages", strategy: "pages" });
+    const paths = getSessionPaths(repo, "session-pages");
+
+    await recordSessionExport(repo, "session-pages", {
+      path: "public/og/pricing.png",
+      format: "png",
+      width: 1200,
+      height: 630,
+      fileSizeBytes: 44_000,
+      createdAt: "2026-05-26T00:00:00.000Z",
+      page: "/pricing"
+    });
+    const request = await createPublishRequest({
+      repo,
+      sessionId: "session-pages",
+      imagePath: "public/og/pricing.png",
+      framework: "next",
+      page: "/pricing",
+      confirmed: true,
+      pageImages: [{ page: "/pricing", imagePath: "public/og/pricing.png" }]
+    });
+
+    const exportJson = JSON.parse(await readFile(paths.exportJson, "utf8"));
+    const publishJson = JSON.parse(await readFile(paths.publishRequestJson, "utf8"));
+    expect(exportJson.exports).toEqual([
+      expect.objectContaining({ page: "/pricing", path: "public/og/pricing.png" })
+    ]);
+    expect(request.pageImages).toEqual([{ page: "/pricing", imagePath: "public/og/pricing.png" }]);
+    expect(publishJson.pageImages).toEqual([{ page: "/pricing", imagePath: "public/og/pricing.png" }]);
+  });
+
   it("records confirmed publish and agent revision requests for deterministic waits", async () => {
     const repo = await mkdtemp(join(tmpdir(), "graphforge-session-confirm-"));
     await createGraphForgeSession({ repo, id: "session-4" });

@@ -1,4 +1,12 @@
-import { createDefaultProject, type GraphForgeSession, type GraphForgeSourceArtifact, type LayerEffects, type OgLayer, type OgProject } from "@graphforge/core";
+import {
+  createDefaultProject,
+  updateActivePageLayers,
+  type GraphForgeSession,
+  type GraphForgeSourceArtifact,
+  type LayerEffects,
+  type OgLayer,
+  type OgProject
+} from "@graphforge/core";
 import { create } from "zustand";
 import {
   addLayer as addSessionLayer,
@@ -20,6 +28,7 @@ import {
   setImageFocalPoint as setSessionImageFocalPoint,
   setImagePerspective as setSessionImagePerspective,
   setLayerEffects as setSessionLayerEffects,
+  selectPageVariant as selectSessionPageVariant,
   snapLayer as snapSessionLayer,
   toggleLayerHidden as toggleSessionLayerHidden,
   toggleLayerLocked as toggleSessionLayerLocked,
@@ -42,6 +51,7 @@ interface StudioStore {
   replaceProject: (project: OgProject | null) => void;
   setSession: (session: GraphForgeSession | null) => void;
   setProjects: (projects: ProjectSummary[]) => void;
+  selectPageVariant: (pageIdOrRoute: string) => void;
   setSelectedLayerId: (id: string) => void;
   updateLayer: (id: string, patch: Partial<OgLayer>) => void;
   setLayerEffects: (id: string, patch: Partial<LayerEffects>) => void;
@@ -86,6 +96,7 @@ export const useStudio = create<StudioStore>((set) => ({
     }),
   setSession: (session) => set({ session }),
   setProjects: (projects) => set({ projects }),
+  selectPageVariant: (pageIdOrRoute) => set((state) => (state.project ? selectSessionPageVariant(state as EditorSession, pageIdOrRoute) : state)),
   setSelectedLayerId: (id) => set((state) => (state.project ? selectLayer(state as EditorSession, id) : state)),
   updateLayer: (id, patch) => set((state) => (state.project ? updateSessionLayer(state as EditorSession, id, patch) : state)),
   setLayerEffects: (id, patch) =>
@@ -213,9 +224,8 @@ export function createProjectWithImportedAsset(project: OgProject, artifact: Gra
   };
 
   return {
-    ...project,
+    ...updateActivePageLayers(project, [...project.layers, layer]),
     sourceArtifacts: [...project.sourceArtifacts, artifact],
-    layers: [...project.layers, layer],
     updatedAt: now
   };
 }

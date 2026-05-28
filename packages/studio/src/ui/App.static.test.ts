@@ -84,7 +84,10 @@ describe("reengineered studio UI contract", () => {
       "Glow radius",
       "Glow color",
       "Texture",
-      "Depth"
+      "Depth",
+      "OG Pages",
+      "Apply style to all",
+      "Export all pages"
     ].forEach((token) => expect(uiSource).toContain(token));
 
     expect(uiSource).toContain("readSessionBundleViaApi");
@@ -174,7 +177,7 @@ describe("reengineered studio UI contract", () => {
     expect(designSystemSource).toContain("onKeyUp={handleSliderChange}");
     expect(designSystemSource).toContain("handlePointerDown");
     expect(designSystemSource).toContain("commitValueFromClientX");
-    expect(stylesSource).toContain(".slider-shell input {\n  position: absolute;");
+    expect(stylesSource).toMatch(/\.slider-shell input\s*\{\s*position:\s*absolute;/);
     expect(stylesSource).toContain("z-index: 2;");
     expect(stylesSource).toContain("pointer-events: none;");
   });

@@ -1,5 +1,6 @@
 import type { Framework, GenerationStrategy } from "@graphforge/core";
 import { scanRepo, type RepoScanResult } from "./scan.js";
+import type { RouteContext } from "./scan.js";
 
 export type GenerationMode = "template" | "pure-image";
 
@@ -18,6 +19,7 @@ export interface GenerationBrief {
   generationMode: GenerationMode;
   framework: Framework;
   routes: string[];
+  routeContexts: RouteContext[];
   metadataFiles: string[];
   brandAssets: string[];
   referenceImage?: string;
@@ -58,6 +60,7 @@ function createGenerationBriefFromScan(input: GenerationBriefInput, scan: RepoSc
     generationMode,
     framework: scan.framework,
     routes,
+    routeContexts: scan.routeContexts,
     metadataFiles: scan.metadataFiles,
     brandAssets: scan.brandAssets,
     referenceImage: input.referenceImage,
@@ -66,6 +69,7 @@ function createGenerationBriefFromScan(input: GenerationBriefInput, scan: RepoSc
       ...input,
       framework: scan.framework,
       routes,
+      routeContexts: scan.routeContexts,
       metadataFiles: scan.metadataFiles,
       brandAssets: scan.brandAssets
     })
@@ -75,6 +79,7 @@ function createGenerationBriefFromScan(input: GenerationBriefInput, scan: RepoSc
 function buildCodexPrompt(input: GenerationBriefInput & {
   framework: Framework;
   routes: string[];
+  routeContexts: RouteContext[];
   metadataFiles: string[];
   brandAssets: string[];
 }): string {
@@ -87,6 +92,17 @@ function buildCodexPrompt(input: GenerationBriefInput & {
 
   const reference = input.referenceImage ? `\nReference image to respect without copying blindly: ${input.referenceImage}` : "";
   const generationMode = input.generationMode ?? "template";
+  const routeContext =
+    input.routeContexts.length > 0
+      ? input.routeContexts
+          .map((page) => {
+            const title = page.detectedTitle ? `title "${page.detectedTitle}"` : "no title detected";
+            const description = page.detectedDescription ? `description "${page.detectedDescription}"` : "no description detected";
+            const file = page.routeFile ? `from ${page.routeFile}` : "without route file";
+            return `${page.route}: ${title}, ${description}, ${file}, confidence ${page.confidence}`;
+          })
+          .join("; ")
+      : "none detected";
   const modeInstruction =
     generationMode === "pure-image"
       ? "The user chose pure image generation. Create an agent image handoff for Codex, Claude, or OpenCode; GraphForge should not call an image provider directly or require a provider API key."
@@ -98,6 +114,7 @@ function buildCodexPrompt(input: GenerationBriefInput & {
     `App name: ${input.name}`,
     `Framework: ${input.framework}`,
     `Routes: ${input.routes.join(", ")}`,
+    `Route context: ${routeContext}`,
     `Brand assets: ${input.brandAssets.length ? input.brandAssets.join(", ") : "none detected"}`,
     `Metadata files: ${input.metadataFiles.length ? input.metadataFiles.join(", ") : "none detected"}`,
     reference.trim(),
@@ -105,6 +122,9 @@ function buildCodexPrompt(input: GenerationBriefInput & {
     generationMode === "pure-image"
       ? "Use graphforge agent-image with the app context, route intent, brand assets, and optional reference image, then open GraphForge Studio for review/edit/export."
       : "Generate a .ogdoc document with layers for headline, subtitle, badge, logo, screenshots, images, shapes, and background. Never bake important text into one SVG/image.",
+    input.strategy === "pages" || input.strategy === "hybrid"
+      ? "Generate one .ogdoc with internal page variants. Each page variant must preserve the shared visual system while changing route-specific text, badges, imagery, and exportPath."
+      : "Generate a common .ogdoc document with no internal page variants unless the user changes strategy.",
     "If image generation tools are available, use them only for background/art/texture/product-scene asset layers unless pure-image mode was selected.",
     "Use strategy common/pages/hybrid exactly as requested and preserve the route list."
   ]

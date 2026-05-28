@@ -1,18 +1,19 @@
-import { isGlowEffectEnabled, normalizeGlowEffect, type ImageLayer, type OgLayer, type OgProject } from "@graphforge/core";
+import { getRenderableProject, isGlowEffectEnabled, normalizeGlowEffect, type ImageLayer, type OgLayer, type OgProject } from "@graphforge/core";
 
 export function renderProjectToSvg(project: OgProject): string {
-  const visibleLayers = project.layers.filter((layer) => !layer.hidden);
+  const renderableProject = getRenderableProject(project);
+  const visibleLayers = renderableProject.layers.filter((layer) => !layer.hidden);
   const defs = [
-    ...visibleLayers.flatMap((layer) => [...renderEffectDefs(layer, project), ...renderImageDefs(layer)])
+    ...visibleLayers.flatMap((layer) => [...renderEffectDefs(layer, renderableProject), ...renderImageDefs(layer)])
   ];
 
   const body = visibleLayers
-    .map((layer) => renderLayer(layer, project))
+    .map((layer) => renderLayer(layer, renderableProject))
     .join("\n");
 
   return [
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${project.canvas.width}" height="${project.canvas.height}" viewBox="0 0 ${project.canvas.width} ${project.canvas.height}" role="img" aria-label="${escapeXml(project.name)}">`,
-    `<desc>${escapeXml(project.layers.filter(isVisibleTextLayer).map((layer) => layer.text).join(" "))}</desc>`,
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${renderableProject.canvas.width}" height="${renderableProject.canvas.height}" viewBox="0 0 ${renderableProject.canvas.width} ${renderableProject.canvas.height}" role="img" aria-label="${escapeXml(renderableProject.name)}">`,
+    `<desc>${escapeXml(renderableProject.layers.filter(isVisibleTextLayer).map((layer) => layer.text).join(" "))}</desc>`,
     `<defs>${defs.join("")}</defs>`,
     body,
     `</svg>`

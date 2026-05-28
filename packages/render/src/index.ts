@@ -1,4 +1,4 @@
-import type { ExportFormat, OgProject } from "@graphforge/core";
+import { getRenderableProject, type ExportFormat, type OgProject } from "@graphforge/core";
 import { renderProjectToSvg } from "./browser.js";
 
 export { renderProjectToSvg } from "./browser.js";
@@ -24,7 +24,8 @@ export async function exportProject(project: OgProject, options: ExportOptions):
     import("sharp")
   ]);
   const sharp = sharpModule.default;
-  const svg = renderProjectToSvg(project);
+  const renderableProject = getRenderableProject(project);
+  const svg = renderProjectToSvg(renderableProject);
   await mkdir(dirname(options.target), { recursive: true });
 
   if (options.format === "svg") {
@@ -41,8 +42,8 @@ export async function exportProject(project: OgProject, options: ExportOptions):
 
   return {
     format: options.format,
-    width: project.canvas.width,
-    height: project.canvas.height,
+    width: renderableProject.canvas.width,
+    height: renderableProject.canvas.height,
     target: options.target,
     fileSizeBytes: info.size
   };

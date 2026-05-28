@@ -112,13 +112,27 @@ export interface SessionExportRequest {
   format: ExportFormat;
   width: number;
   height: number;
+  page?: string;
   fileSizeBytes?: number;
+}
+
+export interface ExportProjectPagesRequest {
+  projectId: string;
+  format: ExportFormat;
+  outDir: string;
+  quality?: number;
+  repo?: string;
+}
+
+export interface ExportProjectPagesResponse {
+  exports: Array<ExportProjectResponse & { page: string }>;
 }
 
 export interface PublishRequestInput {
   repo?: string;
   sessionId: string;
   imagePath: string;
+  pageImages?: Array<{ page: string; imagePath: string }>;
   framework?: Framework;
   page?: string;
   confirmed?: boolean;
@@ -180,6 +194,21 @@ export async function exportProjectViaApi(
     }
   });
   return body.result;
+}
+
+export async function exportProjectPagesViaApi(
+  fetcher: FetchLike = fetch,
+  request: ExportProjectPagesRequest
+): Promise<ExportProjectPagesResponse> {
+  return requestJson<ExportProjectPagesResponse>(fetcher, {
+    url: "/api/export-pages",
+    label: "Could not export page variants",
+    init: {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(request)
+    }
+  });
 }
 
 export async function createAgentHandoffViaApi(

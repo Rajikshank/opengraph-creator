@@ -1,11 +1,12 @@
 import { createReadStream } from "node:fs";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { dirname, extname, join, normalize } from "node:path";
+import { dirname, extname, isAbsolute, join, normalize } from "node:path";
 import type { AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
 import {
   createAssetPath,
+  getRenderableProject,
   mediaTypeFromPath,
   validateStudioDocument,
   type ExportFormat,
@@ -13,6 +14,7 @@ import {
   type SourceArtifactKind,
   type SourceArtifactOrigin
 } from "@graphforge/core";
+import { exportProject } from "@graphforge/render";
 import { createAiImagePlan, type AgentImageOutputFormat } from "./ai-image.js";
 import { createImportedSourceProject } from "./import-source.js";
 import { readStudioDocumentFile, writeStudioDocumentFile } from "./document-io.js";
@@ -94,13 +96,23 @@ interface SessionExportBody {
   format: ExportFormat;
   width: number;
   height: number;
+  page?: string;
   fileSizeBytes?: number;
+}
+
+interface ExportPagesBody {
+  projectId: string;
+  format: ExportFormat;
+  outDir: string;
+  quality?: number;
+  repo?: string;
 }
 
 interface PublishRequestBody {
   repo?: string;
   sessionId: string;
   imagePath: string;
+  pageImages?: Array<{ page: string; imagePath: string }>;
   framework?: "next" | "astro" | "nuxt" | "remix" | "vite" | "html" | "unknown";
   page?: string;
   confirmed?: boolean;
@@ -279,6 +291,7 @@ async function handleRequest(input: {
       format: body.format,
       width: body.width,
       height: body.height,
+      page: body.page,
       fileSizeBytes: body.fileSizeBytes,
       createdAt: new Date().toISOString()
     });
@@ -292,6 +305,7 @@ async function handleRequest(input: {
       repo: body.repo ?? input.sessionRepo ?? input.library.root,
       sessionId: body.sessionId,
       imagePath: body.imagePath,
+      pageImages: body.pageImages,
       framework: body.framework,
       page: body.page,
       confirmed: body.confirmed ?? false
@@ -337,6 +351,24 @@ async function handleRequest(input: {
     const body = (await readJson(input.request)) as ExportBody;
     const result = await exportLibraryProject(input.library, body);
     sendJson(input.response, 200, { result });
+    return;
+  }
+
+  if (url.pathname === "/api/export-pages" && input.request.method === "POST") {
+    const body = (await readJson(input.request)) as ExportPagesBody;
+    const project = await readLibraryProject(input.library, body.projectId);
+    const pages = project.pages?.length ? project.pages : [{ id: project.activePageId ?? "page-home", route: project.targetPages[0] ?? "/" }];
+    const exports = [];
+    const baseDir = body.repo ?? input.library.root;
+    for (const page of pages) {
+      const pageProject = getRenderableProject(project, page.id);
+      const fileName = `${page.route === "/" ? "home" : page.route.replace(/^\/+/, "").replace(/\/+$/, "").replace(/[^a-zA-Z0-9]+/g, "-").toLowerCase()}.${body.format}`;
+      const relativeTarget = normalizePath(join(body.outDir, fileName));
+      const target = isAbsolute(body.outDir) ? join(body.outDir, fileName) : join(baseDir, relativeTarget);
+      const result = await exportProject(pageProject, { format: body.format, target, quality: body.quality });
+      exports.push({ ...result, target: relativeTarget, path: relativeTarget, page: page.route });
+    }
+    sendJson(input.response, 200, { exports });
     return;
   }
 
@@ -462,6 +494,10 @@ function readJson(request: IncomingMessage): Promise<unknown> {
 function sendJson(response: ServerResponse, status: number, value: unknown): void {
   response.writeHead(status, { "content-type": "application/json; charset=utf-8" });
   response.end(JSON.stringify(value));
+}
+
+function normalizePath(path: string): string {
+  return path.replaceAll("\\", "/");
 }
 
 function dataUrlToBytes(dataUrl: string): Uint8Array {

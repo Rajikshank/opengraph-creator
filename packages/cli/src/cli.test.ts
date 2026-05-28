@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createDefaultProject, unpackStudioDocument } from "@graphforge/core";
@@ -8,6 +8,7 @@ import {
   createDoctorReport,
   createProjectFromArgs,
   createMetadataPlan,
+  exportProjectPages,
   exportProjectFile,
   runCli
 } from "./index";
@@ -27,7 +28,11 @@ describe("GraphForge CLI helpers", () => {
     expect(project.sourceRepo).toBe("D:/apps/acme");
     expect(project.generationMode).toBe("pure-image");
     expect(project.targetPages).toEqual(["/", "/pricing"]);
-    expect(project.layers.find((layer) => layer.id === "badge")).toMatchObject({ text: "Technical Article" });
+    expect(project.pages?.map((page) => [page.route, page.layers.find((layer) => layer.id === "badge")?.kind])).toEqual([
+      ["/", "badge"],
+      ["/pricing", "badge"]
+    ]);
+    expect(project.sharedDesign?.description).toContain("Shared visual system");
   });
 
   it("writes generation mode through the new CLI command", async () => {
@@ -39,6 +44,34 @@ describe("GraphForge CLI helpers", () => {
     const project = JSON.parse(await readFile(projectPath, "utf8")) as ReturnType<typeof createDefaultProject>;
     expect(project.generationMode).toBe("pure-image");
     expect(project.strategy).toBe("hybrid");
+  });
+
+  it("creates one multi-page document when the CLI receives page targets", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "graphforge-new-pages-"));
+    const documentPath = join(dir, "pages.ogdoc");
+
+    await runCli([
+      "document",
+      "new",
+      "--name",
+      "Pages App",
+      "--strategy",
+      "pages",
+      "--mode",
+      "template",
+      "--pages",
+      "/,/pricing,/features",
+      "--out",
+      documentPath
+    ]);
+
+    const document = await unpackStudioDocument(await readFile(documentPath));
+    expect(document.project.pages?.map((page) => [page.route, page.exportPath])).toEqual([
+      ["/", "public/og.png"],
+      ["/pricing", "public/og/pricing.png"],
+      ["/features", "public/og/features.png"]
+    ]);
+    expect(document.project.layers).toEqual(document.project.pages?.[0].layers);
   });
 
   it("builds a preview-first metadata plan for Next.js", () => {
@@ -74,6 +107,31 @@ describe("GraphForge CLI helpers", () => {
     const result = await exportProjectFile({ projectPath, format: "jpg", target });
 
     expect(result).toMatchObject({ format: "jpg", width: 1200, height: 630, target });
+  });
+
+  it("exports every page variant with deterministic page-to-image mapping", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "graphforge-page-export-"));
+    const project = createProjectFromArgs({
+      name: "Page Export",
+      strategy: "pages",
+      generationMode: "template",
+      pages: ["/", "/pricing"]
+    });
+    const projectPath = join(dir, "pages.og.json");
+    await writeFile(projectPath, JSON.stringify(project));
+
+    const result = await exportProjectPages({
+      projectPath,
+      format: "png",
+      outDir: join(dir, "public", "og")
+    });
+
+    expect(result.exports.map((item) => [item.page, item.path, item.width, item.height])).toEqual([
+      ["/", join(dir, "public", "og", "home.png"), 1200, 630],
+      ["/pricing", join(dir, "public", "og", "pricing.png"), 1200, 630]
+    ]);
+    await expect(stat(result.exports[0].path)).resolves.toMatchObject({ size: expect.any(Number) });
+    await expect(stat(result.exports[1].path)).resolves.toMatchObject({ size: expect.any(Number) });
   });
 
   it("renders SVG from an existing editable project file through the CLI entrypoint", async () => {
@@ -492,6 +550,31 @@ describe("GraphForge CLI helpers", () => {
     const request = await readFile(join(dir, ".graphforge", "sessions", "cli-session", "publish-request.json"), "utf8");
     expect(request).toContain('"status": "preview"');
     await expect(readFile(join(dir, "app", "layout.tsx"), "utf8")).rejects.toThrow();
+  });
+
+  it("publishes page-specific exports from the session export map", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "graphforge-cli-page-publish-"));
+    await mkdir(join(dir, "app", "pricing"), { recursive: true });
+    await writeFile(join(dir, "app", "layout.tsx"), "export default function RootLayout({ children }) { return children }");
+    await writeFile(join(dir, "app", "pricing", "page.tsx"), "export default function Pricing() { return null }");
+
+    await runCli(["session", "create", "--repo", dir, "--id", "page-session", "--agent", "codex", "--strategy", "pages"]);
+    await runCli(["publish", "--preview", "--repo", dir, "--session", "page-session", "--framework", "next", "--pageImages", JSON.stringify([
+      { page: "/", imagePath: "public/og/home.png" },
+      { page: "/pricing", imagePath: "public/og/pricing.png" }
+    ])]);
+    await runCli(["publish", "--confirm", "--repo", dir, "--session", "page-session", "--framework", "next", "--allPages"]);
+
+    const request = JSON.parse(await readFile(join(dir, ".graphforge", "sessions", "page-session", "publish-request.json"), "utf8"));
+    const layout = await readFile(join(dir, "app", "layout.tsx"), "utf8");
+    const pricing = await readFile(join(dir, "app", "pricing", "page.tsx"), "utf8");
+    expect(request.pageImages).toEqual([
+      { page: "/", imagePath: "public/og/home.png" },
+      { page: "/pricing", imagePath: "public/og/pricing.png" }
+    ]);
+    expect(request.status).toBe("confirmed");
+    expect(layout).toContain("/og/home.png");
+    expect(pricing).toContain("/og/pricing.png");
   });
 
   it("publishes with confirmation by creating metadata backup-safe files", async () => {

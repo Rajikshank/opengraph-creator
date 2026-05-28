@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createDefaultProject } from "@graphforge/core";
+import { createDefaultProject, createMultiPageProject } from "@graphforge/core";
 import {
   addLayer,
   createEditorSession,
@@ -22,6 +22,7 @@ import {
   snapLayer,
   distributeLayers,
   updateProjectSettings,
+  selectPageVariant,
   updateSelectedLayer
 } from "./editor-model";
 
@@ -89,6 +90,29 @@ describe("editor model", () => {
 
     expect(updated.project.targetPages).toEqual(["/pricing", "/blog/get-started"]);
     expect(undo(updated).project.targetPages).toEqual(["/"]);
+  });
+
+  it("switches page variants and edits only the active page in a multi-page document", () => {
+    const project = createMultiPageProject(
+      createDefaultProject({ name: "Pages", strategy: "pages", pages: ["/", "/pricing"] }),
+      [
+        { route: "/", detectedTitle: "Home", confidence: "high" },
+        { route: "/pricing", detectedTitle: "Pricing", confidence: "high" }
+      ]
+    );
+    const session = selectPageVariant(createEditorSession(project), "page-pricing");
+    const updated = updateSelectedLayer(selectLayer(session, "headline"), { text: "Pricing made simple" });
+
+    expect(session.project.activePageId).toBe("page-pricing");
+    expect(session.project.layers.find((layer) => layer.id === "headline")).toMatchObject({ text: "Pricing" });
+    expect(updated.project.pages?.find((page) => page.id === "page-pricing")).toMatchObject({
+      status: "edited",
+      layers: expect.arrayContaining([expect.objectContaining({ id: "headline", text: "Pricing made simple" })])
+    });
+    expect(updated.project.pages?.find((page) => page.id === "page-home")?.layers.find((layer) => layer.id === "headline")).toMatchObject({
+      text: "Home"
+    });
+    expect(undo(updated).project.layers.find((layer) => layer.id === "headline")).toMatchObject({ text: "Pricing" });
   });
 
   it("moves a layer to an absolute canvas position and clamps it inside the canvas", () => {

@@ -2,7 +2,7 @@ import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { createDefaultProject, unpackStudioDocument } from "@graphforge/core";
+import { createDefaultProject, createMultiPageProject, unpackStudioDocument } from "@graphforge/core";
 import { createLibrary } from "./library";
 import { createStudioServer, getDefaultStudioStaticDir, type StudioServerHandle } from "./server";
 
@@ -84,6 +84,37 @@ describe("GraphForge studio local API", () => {
     await expect(stat(join(repo, "public", "og.svg"))).resolves.toMatchObject({ size: expect.any(Number) });
     await expect(stat(join(root, "library", "public", "og.svg"))).rejects.toThrow();
   });
+
+  it("exports every page variant through the repo-scoped export-pages endpoint", async () => {
+    const root = await mkdtemp(join(tmpdir(), "graphforge-api-page-export-"));
+    const library = createLibrary({ root: join(root, "library") });
+    const repo = join(root, "user-app");
+    handle = await createStudioServer({ library, port: 0, sessionRepo: repo });
+    const project = createMultiPageProject(
+      createDefaultProject({ name: "Page Export", strategy: "pages", pages: ["/", "/pricing"] })
+    );
+
+    await fetch(`${handle.url}/api/projects/${project.projectId}`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(project)
+    });
+    const exportResponse = await fetch(`${handle.url}/api/export-pages`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ projectId: project.projectId, format: "png", outDir: "public/og", repo })
+    });
+    const body = await exportResponse.json();
+
+    expect(exportResponse.status).toBe(200);
+    expect(body.exports).toEqual([
+      expect.objectContaining({ page: "/", target: "public/og/home.png", width: 1200, height: 630 }),
+      expect.objectContaining({ page: "/pricing", target: "public/og/pricing.png", width: 1200, height: 630 })
+    ]);
+    await expect(stat(join(repo, "public", "og", "home.png"))).resolves.toMatchObject({ size: expect.any(Number) });
+    await expect(stat(join(repo, "public", "og", "pricing.png"))).resolves.toMatchObject({ size: expect.any(Number) });
+  });
+
 
   it("imports generated assets and creates agent handoff plans over HTTP", async () => {
     const root = await mkdtemp(join(tmpdir(), "graphforge-api-import-"));

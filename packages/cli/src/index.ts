@@ -1,15 +1,17 @@
 #!/usr/bin/env node
 import { realpathSync } from "node:fs";
 import { copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
-import { dirname, join, normalize } from "node:path";
+import { dirname, isAbsolute, join, normalize, relative } from "node:path";
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   createDefaultProject,
+  createMultiPageProject,
   createPageVariantProjects,
   createProjectFromPreset,
   validateStudioDocument,
+  getRenderableProject,
   type ExportFormat,
   type Framework,
   type GenerationMode,
@@ -70,8 +72,24 @@ export interface ExportProjectFileInput {
   quality?: number;
 }
 
+export interface ExportProjectPagesInput {
+  projectPath: string;
+  format: ExportFormat;
+  outDir: string;
+  quality?: number;
+}
+
+export interface ExportProjectPagesResult {
+  exports: Array<ExportResult & { page: string; path: string }>;
+}
+
 export interface ApplyMetadataInput extends MetadataPlanInput {
   repo: string;
+}
+
+interface PageImageMapping {
+  page: string;
+  imagePath: string;
 }
 
 export type DoctorCheckStatus = "pass" | "warn" | "fail";
@@ -105,7 +123,8 @@ export function createProjectFromArgs(args: CreateProjectArgs): OgProject {
     sourceRepo: args.repo,
     pages: args.pages
   };
-  return args.preset ? createProjectFromPreset({ ...input, preset: args.preset }) : createDefaultProject(input);
+  const project = args.preset ? createProjectFromPreset({ ...input, preset: args.preset }) : createDefaultProject(input);
+  return project.strategy === "pages" || project.strategy === "hybrid" ? createMultiPageProject(project) : project;
 }
 
 export function createMetadataPlan(input: MetadataPlanInput): MetadataPlan {
@@ -130,6 +149,20 @@ export function createMetadataPlan(input: MetadataPlanInput): MetadataPlan {
 export async function exportProjectFile(input: ExportProjectFileInput): Promise<ExportResult> {
   const project = JSON.parse(await readFile(input.projectPath, "utf8")) as OgProject;
   return exportProject(project, { format: input.format, target: input.target, quality: input.quality });
+}
+
+export async function exportProjectPages(input: ExportProjectPagesInput): Promise<ExportProjectPagesResult> {
+  const project = JSON.parse(await readFile(input.projectPath, "utf8")) as OgProject;
+  const pages = project.pages?.length ? project.pages : [{ route: project.targetPages[0] ?? "/", id: project.activePageId ?? "page-home" }];
+  const results: Array<ExportResult & { page: string; path: string }> = [];
+  for (const page of pages) {
+    const pageProject = getRenderableProject(project, page.id);
+    const fileName = `${page.route === "/" ? "home" : page.route.replace(/^\/+/, "").replace(/\/+$/, "").replace(/[^a-zA-Z0-9]+/g, "-").toLowerCase()}.${input.format}`;
+    const target = join(input.outDir, fileName);
+    const result = await exportProject(pageProject, { format: input.format, target, quality: input.quality });
+    results.push({ ...result, path: result.target, page: page.route });
+  }
+  return { exports: results };
 }
 
 export async function applyMetadataPlanToRepo(input: ApplyMetadataInput): Promise<MetadataPlan> {
@@ -523,6 +556,30 @@ export async function runCli(argv: string[]): Promise<void> {
   if (command === "export") {
     const args = parseArgs(rest);
     if (!args.project) throw new Error("--project is required");
+    if (args.allPages === "true" || args.allpages === "true") {
+      const outDir = args.outDir ?? args.out ?? "public/og";
+      const result = await exportProjectPages({
+        projectPath: args.project,
+        format: parseFormat(args.format),
+        outDir: args.repo && !isAbsolute(outDir) ? join(args.repo, outDir) : outDir,
+        quality: args.quality ? Number(args.quality) : undefined
+      });
+      if (args.session) {
+        for (const item of result.exports) {
+          await recordSessionExport(args.repo ?? process.cwd(), args.session, {
+            path: args.repo ? toRepoRelativePath(args.repo, item.target) : item.target,
+            format: item.format,
+            width: item.width,
+            height: item.height,
+            page: item.page,
+            fileSizeBytes: item.fileSizeBytes,
+            createdAt: new Date().toISOString()
+          });
+        }
+      }
+      console.log(JSON.stringify(result, null, 2));
+      return;
+    }
     const result = await exportProjectFile({
       projectPath: args.project,
       format: parseFormat(args.format),
@@ -620,9 +677,10 @@ export async function runCli(argv: string[]): Promise<void> {
         mode: parseGenerationMode(args.mode)
       });
     }
-    const imagePath = args.image ?? "public/og.png";
+    const pageImages = await resolvePageImagesForPublish(repo, sessionId, args);
+    const imagePath = pageImages?.[0]?.imagePath ?? args.image ?? "public/og.png";
     const framework = parseFramework(args.framework);
-    const page = args.page ?? "/";
+    const page = args.page ?? pageImages?.[0]?.page ?? "/";
     const confirmed = args.confirm === "true";
     const request = await createPublishRequest({
       repo,
@@ -630,15 +688,18 @@ export async function runCli(argv: string[]): Promise<void> {
       imagePath,
       framework,
       page,
+      pageImages,
       confirmed
     });
-    const plan = await applyMetadataPlanToRepo({
-      repo,
-      framework,
-      page,
-      imagePath,
-      confirm: confirmed
-    });
+    const plan = pageImages?.length
+      ? await applyPageImageMetadataPlans({ repo, framework, pageImages, confirm: confirmed })
+      : await applyMetadataPlanToRepo({
+          repo,
+          framework,
+          page,
+          imagePath,
+          confirm: confirmed
+        });
     console.log(JSON.stringify({ request, plan }, null, 2));
     return;
   }
@@ -684,6 +745,46 @@ function parseArgs(args: string[]): Record<string, string> {
     }
   }
   return parsed;
+}
+
+async function resolvePageImagesForPublish(repo: string, sessionId: string, args: Record<string, string>): Promise<PageImageMapping[] | undefined> {
+  if (args.pageImages) {
+    const source = args.pageImages.startsWith("@") ? await readFile(args.pageImages.slice(1), "utf8") : args.pageImages;
+    const parsed = JSON.parse(source) as PageImageMapping[];
+    return parsed.map((item) => ({ page: item.page, imagePath: item.imagePath }));
+  }
+  if (args.allPages !== "true" && args.allpages !== "true") return undefined;
+  const session = await readGraphForgeSession(repo, sessionId);
+  const latestByPage = new Map<string, PageImageMapping>();
+  for (const item of session.exports) {
+    if (item.page) latestByPage.set(item.page, { page: item.page, imagePath: item.path });
+  }
+  if (latestByPage.size) return [...latestByPage.values()];
+  return [...session.publishRequests].reverse().find((request) => request.pageImages?.length)?.pageImages;
+}
+
+async function applyPageImageMetadataPlans(input: {
+  repo: string;
+  framework: Framework;
+  pageImages: PageImageMapping[];
+  confirm: boolean;
+}): Promise<{ mode: "preview" | "apply"; instructions: string[]; mutations: MetadataPlan["mutations"] }> {
+  const plans = await Promise.all(
+    input.pageImages.map((item) =>
+      applyMetadataPlanToRepo({
+        repo: input.repo,
+        framework: input.framework,
+        page: item.page,
+        imagePath: item.imagePath,
+        confirm: input.confirm
+      })
+    )
+  );
+  return {
+    mode: input.confirm ? "apply" : "preview",
+    instructions: plans.flatMap((plan) => plan.instructions),
+    mutations: plans.flatMap((plan) => plan.mutations)
+  };
 }
 
 function parseSessionWaitTarget(value?: string): SessionWaitTarget {
@@ -819,6 +920,7 @@ Commands:
   graphforge studio --port 5123 --repo <path>
   graphforge render --name <name> --out og.svg
   graphforge export --project project.og.json --format png|webp|jpg|svg --out public/og.png --session <session-id>
+  graphforge export --project project.og.json --format png|webp|jpg|svg --allPages true --outDir public/og --session <session-id>
   graphforge variants --project project.og.json --outDir og-projects
   graphforge agent-handoff --project project.og.json --prompt "art direction" --out public/og-agent.png --plan .graphforge/agent-handoff.json
   graphforge agent-image --project project.og.json --out public/og-agent.png  (compatibility alias)
@@ -828,6 +930,8 @@ Commands:
   graphforge apply --framework next --image public/og.png --confirm
   graphforge publish --preview --session <session-id> --image public/og.png
   graphforge publish --confirm --session <session-id> --image public/og.png
+  graphforge publish --preview --session <session-id> --allPages true
+  graphforge publish --confirm --session <session-id> --allPages true
   graphforge doctor
 `);
 }
@@ -947,6 +1051,11 @@ function getLikelyMetadataFile(framework: Framework, page: string): string {
 
 function toPublicUrl(imagePath: string): string {
   return `/${imagePath.replaceAll("\\", "/").replace(/^public\//, "")}`;
+}
+
+function toRepoRelativePath(repo: string, target: string): string {
+  const relativePath = isAbsolute(target) ? relative(repo, target) : target;
+  return relativePath.replaceAll("\\", "/");
 }
 
 async function writeMetadataFile(file: string, framework: Framework, imageUrl: string): Promise<void> {

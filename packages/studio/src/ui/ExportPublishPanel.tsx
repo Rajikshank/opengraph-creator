@@ -5,6 +5,7 @@ import {
   createAgentHandoffViaApi,
   createPublishRequestViaApi,
   createSessionAgentRequestViaApi,
+  exportProjectPagesViaApi,
   exportProjectViaApi,
   recordSessionExportViaApi,
   saveProjectViaApi,
@@ -24,6 +25,7 @@ export function ExportPublishPanel() {
   const [framework, setFramework] = useState<Framework>("unknown");
   const [quality, setQuality] = useState(82);
   const [target, setTarget] = useState("public/og.png");
+  const [pageImages, setPageImages] = useState<Array<{ page: string; imagePath: string }>>([]);
   const [hasExported, setHasExported] = useState(false);
   const [hasPreviewRequest, setHasPreviewRequest] = useState(false);
   const [hasConfirmedPublish, setHasConfirmedPublish] = useState(false);
@@ -48,6 +50,7 @@ export function ExportPublishPanel() {
       const result = await exportProjectViaApi(fetch, { projectId: project.projectId, format, target, quality, repo: session?.repo });
       setLastExportSizeBytes(result.fileSizeBytes);
       setHasExported(true);
+      setPageImages(project.pages?.length ? [{ page: project.targetPages[0] ?? "/", imagePath: result.target }] : []);
       setHasPreviewRequest(false);
       setHasConfirmedPublish(false);
       if (session) {
@@ -73,6 +76,50 @@ export function ExportPublishPanel() {
     }
   };
 
+  const exportAllPages = async () => {
+    if (!project?.pages?.length) return;
+    try {
+      if (session) await saveSessionDocumentViaApi(fetch, { repo: session.repo, sessionId: session.id, project });
+      await saveProjectViaApi(fetch, project);
+      const result = await exportProjectPagesViaApi(fetch, {
+        projectId: project.projectId,
+        format,
+        outDir: "public/og",
+        quality,
+        repo: session?.repo
+      });
+      const mappings = result.exports.map((item) => ({ page: item.page, imagePath: item.target }));
+      setPageImages(mappings);
+      setLastExportSizeBytes(result.exports.reduce((total, item) => total + (item.fileSizeBytes ?? 0), 0));
+      setHasExported(true);
+      setHasPreviewRequest(false);
+      setHasConfirmedPublish(false);
+      if (session) {
+        for (const item of result.exports) {
+          await recordSessionExportViaApi(fetch, {
+            repo: session.repo,
+            sessionId: session.id,
+            path: item.target,
+            format,
+            page: item.page,
+            width: item.width ?? 1200,
+            height: item.height ?? 630,
+            fileSizeBytes: item.fileSizeBytes
+          });
+        }
+      }
+      notifyStudioSuccess(`Exported ${result.exports.length} page OG image${result.exports.length === 1 ? "" : "s"}`);
+    } catch (error) {
+      notifyStudioError(
+        normalizeStudioError(error, {
+          kind: "export",
+          title: "Page export failed",
+          recovery: "Your editable page variants are still safe. Retry export after checking the target path and local Studio service."
+        })
+      );
+    }
+  };
+
   const createPublishPreview = async () => {
     if (!session) {
       notifyStudioError(
@@ -85,7 +132,7 @@ export function ExportPublishPanel() {
       return;
     }
     try {
-      await createPublishRequestViaApi(fetch, { repo: session.repo, sessionId: session.id, imagePath: target, framework, confirmed: false });
+      await createPublishRequestViaApi(fetch, { repo: session.repo, sessionId: session.id, imagePath: pageImages[0]?.imagePath ?? target, pageImages: pageImages.length ? pageImages : undefined, framework, confirmed: false });
       setHasPreviewRequest(true);
       setHasConfirmedPublish(false);
       notifyStudioSuccess("Publish preview request created");
@@ -132,7 +179,7 @@ export function ExportPublishPanel() {
       return;
     }
     try {
-      await createPublishRequestViaApi(fetch, { repo: session.repo, sessionId: session.id, imagePath: target, framework, confirmed: true });
+      await createPublishRequestViaApi(fetch, { repo: session.repo, sessionId: session.id, imagePath: pageImages[0]?.imagePath ?? target, pageImages: pageImages.length ? pageImages : undefined, framework, confirmed: true });
       setHasPreviewRequest(true);
       setHasConfirmedPublish(true);
       notifyStudioSuccess("Publish confirmed for agent handoff");
@@ -155,7 +202,9 @@ export function ExportPublishPanel() {
         const request = await createSessionAgentRequestViaApi(fetch, {
           repo: session.repo,
           sessionId: session.id,
-          prompt: `Wire the confirmed OG export into the app metadata. Use ${target} as the selected raster OG image after previewing metadata.`,
+          prompt: pageImages.length
+            ? `Wire the confirmed page-specific OG exports into the app metadata after previewing metadata. Page mappings: ${pageImages.map((item) => `${item.page} -> ${item.imagePath}`).join(", ")}.`
+            : `Wire the confirmed OG export into the app metadata. Use ${target} as the selected raster OG image after previewing metadata.`,
           documentPath: session.activeDocumentPath,
           expectedOutput: session.activeDocumentPath
         });
@@ -164,7 +213,9 @@ export function ExportPublishPanel() {
       }
       const result = await createAgentHandoffViaApi(fetch, {
         project,
-        prompt: `Ask agent to wire exports. Use ${target} as the selected raster OG image after previewing metadata.`,
+        prompt: pageImages.length
+          ? `Ask agent to wire page-specific exports after previewing metadata. Page mappings: ${pageImages.map((item) => `${item.page} -> ${item.imagePath}`).join(", ")}.`
+          : `Ask agent to wire exports. Use ${target} as the selected raster OG image after previewing metadata.`,
         target,
         format: format === "jpg" ? "jpeg" : format
       });
@@ -220,6 +271,11 @@ export function ExportPublishPanel() {
       <button type="button" className="primary-action" disabled={isBusy} onClick={() => void runGuardedOperation("export", exportProject)}>
         <Download size={15} /> {busyAction === "export" ? "Exporting..." : "Export OG image"}
       </button>
+      {project?.pages?.length ? (
+        <button type="button" className="secondary-action" disabled={isBusy} onClick={() => void runGuardedOperation("export", exportAllPages)}>
+          <Download size={15} /> {busyAction === "export" ? "Exporting..." : "Export all pages"}
+        </button>
+      ) : null}
       <button type="button" className="secondary-action" disabled={isBusy} onClick={() => void runGuardedOperation("preview", createPublishPreview)}>
         <Send size={15} /> {busyAction === "preview" ? "Creating preview..." : "Create publish preview"}
       </button>

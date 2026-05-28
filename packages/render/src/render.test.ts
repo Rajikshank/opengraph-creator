@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createDefaultProject, type ImageLayer } from "@graphforge/core";
+import { createDefaultProject, createMultiPageProject, type ImageLayer } from "@graphforge/core";
 import { renderProjectToSvg } from "./index";
 
 describe("GraphForge renderer", () => {
@@ -48,6 +48,23 @@ describe("GraphForge renderer", () => {
     expect(containSvg).toContain('preserveAspectRatio="xMidYMid meet"');
     expect(coverSvg).toContain('preserveAspectRatio="xMidYMid slice"');
     expect(fillSvg).toContain('preserveAspectRatio="none"');
+  });
+
+  it("renders the active page variant instead of the legacy root layers in multi-page documents", () => {
+    const project = createMultiPageProject(
+      createDefaultProject({ name: "Renderer Pages", strategy: "pages", pages: ["/", "/pricing"] }),
+      [
+        { route: "/", detectedTitle: "Home", confidence: "high" },
+        { route: "/pricing", detectedTitle: "Pricing", detectedDescription: "Simple plans", confidence: "high" }
+      ]
+    );
+    project.activePageId = "page-pricing";
+
+    const svg = renderProjectToSvg(project);
+
+    expect(svg).toContain("Pricing");
+    expect(svg).toContain("Simple plans");
+    expect(svg).not.toContain(">Home<");
   });
 
   it("renders internal image placeholders as real SVG artwork instead of leaking graphforge URLs", () => {

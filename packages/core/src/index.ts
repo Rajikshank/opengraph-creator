@@ -30,6 +30,18 @@ export interface GraphForgeSourceArtifact {
   createdAt: string;
 }
 
+export type OgPageStatus = "draft" | "edited" | "exported" | "publish-preview" | "confirmed";
+export type OgPageConfidence = "high" | "medium" | "low";
+
+export interface OgPageSourceContext {
+  route?: string;
+  routeFile?: string;
+  metadataFile?: string;
+  detectedTitle?: string;
+  detectedDescription?: string;
+  confidence: OgPageConfidence;
+}
+
 export interface GradientStop {
   color: string;
   position: number;
@@ -203,8 +215,26 @@ export interface OgProject {
   };
   sourceArtifacts: GraphForgeSourceArtifact[];
   layers: OgLayer[];
+  activePageId?: string;
+  pages?: OgPageVariant[];
+  sharedDesign?: {
+    name: string;
+    description?: string;
+    lockedStyleLayerIds?: string[];
+  };
   createdAt: string;
   updatedAt: string;
+}
+
+export interface OgPageVariant {
+  id: string;
+  route: string;
+  title: string;
+  description?: string;
+  exportPath: string;
+  status: OgPageStatus;
+  layers: OgLayer[];
+  sourceContext: OgPageSourceContext;
 }
 
 export interface GraphForgeSessionExport {
@@ -212,6 +242,7 @@ export interface GraphForgeSessionExport {
   format: ExportFormat;
   width: number;
   height: number;
+  page?: string;
   fileSizeBytes?: number;
   createdAt: string;
 }
@@ -219,6 +250,7 @@ export interface GraphForgeSessionExport {
 export interface GraphForgePublishRequest {
   path: string;
   imagePath: string;
+  pageImages?: Array<{ page: string; imagePath: string }>;
   framework?: Framework;
   page: string;
   status: "preview" | "confirmed";
@@ -593,12 +625,170 @@ export function createPageVariantProjects(project: OgProject): OgProject[] {
   });
 }
 
-function pageToTitle(page: string): string {
+export function createMultiPageProject(project: OgProject, contexts: OgPageSourceContext[] = []): OgProject {
+  const targetPages = normalizeTargetPages(project.targetPages);
+  if (project.strategy === "common" || targetPages.length <= 1) {
+    return {
+      ...project,
+      targetPages,
+      activePageId: undefined,
+      pages: undefined
+    };
+  }
+  const pages = targetPages.map((route) => {
+    const context =
+      contexts.find((item) => item.route && normalizeRoute(item.route) === route) ??
+      contexts.find((item) => item.routeFile && normalizeRoute(item.routeFile) === route);
+    const title = context?.detectedTitle?.trim() || pageToTitle(route);
+    const description = context?.detectedDescription?.trim() || (route === "/" ? "Homepage Open Graph preview." : `${title} page Open Graph preview.`);
+    return createPageVariant(project, route, { ...context, detectedTitle: title, detectedDescription: description, confidence: context?.confidence ?? "medium" });
+  });
+  const activePageId = project.activePageId && pages.some((page) => page.id === project.activePageId) ? project.activePageId : pages[0]?.id;
+  const active = pages.find((page) => page.id === activePageId) ?? pages[0];
+  return {
+    ...project,
+    targetPages,
+    activePageId,
+    pages,
+    layers: active?.layers ?? project.layers,
+    sharedDesign: project.sharedDesign ?? {
+      name: `${project.name} OG system`,
+      description: "Shared visual system with materialized editable page variants.",
+      lockedStyleLayerIds: ["background", "brand-mark"]
+    },
+    updatedAt: new Date().toISOString()
+  };
+}
+
+export function getActivePage(project: OgProject): OgPageVariant | undefined {
+  if (!project.pages?.length) return undefined;
+  return project.pages.find((page) => page.id === project.activePageId) ?? project.pages[0];
+}
+
+export function getRenderableProject(project: OgProject, pageIdOrRoute?: string): OgProject {
+  const page = getPageVariant(project, pageIdOrRoute) ?? getActivePage(project);
+  if (!page) return project;
+  return {
+    ...project,
+    name: `${project.name} - ${page.title}`,
+    activePageId: page.id,
+    targetPages: [page.route],
+    layers: page.layers
+  };
+}
+
+export function setActivePage(project: OgProject, pageIdOrRoute: string): OgProject {
+  const page = getPageVariant(project, pageIdOrRoute);
+  if (!page) return project;
+  return {
+    ...project,
+    activePageId: page.id,
+    targetPages: project.targetPages,
+    layers: page.layers,
+    updatedAt: new Date().toISOString()
+  };
+}
+
+export function updateActivePageLayers(project: OgProject, layers: OgLayer[], status: OgPageStatus = "edited"): OgProject {
+  const active = getActivePage(project);
+  if (!active || !project.pages?.length) {
+    return { ...project, layers, updatedAt: new Date().toISOString() };
+  }
+  const pages = project.pages.map((page) =>
+    page.id === active.id
+      ? {
+          ...page,
+          layers,
+          status
+        }
+      : page
+  );
+  return {
+    ...project,
+    pages,
+    layers,
+    updatedAt: new Date().toISOString()
+  };
+}
+
+export function createPageVariant(project: OgProject, route: string, context: OgPageSourceContext): OgPageVariant {
+  const normalizedRoute = normalizeRoute(route);
+  const title = context.detectedTitle?.trim() || pageToTitle(normalizedRoute);
+  const description = context.detectedDescription?.trim();
+  const layers = project.layers.map((layer) => {
+    if (layer.id === "headline" && layer.kind === "text") {
+      return { ...layer, text: title };
+    }
+    if (layer.id === "subtitle" && layer.kind === "text") {
+      return { ...layer, text: description || `${title} page Open Graph preview.` };
+    }
+    if (layer.id === "badge" && (layer.kind === "badge" || layer.kind === "text")) {
+      return { ...layer, text: normalizedRoute === "/" ? "Home" : pageToTitle(normalizedRoute) };
+    }
+    return JSON.parse(JSON.stringify(layer)) as OgLayer;
+  });
+  return {
+    id: routeToPageId(normalizedRoute),
+    route: normalizedRoute,
+    title,
+    description,
+    exportPath: getExportPath({ page: normalizedRoute, strategy: project.strategy, format: "png" }),
+    status: "draft",
+    layers,
+    sourceContext: {
+      ...context,
+      detectedTitle: title,
+      detectedDescription: description,
+      confidence: context.confidence
+    }
+  };
+}
+
+function getPageVariant(project: OgProject, pageIdOrRoute?: string): OgPageVariant | undefined {
+  if (!project.pages?.length || !pageIdOrRoute) return undefined;
+  const normalized = normalizeRoute(pageIdOrRoute);
+  return project.pages.find((page) => page.id === pageIdOrRoute || page.route === normalized);
+}
+
+export function normalizeRoute(route: string): string {
+  const trimmed = route.trim();
+  if (!trimmed || trimmed === ".") return "/";
+  const withoutFilePrefix = trimmed
+    .replace(/^app\//, "/")
+    .replace(/^pages\//, "/")
+    .replace(/^src\/pages\//, "/")
+    .replace(/\/page\.[tj]sx$/, "")
+    .replace(/\.[tj]sx$/, "")
+    .replace(/\.astro$/, "")
+    .replace(/\/index$/, "");
+  const routeLike = withoutFilePrefix.startsWith("/") ? withoutFilePrefix : `/${withoutFilePrefix}`;
+  return routeLike.replace(/\/{2,}/g, "/").replace(/\/+$/, "") || "/";
+}
+
+export function normalizeTargetPages(pages: string[]): string[] {
+  const seen = new Set<string>();
+  const normalized = pages
+    .map((page) => page.trim())
+    .filter(Boolean)
+    .map(normalizeRoute)
+    .filter((page) => {
+      if (seen.has(page)) return false;
+      seen.add(page);
+      return true;
+    });
+  return normalized.length ? normalized : ["/"];
+}
+
+export function pageToTitle(page: string): string {
   if (page === "/") return "Home";
   const segment = page.split("/").filter(Boolean).at(-1) ?? "Page";
   return segment
     .replace(/[-_]+/g, " ")
     .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function routeToPageId(route: string): string {
+  return `page-${slugifyRoute(route)}`;
 }
 
 function clampNumber(value: number, min: number, max: number): number {
@@ -614,6 +804,12 @@ export function validateProject(project: OgProject): ValidationResult {
   }
   if (!project.layers.length) errors.push("Project must include at least one editable layer.");
   if (!project.targetPages.length) errors.push("Project must target at least one page.");
+  if (project.pages?.length) {
+    for (const page of project.pages) {
+      if (!page.route) errors.push(`Page variant ${page.id} must include a route.`);
+      if (!page.layers.length) errors.push(`Page variant ${page.route} must include at least one editable layer.`);
+    }
+  }
 
   return { ok: errors.length === 0, errors };
 }

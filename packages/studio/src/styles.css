@@ -711,6 +711,63 @@ input[type="range"] {
   cursor: pointer;
 }
 
+.og-pages-panel {
+  display: grid;
+  gap: 8px;
+  padding: 9px;
+  border: 1px solid color-mix(in oklch, var(--line) 84%, transparent);
+  border-radius: 7px;
+  background: color-mix(in oklch, var(--panel-2) 74%, transparent);
+}
+
+.og-page-list {
+  display: grid;
+  gap: 5px;
+  max-height: 220px;
+  overflow: auto;
+  scrollbar-color: color-mix(in oklch, var(--accent-focus) 48%, var(--line)) transparent;
+}
+
+.og-page-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 7px 8px;
+  text-align: left;
+}
+
+.og-page-row span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.og-page-row strong,
+.og-page-row small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.og-page-row em {
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--accent-focus) 16%, transparent);
+  color: #f7d595;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 760;
+  text-transform: uppercase;
+}
+
+.og-page-row.active {
+  border-color: var(--accent-focus);
+  background: oklch(0.235 0.022 72);
+}
+
 .primary-action,
 .secondary-action,
 .ghost-action {

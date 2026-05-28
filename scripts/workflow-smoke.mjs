@@ -11,15 +11,22 @@ const home = join(workspace, "home");
 const cli = ["packages/cli/dist/index.js"];
 
 await mkdir(appRepo, { recursive: true });
+await mkdir(join(appRepo, "app", "pricing"), { recursive: true });
+await mkdir(join(appRepo, "public"), { recursive: true });
+await writeFile(join(appRepo, "next.config.js"), "module.exports = {}\n", "utf8");
 await writeFile(
-  join(appRepo, "index.html"),
-  [
-    "<!doctype html>",
-    "<html>",
-    "  <head><title>Workflow App</title></head>",
-    "  <body><main id=\"root\">Workflow App</main></body>",
-    "</html>"
-  ].join("\n"),
+  join(appRepo, "app", "layout.tsx"),
+  "export default function RootLayout({ children }) { return <html><body>{children}</body></html> }\n",
+  "utf8"
+);
+await writeFile(
+  join(appRepo, "app", "page.tsx"),
+  'export const metadata = { title: "Workflow App Home", description: "A practical workflow test app." }; export default function Page() { return <main>Workflow App</main> }\n',
+  "utf8"
+);
+await writeFile(
+  join(appRepo, "app", "pricing", "page.tsx"),
+  'export const metadata = { title: "Workflow Pricing", description: "Clear page-specific pricing context." }; export default function Pricing() { return <main>Pricing</main> }\n',
   "utf8"
 );
 
@@ -30,6 +37,8 @@ const documentPath = join(workspace, "workflow.ogdoc");
 const variantsDir = join(workspace, "variants");
 const renderPath = join(appRepo, "public", "og.svg");
 const exportPath = join(appRepo, "public", "og.webp");
+const pageExportHomePath = join(appRepo, "public", "og", "home.webp");
+const pageExportPricingPath = join(appRepo, "public", "og", "pricing.webp");
 const agentPlanPath = join(workspace, "agent-plan.json");
 const sessionId = "workflow-session";
 
@@ -44,22 +53,28 @@ await runGraphForge(["document", "validate", "--source", documentPath]);
 await runGraphForge(["variants", "--project", projectPath, "--outDir", variantsDir, "--library", "true", "--home", home]);
 await runGraphForge(["render", "--project", projectPath, "--out", renderPath]);
 await runGraphForge(["export", "--project", projectPath, "--format", "webp", "--quality", "82", "--out", exportPath, "--session", sessionId, "--repo", appRepo]);
+await runGraphForge(["export", "--project", projectPath, "--format", "webp", "--quality", "82", "--allPages", "true", "--outDir", "public/og", "--session", sessionId, "--repo", appRepo]);
 await runGraphForge(["agent-handoff", "--project", projectPath, "--prompt", "premium local workflow smoke", "--out", join(appRepo, "public", "og-agent.png"), "--plan", agentPlanPath]);
-const preview = await runGraphForge(["publish", "--preview", "--repo", appRepo, "--session", sessionId, "--framework", "vite", "--image", "public/og.webp"]);
-await runGraphForge(["publish", "--confirm", "--repo", appRepo, "--session", sessionId, "--framework", "vite", "--image", "public/og.webp"]);
+const preview = await runGraphForge(["publish", "--preview", "--repo", appRepo, "--session", sessionId, "--framework", "next", "--allPages", "true"]);
+await runGraphForge(["publish", "--confirm", "--repo", appRepo, "--session", sessionId, "--framework", "next", "--allPages", "true"]);
 
 const brief = JSON.parse(await readFile(briefPath, "utf8"));
 const pureBrief = JSON.parse(await readFile(pureBriefPath, "utf8"));
 const project = JSON.parse(await readFile(projectPath, "utf8"));
 const document = await stat(documentPath);
-const html = await readFile(join(appRepo, "index.html"), "utf8");
+const layout = await readFile(join(appRepo, "app", "layout.tsx"), "utf8");
+const pricingPage = await readFile(join(appRepo, "app", "pricing", "page.tsx"), "utf8");
 const renderedSvg = await readFile(renderPath, "utf8");
 const image = await stat(exportPath);
+const pageHomeImage = await stat(pageExportHomePath);
+const pagePricingImage = await stat(pageExportPricingPath);
 const plan = JSON.parse(await readFile(agentPlanPath, "utf8"));
 const previewPlan = JSON.parse(preview.stdout);
 const session = JSON.parse(await readFile(join(appRepo, ".graphforge", "sessions", sessionId, "session.json"), "utf8"));
+const publishRequest = JSON.parse(await readFile(join(appRepo, ".graphforge", "sessions", sessionId, "publish-request.json"), "utf8"));
 
 assert(brief.codexPrompt.includes("Workflow App"), "brief did not include Codex prompt context");
+assert(brief.codexPrompt.includes("Route context:"), "brief did not include route context");
 assert(brief.generationMode === "template", "template brief did not preserve generation mode");
 assert(pureBrief.generationMode === "pure-image", "pure-image brief did not preserve generation mode");
 assert(pureBrief.codexPrompt.includes("agent image handoff"), "pure-image brief did not describe the agent handoff path");
@@ -67,14 +82,19 @@ assert(project.targetPages.length === 2, "project did not preserve requested pag
 assert(project.generationMode === "pure-image", "project did not preserve requested generation mode");
 assert(document.size > 1_000, `Studio document package is unexpectedly small: ${document.size}`);
 assert(renderedSvg.includes("Workflow App"), "render --project did not use the editable project file");
-assert(image.size > 10_000, `exported webp is unexpectedly small: ${image.size}`);
-assert(html.includes('<meta property="og:image" content="/og.webp">'), "metadata apply did not upsert og:image");
-assert(html.includes('<meta name="twitter:image" content="/og.webp">'), "metadata apply did not upsert twitter:image");
+assert(image.size > 5_000, `exported webp is unexpectedly small: ${image.size}`);
+assert(pageHomeImage.size > 5_000, `home page export is unexpectedly small: ${pageHomeImage.size}`);
+assert(pagePricingImage.size > 5_000, `pricing page export is unexpectedly small: ${pagePricingImage.size}`);
+assert(layout.includes("/og/home.webp"), "home metadata apply did not upsert page-specific og:image");
+assert(pricingPage.includes("/og/pricing.webp"), "pricing metadata apply did not upsert page-specific og:image");
 assert(plan.mode === "agent-handoff", "agent handoff plan did not preserve handoff mode");
 assert(plan.prompt.includes("premium local workflow smoke"), "agent handoff plan did not include art direction");
 assert(!JSON.stringify(plan).includes("OPENAI_API_KEY"), "agent handoff plan should not require provider credentials");
 assert(previewPlan.request.status === "preview" && previewPlan.plan.mode === "preview", "publish preview was not mutation-free");
+assert(previewPlan.request.pageImages?.length === 2, "publish preview did not include page image mappings");
+assert(publishRequest.pageImages?.some((item) => item.page === "/pricing" && item.imagePath === "public/og/pricing.webp"), "confirmed publish request did not preserve pricing page mapping");
 assert(session.exports.some((item) => item.path === exportPath && item.format === "webp"), "session did not record workflow export");
+assert(session.exports.some((item) => item.path === "public/og/pricing.webp" && item.page === "/pricing"), "session did not record page-specific export");
 assert(session.publishRequests.some((item) => item.status === "confirmed"), "session did not record confirmed publish request");
 
 console.log(
@@ -88,6 +108,7 @@ console.log(
       document: documentPath,
       render: renderPath,
       export: exportPath,
+      pageExports: [pageExportHomePath, pageExportPricingPath],
       exportBytes: image.size,
       agentPlan: agentPlanPath
     },

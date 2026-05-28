@@ -41,6 +41,7 @@ export interface SessionExportRecord {
   format: ExportFormat;
   width: number;
   height: number;
+  page?: string;
   fileSizeBytes?: number;
   createdAt: string;
 }
@@ -49,6 +50,7 @@ export interface CreatePublishRequestInput {
   repo: string;
   sessionId: string;
   imagePath: string;
+  pageImages?: Array<{ page: string; imagePath: string }>;
   framework?: Framework;
   page?: string;
   confirmed: boolean;
@@ -158,7 +160,10 @@ export async function recordSessionExport(
     lastHeartbeatAt: new Date().toISOString(),
     pendingAction: "publish-preview"
   };
-  await atomicWriteJson(paths.exportJson, exportRecord);
+  await atomicWriteJson(paths.exportJson, {
+    exports: [...session.exports, exportRecord],
+    latest: exportRecord
+  });
   await writeGraphForgeSession(next);
   await appendSessionEvent(repo, sessionId, {
     type: "session.exported",
@@ -174,6 +179,7 @@ export async function createPublishRequest(input: CreatePublishRequestInput): Pr
   const request: GraphForgePublishRequest = {
     path: paths.publishRequestJson,
     imagePath: input.imagePath,
+    pageImages: input.pageImages,
     framework: input.framework,
     page: input.page ?? "/",
     status: input.confirmed ? "confirmed" : "preview",
