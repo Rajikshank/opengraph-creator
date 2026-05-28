@@ -179,6 +179,27 @@ describe("GraphForge studio local API", () => {
     expect((await readResponse.json()).session).toMatchObject({ id: "bound-session", repo: root });
   });
 
+  it("returns a provider-neutral agent connection recipe for repo-scoped studio launches", async () => {
+    const root = await mkdtemp(join(tmpdir(), "graphforge-api-connect-recipe-"));
+    const library = createLibrary({ root: join(root, "library") });
+    const repo = join(root, "user-app");
+    handle = await createStudioServer({ library, port: 0, sessionRepo: repo });
+
+    const response = await fetch(`${handle.url}/api/connect-recipe?repo=${encodeURIComponent(repo)}`);
+    const recipe = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(recipe).toMatchObject({
+      repo,
+      sessionRoot: join(repo, ".graphforge", "sessions")
+    });
+    expect(recipe.command).toContain("graphforge session create");
+    expect(recipe.command).toContain(`--repo "${repo}"`);
+    expect(recipe.prompt).toContain("editable .ogdoc");
+    expect(recipe.prompt).toContain("next-action");
+    expect(JSON.stringify(recipe).toLowerCase()).not.toContain("openai_api_key");
+  });
+
   it("saves session edits and imported assets into the Studio document package", async () => {
     const root = await mkdtemp(join(tmpdir(), "graphforge-api-document-"));
     const library = createLibrary({ root: join(root, "library") });

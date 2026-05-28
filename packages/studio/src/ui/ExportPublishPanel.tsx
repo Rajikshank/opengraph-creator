@@ -5,11 +5,13 @@ import type { ExportFormat, Framework } from "@graphforge/core";
 import {
   createAgentHandoffViaApi,
   createPublishRequestViaApi,
+  createSessionAgentRequestViaApi,
   exportProjectViaApi,
   recordSessionExportViaApi,
   saveProjectViaApi,
   saveSessionDocumentViaApi
 } from "../api";
+import { StudioSelect } from "../design-system/StudioSelect";
 import { StudioSlider } from "../design-system/StudioSlider";
 import { useStudio } from "./studio-store";
 
@@ -93,6 +95,18 @@ export function ExportPublishPanel() {
   const askAgentToWire = async () => {
     if (!project) return;
     try {
+      if (session) {
+        await saveSessionDocumentViaApi(fetch, { repo: session.repo, sessionId: session.id, project });
+        const request = await createSessionAgentRequestViaApi(fetch, {
+          repo: session.repo,
+          sessionId: session.id,
+          prompt: `Wire the confirmed OG export into the app metadata. Use ${target} as the selected raster OG image after previewing metadata.`,
+          documentPath: session.activeDocumentPath,
+          expectedOutput: session.activeDocumentPath
+        });
+        toast.success(`Agent request saved: ${request.path}`);
+        return;
+      }
       const result = await createAgentHandoffViaApi(fetch, {
         project,
         prompt: `Ask agent to wire exports. Use ${target} as the selected raster OG image after previewing metadata.`,
@@ -111,35 +125,36 @@ export function ExportPublishPanel() {
         <Download size={15} />
         <span>Export</span>
       </h2>
-      <label>
-        Format
-        <select
-          value={format}
-          onChange={(event) => {
-            const next = event.target.value as ExportFormat;
+      <StudioSelect
+        label="Format"
+        value={format}
+        options={[
+          { value: "png", label: "PNG" },
+          { value: "webp", label: "WebP" },
+          { value: "jpg", label: "JPEG" },
+          { value: "svg", label: "SVG source" }
+        ]}
+        onValueChange={(value) => {
+            const next = value as ExportFormat;
             setFormat(next);
             setTarget(next === "png" ? "public/og.png" : next === "webp" ? "public/og.webp" : next === "jpg" ? "public/og.jpg" : "public/og.svg");
           }}
-        >
-          <option value="png">PNG</option>
-          <option value="webp">WebP</option>
-          <option value="jpg">JPEG</option>
-          <option value="svg">SVG source</option>
-        </select>
-      </label>
+      />
       <label>Output path<input value={target} onChange={(event) => setTarget(event.target.value)} /></label>
-      <label>
-        Framework
-        <select value={framework} onChange={(event) => setFramework(event.target.value as Framework)}>
-          <option value="unknown">Detect later</option>
-          <option value="next">Next.js</option>
-          <option value="astro">Astro</option>
-          <option value="nuxt">Nuxt</option>
-          <option value="remix">Remix</option>
-          <option value="vite">Vite</option>
-          <option value="html">HTML</option>
-        </select>
-      </label>
+      <StudioSelect
+        label="Framework"
+        value={framework}
+        options={[
+          { value: "unknown", label: "Detect later" },
+          { value: "next", label: "Next.js" },
+          { value: "astro", label: "Astro" },
+          { value: "nuxt", label: "Nuxt" },
+          { value: "remix", label: "Remix" },
+          { value: "vite", label: "Vite" },
+          { value: "html", label: "HTML" }
+        ]}
+        onValueChange={(value) => setFramework(value as Framework)}
+      />
       <StudioSlider label="Quality" min={40} max={100} value={quality} unit="%" onValueChange={setQuality} />
       <button type="button" className="primary-action" onClick={exportProject}>
         <Download size={15} /> Export OG image

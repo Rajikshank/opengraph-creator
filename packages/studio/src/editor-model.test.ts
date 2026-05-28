@@ -113,12 +113,14 @@ describe("editor model", () => {
     expect(undo(deleted).project.layers.some((layer) => layer.id === copy?.id)).toBe(true);
   });
 
-  it("adds new editable text, image, and distinct shape tools with unique ids and selection history", () => {
+  it("adds new editable text, image, badge, background, and distinct shape tools with unique ids and selection history", () => {
     const project = createDefaultProject({ name: "Editor", strategy: "common" });
     const session = createEditorSession(project);
     const withText = addLayer(session, "text");
     const withImage = addLayer(withText, "image");
-    const withRectangle = addLayer(withImage, "rectangle");
+    const withBadge = addLayer(withImage, "badge");
+    const withBackground = addLayer(withBadge, "background");
+    const withRectangle = addLayer(withBackground, "rectangle");
     const withEllipse = addLayer(withRectangle, "ellipse");
     const withLine = addLayer(withEllipse, "line");
 
@@ -135,6 +137,20 @@ describe("editor model", () => {
       name: "Image Layer",
       src: "graphforge://image-placeholder"
     });
+    expect(withBadge.project.layers.at(-1)).toMatchObject({
+      id: "badge-layer",
+      kind: "badge",
+      name: "Badge Layer",
+      text: "New badge"
+    });
+    expect(withBackground.project.layers[0]).toMatchObject({
+      id: "background-layer",
+      kind: "background",
+      name: "Background Layer",
+      width: 1200,
+      height: 630
+    });
+    expect(withBackground.selectedLayerId).toBe("background-layer");
     expect(withRectangle.project.layers.at(-1)).toMatchObject({
       id: "rectangle-layer",
       kind: "shape",
@@ -157,7 +173,7 @@ describe("editor model", () => {
       height: 4
     });
     expect(withLine.selectedLayerId).toBe("line-layer");
-    expect(withLine.project.layers.map((layer) => layer.id)).toEqual(expect.arrayContaining(["text-layer", "image-layer", "rectangle-layer", "ellipse-layer", "line-layer"]));
+    expect(withLine.project.layers.map((layer) => layer.id)).toEqual(expect.arrayContaining(["text-layer", "image-layer", "badge-layer", "background-layer", "rectangle-layer", "ellipse-layer", "line-layer"]));
     expect(undo(withLine).project.layers.some((layer) => layer.id === "line-layer")).toBe(false);
   });
 

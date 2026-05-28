@@ -71,8 +71,8 @@ async function verifyStudioViewport(page, url, viewport, screenshotPath, options
   await page.setViewportSize(viewport);
   await page.goto(url, { waitUntil: "networkidle" });
   await page.getByText("Ogloom").first().waitFor({ timeout: 10_000 });
-  await page.getByText("Import into document").first().waitFor({ timeout: 5_000 });
-  await page.getByText("No agent detected").waitFor({ timeout: 5_000 });
+  await page.getByText("No active agent session").waitFor({ timeout: 5_000 });
+  await page.getByRole("button", { name: /Open .ogdoc/i }).waitFor({ timeout: 5_000 });
   await page.getByRole("button", { name: /Start manual draft/i }).click();
   await page.getByRole("radio", { name: /Platform Preview/i }).waitFor({ timeout: 5_000 });
   await page.getByRole("radio", { name: /Platform Preview/i }).click();
@@ -143,7 +143,7 @@ async function verifyStudioViewport(page, url, viewport, screenshotPath, options
     await page.getByRole("slider", { name: "Glow intensity" }).waitFor({ timeout: 5_000 });
     await page.getByRole("slider", { name: "Glow radius" }).waitFor({ timeout: 5_000 });
     await page.getByLabel("Glow color").waitFor({ timeout: 5_000 });
-    await page.getByRole("checkbox", { name: "Glow" }).check();
+    await page.getByRole("switch", { name: "Glow" }).click();
     await setRangeValue(page, "Glow intensity", "0.75");
     await setRangeValue(page, "Glow radius", "36");
     await page.getByRole("tab", { name: /Export/i }).click();
@@ -205,7 +205,7 @@ async function exerciseLiveEffectsOnBackground(page) {
   await page.getByRole("tab", { name: /Effects/i }).click();
   await page.getByRole("slider", { name: "Noise" }).waitFor({ timeout: 5_000 });
   const noiseBefore = await readCanvasNoiseMetrics(page);
-  await page.getByLabel("Blend mode").selectOption("normal");
+  await selectStudioOption(page, "Blend mode", "Normal");
   await setRangeValue(page, "Noise", "0.2");
   await page.waitForTimeout(160);
   const noiseAfter = await readCanvasNoiseMetrics(page);
@@ -285,9 +285,9 @@ async function assertTransparentPngDoesNotGetGrayBacking(page) {
 
 async function assertImageNoiseClippedToContainedImage(page) {
   await page.locator(".file-upload-control input").setInputFiles(wideSvgPath);
-  await page.getByLabel("Fit").selectOption("contain");
+  await selectStudioOption(page, "Fit", "Contain");
   await page.getByRole("tab", { name: /Effects/i }).click();
-  await page.getByLabel("Blend mode").selectOption("normal");
+  await selectStudioOption(page, "Blend mode", "Normal");
   await setRangeValue(page, "Noise", "0.2");
   await page.waitForTimeout(200);
   const metrics = await page.evaluate(() => {
@@ -594,6 +594,11 @@ async function setRangeValue(page, label, value) {
     input.dispatchEvent(new Event("input", { bubbles: true }));
     input.dispatchEvent(new Event("change", { bubbles: true }));
   }, value);
+}
+
+async function selectStudioOption(page, label, option) {
+  await page.getByRole("combobox", { name: label }).click();
+  await page.getByRole("option", { name: option }).click();
 }
 
 async function assertNoHorizontalOverflow(page) {

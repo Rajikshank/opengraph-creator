@@ -6,7 +6,19 @@ export type LayerKind = "background" | "text" | "image" | "logo" | "screenshot" 
 export type SourceArtifactKind = "graphforge-json" | "svg" | "html" | "image";
 export type SourceArtifactOrigin = "codex" | "claude" | "manual" | "library";
 export type AgentKind = "codex" | "claude" | "opencode" | "manual" | "unknown";
-export type SessionStatus = "draft" | "waiting-for-agent" | "editing" | "exported" | "publish-requested" | "published" | "agent-requested" | "stale";
+export type SessionStatus =
+  | "draft"
+  | "waiting-for-agent"
+  | "editing"
+  | "exported"
+  | "publish-requested"
+  | "published"
+  | "agent-requested"
+  | "cancelled"
+  | "terminal"
+  | "stale";
+export type EffectCapability = "supported" | "disabled";
+export type EffectName = "gradient" | "noise" | "lighting" | "vignette" | "blur" | "shadow" | "glow";
 
 export * from "./document-package.js";
 
@@ -59,6 +71,44 @@ export interface LayerEffects {
   noise?: NoiseEffect;
   lighting?: LightingEffect;
   vignette?: number;
+}
+
+export function getLayerEffectCapabilities(kind: LayerKind): Record<EffectName, EffectCapability> {
+  const supportedSurfaceEffects: Record<EffectName, EffectCapability> = {
+    gradient: "supported",
+    noise: "supported",
+    lighting: "supported",
+    vignette: "supported",
+    blur: "supported",
+    shadow: "supported",
+    glow: "supported"
+  };
+
+  if (kind === "background" || kind === "shape" || kind === "image" || kind === "logo" || kind === "screenshot") {
+    return supportedSurfaceEffects;
+  }
+
+  if (kind === "text" || kind === "badge") {
+    return {
+      gradient: "disabled",
+      noise: "disabled",
+      lighting: "disabled",
+      vignette: "disabled",
+      blur: "supported",
+      shadow: "supported",
+      glow: "supported"
+    };
+  }
+
+  return {
+    gradient: "disabled",
+    noise: "disabled",
+    lighting: "disabled",
+    vignette: "disabled",
+    blur: "disabled",
+    shadow: "disabled",
+    glow: "disabled"
+  };
 }
 
 export interface BaseLayer {

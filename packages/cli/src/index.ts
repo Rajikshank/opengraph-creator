@@ -33,6 +33,7 @@ import { createStudioServer, getDefaultStudioStaticDir } from "./server.js";
 import {
   createGraphForgeSession,
   appendSessionEvent,
+  cancelGraphForgeSession,
   createPublishRequest,
   getSessionPaths,
   readGraphForgeSession,
@@ -94,7 +95,7 @@ export interface DoctorReport {
   checks: DoctorCheck[];
 }
 
-type SessionWaitTarget = "default" | "exported" | "publish-preview" | "publish-confirmed" | "agent-request" | "terminal";
+type SessionWaitTarget = "default" | "exported" | "publish-preview" | "publish-confirmed" | "agent-request" | "next-action" | "terminal";
 
 export function createProjectFromArgs(args: CreateProjectArgs): OgProject {
   const input = {
@@ -245,6 +246,11 @@ export async function runCli(argv: string[]): Promise<void> {
       console.log(JSON.stringify(await readGraphForgeSession(repo, args.id), null, 2));
       return;
     }
+    if (subcommand === "cancel") {
+      if (!args.id) throw new Error("--id is required");
+      console.log(JSON.stringify(await cancelGraphForgeSession(repo, args.id, args.reason ?? "User cancelled the Studio handoff"), null, 2));
+      return;
+    }
     if (subcommand === "wait") {
       if (!args.id) throw new Error("--id is required");
       const waitTarget = parseSessionWaitTarget(args.until);
@@ -312,7 +318,7 @@ export async function runCli(argv: string[]): Promise<void> {
       console.log(args.json === "true" ? JSON.stringify(launch, null, 2) : `GraphForge Studio launched at ${url}`);
       return;
     }
-    throw new Error("Unknown session command. Use create, open, launch, wait, or status.");
+    throw new Error("Unknown session command. Use create, open, launch, wait, cancel, or status.");
   }
 
   if (command === "document") {
@@ -653,11 +659,14 @@ export async function runCli(argv: string[]): Promise<void> {
 
   if (command === "studio") {
     const args = parseArgs(rest);
+    const repo = args.repo;
     const handle = await createStudioServer({
       library: createLibrary({ root: args.home }),
-      port: args.port ? Number(args.port) : 0
+      port: args.port ? Number(args.port) : 0,
+      sessionRepo: repo
     });
-    console.log(`GraphForge Studio running at ${handle.url}`);
+    const url = repo ? `${handle.url}?${new URLSearchParams({ repo }).toString()}` : handle.url;
+    console.log(`GraphForge Studio running at ${url}`);
     console.log("Press Ctrl+C to stop.");
     await new Promise<void>(() => undefined);
     return;
@@ -684,11 +693,12 @@ function parseSessionWaitTarget(value?: string): SessionWaitTarget {
     value === "publish-preview" ||
     value === "publish-confirmed" ||
     value === "agent-request" ||
+    value === "next-action" ||
     value === "terminal"
   ) {
     return value;
   }
-  throw new Error("--until must be one of exported, publish-preview, publish-confirmed, agent-request, terminal");
+  throw new Error("--until must be one of exported, publish-preview, publish-confirmed, agent-request, next-action, terminal");
 }
 
 function parseWaitTimeout(value?: string): number {
@@ -709,7 +719,17 @@ function sessionMatchesWaitTarget(session: Awaited<ReturnType<typeof readGraphFo
   if (target === "publish-preview") return hasPreview;
   if (target === "publish-confirmed") return hasConfirmed;
   if (target === "agent-request") return hasAgentRequest;
-  if (target === "terminal") return hasConfirmed || session.status === "published";
+  if (target === "next-action") {
+    return (
+      hasAgentRequest ||
+      hasConfirmed ||
+      session.status === "agent-requested" ||
+      session.status === "published" ||
+      session.status === "cancelled" ||
+      session.status === "terminal"
+    );
+  }
+  if (target === "terminal") return hasConfirmed || session.status === "published" || session.status === "cancelled" || session.status === "terminal";
   return hasExport || hasPreview || hasConfirmed || hasAgentRequest;
 }
 
@@ -793,9 +813,10 @@ Commands:
   graphforge session create --repo <path> --agent codex|claude|opencode --strategy common|pages|hybrid
   graphforge session open --repo <path> --id <session-id>
   graphforge session launch --repo <path> --id <session-id> --open true --waitReady true --json
-  graphforge session wait --id <session-id> --until exported|publish-preview|publish-confirmed|agent-request|terminal --timeout 30000|0|never
+  graphforge session wait --id <session-id> --until exported|publish-preview|publish-confirmed|agent-request|next-action|terminal --timeout 30000|0|never
+  graphforge session cancel --repo <path> --id <session-id> --reason "User cancelled"
   graphforge session status --id <session-id>
-  graphforge studio --port 5123
+  graphforge studio --port 5123 --repo <path>
   graphforge render --name <name> --out og.svg
   graphforge export --project project.og.json --format png|webp|jpg|svg --out public/og.png --session <session-id>
   graphforge variants --project project.og.json --outDir og-projects

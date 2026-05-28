@@ -1,127 +1,152 @@
 # GraphForge OG Studio
 
-Agent-first Open Graph finishing studio for local app repositories. Codex, Claude, OpenCode, or another coding agent generates the OG source artifact; GraphForge imports it, lets a human edit and preview it, exports optimized social images, and prepares safe publish handoff plans.
+GraphForge is a local, agent-first Open Graph finishing studio for app repositories. A coding agent such as Codex, Claude Code, or OpenCode scans the user's app, generates an editable `.ogdoc` document, opens Studio, waits for the user's decision, then resumes to wire the final image into the app after confirmation.
 
-GraphForge does not require an OpenAI key and does not call image-generation providers from the app, CLI, Studio, or skill.
+GraphForge is not an AI provider client. It does not require OpenAI, Anthropic, or image-generation API keys. The agent does the generation work; Studio handles editing, preview, export, compression, and durable handoff.
 
-## What Works In This V1
+## Core Model
 
-- Create editable OG project JSON for common, page-specific, or hybrid strategies.
-- Import agent-generated GraphForge JSON, SVG, HTML, or image assets into the Studio.
-- Create local agent handoff plans for template-based or pure-image generation.
-- Edit text, font, image, shape, layout, blur, glow, shadow, gradient, noise, lighting, and opacity settings.
-- Preview the same OG image across X/Twitter, LinkedIn, Facebook, Discord, Slack, WhatsApp, iMessage, and browser/search contexts.
-- Export default raster `public/og.png`, optional `public/og.webp` or `public/og.jpg`, and SVG source/template files.
-- Manage durable `.graphforge/sessions/<id>/` handoff files for agent recovery.
-- Run a local Studio with resizable panels, owned scroll regions, layer creation, inspector controls, image upload, direct canvas movement, duplicate/delete, lock/unlock, hide/show, undo/redo, and platform previews.
-- Scan common web app frameworks and preview/apply basic metadata files.
-- Preserve existing HTML/Vite, Next.js, Astro, Nuxt, and Remix files through conservative metadata upserts or merges.
-- Install the bundled Codex skill into a local skills directory.
+- `.ogdoc` is the editable master document, similar to a lightweight PSD-style package.
+- PNG, WebP, JPEG, SVG, and HTML can be imported as assets or exported as final output.
+- The bridge between agent and Studio is file-based under `.graphforge/sessions/<id>/`.
+- The agent waits with `graphforge session wait --until next-action`, so the same flow works across Codex, Claude Code, and OpenCode.
+- Metadata is changed only after preview and explicit confirmation.
 
-## Commands
+## Install And Launch
+
+Development checkout:
 
 ```bash
 npm install
 npm run build
 npm run graphforge -- doctor
-npm run graphforge -- doctor --json
-npm run graphforge -- brief --repo . --name "My App" --strategy hybrid --mode template --out .graphforge/brief.json
-npm run graphforge -- new --name "My App" --strategy hybrid --mode template --pages /,/pricing --out my-app.og.json
-npm run graphforge -- import --source .graphforge/generated/og.svg --kind svg --name "My App" --out my-app.imported.og.json
-npm run graphforge -- variants --project my-app.og.json --outDir .graphforge
-npm run graphforge -- render --project my-app.og.json --out public/og.svg
-npm run graphforge -- export --project my-app.og.json --format png --out public/og.png
-npm run graphforge -- export --project my-app.og.json --format jpg --quality 82 --out public/og.jpg
-npm run graphforge -- agent-handoff --project my-app.og.json --prompt "make it feel like a polished product launch" --out public/og-agent.png --plan .graphforge/agent-handoff.json
-npm run graphforge -- session create --repo . --agent codex --strategy hybrid --mode template
-npm run graphforge -- publish --preview --session <id> --image public/og.png
-npm run graphforge -- publish --confirm --session <id> --image public/og.png
-npm run graphforge -- studio --port 5123
+npm run graphforge -- studio --repo .
 ```
 
-After publishing as an npm package, the target entrypoint is:
+Packaged usage after release:
 
 ```bash
 npx @graphforge/cli doctor
-npx @graphforge/cli studio
+npx @graphforge/cli studio --repo .
 npx @graphforge/cli install-skill --agent codex
+npx @graphforge/cli install-skill --agent claude
+npx @graphforge/cli install-skill --agent opencode
 ```
 
-## Codex Skill
+Manual Studio launch opens a Project Hub. Agent launch opens the generated `.ogdoc` directly.
 
-Install the bundled skill for Codex, Claude, OpenCode, or all supported local agent folders:
+## Agent Workflow
+
+The installed skill should:
+
+1. Inspect the app framework, routes, metadata, brand assets, screenshots, and copy.
+2. Ask only relevant design questions: strategy, pages, tone, source mode, references, and output format.
+3. Create a durable session.
+4. Generate an editable `.ogdoc` at `.graphforge/sessions/<id>/document.ogdoc`.
+5. Validate the document.
+6. Launch Studio.
+7. Wait for the next Studio decision.
 
 ```bash
-npm run graphforge -- install-skill --agent codex
-npm run graphforge -- install-skill --agent claude
-npm run graphforge -- install-skill --agent opencode
-npm run graphforge -- install-skill --agent all
+graphforge session create --repo . --agent codex --strategy hybrid --mode template
+graphforge document validate --source ".graphforge/sessions/<id>/document.ogdoc"
+graphforge session launch --repo . --id "<id>" --open true --waitReady true --json
+graphforge session wait --repo . --id "<id>" --until next-action --timeout 0
 ```
 
-The skill teaches the coding agent to inspect the repo, choose common/page/hybrid generation, choose template or pure-image mode, generate editable assets, open the Studio for review, export optimized images, and preview metadata changes before applying them.
+When `next-action` returns:
 
-`graphforge doctor` verifies the CLI, renderer, bundled Studio assets, bundled skill source, local skill installation, and agent handoff readiness.
+- `agent-requested`: read `agent-request.json`, revise `document.ogdoc`, validate, relaunch Studio, and wait again.
+- `published`: read confirmed `publish-request.json`, then wire metadata into the app.
+- `cancelled` or `terminal`: stop without mutating metadata.
 
-## Agent Handoff Flow
+## Session Files
 
-Use `brief` when you want a durable handoff between an app repo and Codex, Claude, or OpenCode:
+Each session is recoverable from:
+
+```text
+.graphforge/sessions/<id>/
+  session.json
+  events.jsonl
+  document.ogdoc
+  incoming/
+  export.json
+  publish-request.json
+  agent-request.json
+  studio.json
+```
+
+These files are the cross-agent contract. If an agent process stops, rerun the skill and resume from the session files.
+
+## Studio Features
+
+- State-aware Project Hub for direct CLI launch, repo launch, recovery, and recent documents.
+- Layered Konva canvas for text, image, logo, screenshot, shape, badge, and background layers.
+- Image upload, crop, focal point, fit mode, and asset packaging.
+- Typography controls for font, size, weight, style, color, line height, letter spacing, stroke, and stroke width.
+- Shape controls for fill, border, radius, opacity, rotation, skew, align, distribute, snap, duplicate, lock, hide, reorder, and delete.
+- Effect controls for supported glow, shadow, blur, gradient, noise, lighting, vignette, and blend modes.
+- Platform preview inspector for X/Twitter, LinkedIn, Facebook, Discord, Slack, WhatsApp, iMessage, and browser/search.
+- Export to exact `1200x630` PNG, WebP, JPEG, or SVG source.
+
+Unsupported effect/layer combinations are hidden or disabled instead of shown as fake-functional controls.
+
+## Export And Publish
+
+Default final output:
 
 ```bash
-npm run graphforge -- brief --repo . --name "My App" --strategy pages --mode template --reference references/og-style.png --out .graphforge/brief.json
+graphforge export --project project.og.json --format png --out public/og.png
 ```
 
-The brief contains detected framework, routes, metadata files, brand assets, selected common/page-specific/hybrid strategy, selected template or pure-image mode, optional reference image path, and a strict output contract for editable GraphForge JSON, SVG/HTML, or pure 1200x630 image output.
-
-Then ask the coding agent to generate the source artifact, import it into the Studio, review/edit/export the final image, and run `graphforge publish --preview` before any metadata mutation. Confirmed publishes create `.graphforge.bak` backups first.
-
-## Pure Image Mode
-
-Use this when the user chooses a flat generated bitmap instead of an editable template/layer design:
+Optional formats:
 
 ```bash
-npm run graphforge -- agent-handoff --project my-app.og.json --prompt "cinematic but minimal SaaS launch card" --out public/og-agent.png --plan .graphforge/agent-handoff.json
+graphforge export --project project.og.json --format webp --quality 82 --out public/og.webp
+graphforge export --project project.og.json --format jpg --quality 82 --out public/og.jpg
+graphforge render --project project.og.json --out public/og.svg
 ```
 
-The command writes an agent handoff plan only. The coding agent generates or authors the image outside GraphForge and returns the result to Studio for preview, compression, export, and metadata wiring.
+Publish flow:
 
-`graphforge agent-image` and `graphforge ai-image` are kept only as compatibility aliases for the same local handoff behavior.
+```bash
+graphforge publish --preview --repo . --session "<id>" --framework next --image public/og.png
+graphforge publish --confirm --repo . --session "<id>" --framework next --image public/og.png
+```
+
+Preview writes a handoff request only. Confirm writes metadata and preserves backups where applicable.
 
 ## Package Layout
 
-- `packages/core`: schema, presets, validation, platform rules, route variants.
-- `packages/render`: SVG rendering plus PNG/WebP/JPEG export.
-- `packages/cli`: local commands, repo scan, session workflow, library, Studio server, metadata publish, skill install.
-- `packages/studio`: React/Vite editor.
-- `packages/codex-skill`: source skill instructions and references.
+- `packages/core`: schema, presets, validation, platform warnings, effect capabilities, document package support.
+- `packages/render`: SVG renderer and PNG/WebP/JPEG export pipeline.
+- `packages/studio`: React/Vite creative-tool interface.
+- `packages/cli`: local CLI, Studio server, sessions, packaging, skill install, publish helpers.
+- `packages/codex-skill` and `packages/cli/codex-skill`: bundled agent skill source and packaged copy.
+- `scripts`: workflow, package, handoff, and Studio smoke tests.
 
-## Verification
+## Quality Gate
 
-Run the full local gate:
+Before release or claiming a workflow is fixed:
 
 ```bash
+npm run build
 npm test
 npm run typecheck
-npm run build
 npm run lint
-npm audit --audit-level=moderate
 npm run smoke:workflow
-npm run smoke:studio
-npm run smoke:package
 npm run smoke:agent-handoff
+npm run smoke:agent-next-action
+npm run smoke:package
+npm run smoke:studio
 npm pack -w @graphforge/cli --dry-run
 ```
 
-`npm run smoke:workflow` uses the built CLI against a temporary app repo and verifies doctor, brief creation, editable project creation, page variants, optimized WebP export, mutation-free metadata preview, confirmed metadata apply, and agent handoff planning.
+Smoke coverage verifies npx-style packaging, skill install, session handoff, Studio startup, browser interaction, platform preview layout, export dimensions, nonblank raster output, and no provider-key requirement.
 
-`npm run smoke:studio` starts the built local Studio, verifies the import-first editor UI renders, performs real save/handoff/export/drag interactions, rejects legacy visual tokens in the served CSS, checks compact viewport overflow, and writes desktop/compact screenshot artifacts to `.tmp-smoke/studio-visual/`.
+## Boundaries
 
-`npm run smoke:package` packs the core, render, and CLI workspaces, installs those tarballs into a temporary app, then runs the installed `graphforge` binary to create and render an OG project. This verifies the npx-style packaged path outside the monorepo.
-
-The CLI package bundles `studio-dist` and `codex-skill`, so `npx @graphforge/cli studio` can serve the editor and `graphforge install-skill --agent codex|claude|opencode|all` can install the agent workflow without requiring a monorepo checkout.
-
-## Current Boundaries
-
-- GraphForge coordinates coding agents; it is not an AI provider client.
-- Metadata application is intentionally conservative and file-based. Deeply dynamic framework metadata may still require manual review after the preview step.
-- Platform previews are approximations; final live URL preview should still be checked after deployment.
-- The Studio is a focused OG finishing tool, not a full general-purpose design suite.
+- GraphForge coordinates agent workflows; it does not generate images through provider APIs.
+- Studio is an OG finishing tool, not a full general-purpose design suite.
+- Platform previews are careful local simulations. Deployed URLs should still be checked with live social validators before launch.
+- Dynamic framework metadata may require manual review even after GraphForge writes a safe preview or confirmed handoff.

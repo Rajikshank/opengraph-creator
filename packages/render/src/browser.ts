@@ -3,7 +3,6 @@ import { isGlowEffectEnabled, normalizeGlowEffect, type OgLayer, type OgProject 
 export function renderProjectToSvg(project: OgProject): string {
   const visibleLayers = project.layers.filter((layer) => !layer.hidden);
   const defs = [
-    `<filter id="gf-shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#020617" flood-opacity="0.34"/></filter>`,
     ...visibleLayers.flatMap((layer) => [...renderEffectDefs(layer, project), ...renderImageDefs(layer)])
   ];
 
@@ -28,8 +27,7 @@ function renderLayer(layer: OgLayer, project: OgProject): string {
     layer.skewY ? `skewY(${layer.skewY})` : ""
   ].filter(Boolean).join(" ");
   const filter = getFilter(layer);
-  const blur = "effects" in layer && layer.effects.blur > 0 ? ` style="filter: blur(${layer.effects.blur}px)"` : "";
-  const common = `opacity="${layer.opacity}" transform="${transform}"${filter ? ` filter="${filter}"` : ""}${blur}`;
+  const common = `opacity="${layer.opacity}" transform="${transform}"${filter ? ` filter="${filter}"` : ""}`;
 
   if (layer.kind === "background" || layer.kind === "shape") {
     return renderShapeLayer(layer, project, common);
@@ -121,12 +119,8 @@ function renderEffectDefs(layer: OgLayer, project: OgProject): string[] {
   if (!("effects" in layer)) return [];
   const defs: string[] = [];
   const id = safeId(layer.id);
-  if (isGlowEffectEnabled(layer.effects.glow)) {
-    const glow = normalizeGlowEffect(layer.effects.glow, project.brand.accent);
-    defs.push(
-      `<filter id="gf-glow-${id}" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="${clamp(glow.radius / 3, 0, 28)}" result="blur"/><feMorphology operator="dilate" radius="${glow.spread ?? 0}" in="blur" result="spread"/><feFlood flood-color="${escapeXml(glow.color ?? project.brand.accent)}" flood-opacity="${clamp(glow.intensity, 0, 1)}"/><feComposite in2="spread" operator="in"/><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>`
-    );
-  }
+  const composedFilter = renderComposedFilter(layer, project);
+  if (composedFilter) defs.push(composedFilter);
   const gradient = layer.effects.gradient;
   if (gradient) {
     const stops = gradient.stops
@@ -146,23 +140,62 @@ function renderEffectDefs(layer: OgLayer, project: OgProject): string[] {
       );
     }
   }
-  if (layer.effects.noise) {
+  if (layer.effects.noise && layer.effects.noise.amount > 0) {
     defs.push(
       `<filter id="gf-noise-${id}" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="3" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/></filter>`
     );
   }
-  if (layer.effects.lighting) {
+  if (layer.effects.lighting && layer.effects.lighting.intensity > 0) {
     const lighting = layer.effects.lighting;
     defs.push(
       `<radialGradient id="gf-lighting-${id}" cx="${clamp(lighting.x, 0, 1) * 100}%" cy="${clamp(lighting.y, 0, 1) * 100}%" r="70%"><stop offset="0%" stop-color="${escapeXml(lighting.color)}" stop-opacity="${clamp(lighting.intensity, 0, 1)}"/><stop offset="100%" stop-color="${escapeXml(lighting.color)}" stop-opacity="0"/></radialGradient>`
     );
   }
-  if (layer.effects.vignette) {
+  if (layer.effects.vignette && layer.effects.vignette > 0) {
     defs.push(
       `<radialGradient id="gf-vignette-${id}" cx="50%" cy="50%" r="75%"><stop offset="55%" stop-color="#000000" stop-opacity="0"/><stop offset="100%" stop-color="#000000" stop-opacity="${clamp(layer.effects.vignette, 0, 1)}"/></radialGradient>`
     );
   }
   return defs;
+}
+
+function renderComposedFilter(layer: OgLayer, project: OgProject): string {
+  if (!("effects" in layer) || !hasComposedFilter(layer)) return "";
+  const id = safeId(layer.id);
+  const effects = layer.effects;
+  const glowEnabled = isGlowEffectEnabled(effects.glow);
+  const glow = normalizeGlowEffect(effects.glow, project.brand.accent);
+  const nodes: string[] = [];
+
+  if (effects.shadow) {
+    nodes.push(
+      `<feDropShadow in="SourceAlpha" dx="0" dy="18" stdDeviation="18" flood-color="#020617" flood-opacity="0.34" result="gf-shadow-${id}"/>`
+    );
+  }
+
+  if (glowEnabled) {
+    nodes.push(
+      `<feGaussianBlur in="SourceAlpha" stdDeviation="${clamp(glow.radius / 3, 0, 28)}" result="gf-glow-blur-${id}"/>`,
+      `<feMorphology operator="dilate" radius="${glow.spread ?? 0}" in="gf-glow-blur-${id}" result="gf-glow-spread-${id}"/>`,
+      `<feFlood flood-color="${escapeXml(glow.color ?? project.brand.accent)}" flood-opacity="${clamp(glow.intensity, 0, 1)}" result="gf-glow-color-${id}"/>`,
+      `<feComposite in="gf-glow-color-${id}" in2="gf-glow-spread-${id}" operator="in" result="gf-glow-${id}"/>`
+    );
+  }
+
+  const sourceResult = `gf-layer-blur-${id}`;
+  if (effects.blur > 0) {
+    nodes.push(`<feGaussianBlur in="SourceGraphic" stdDeviation="${clamp(effects.blur, 0, 40)}" result="${sourceResult}"/>`);
+  } else {
+    nodes.push(`<feColorMatrix in="SourceGraphic" type="matrix" values="1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 1 0" result="${sourceResult}"/>`);
+  }
+
+  const mergeNodes = [
+    effects.shadow ? `<feMergeNode in="gf-shadow-${id}"/>` : "",
+    glowEnabled ? `<feMergeNode in="gf-glow-${id}"/>` : "",
+    `<feMergeNode in="${sourceResult}"/>`
+  ].filter(Boolean).join("");
+
+  return `<filter id="gf-filter-${id}" x="-45%" y="-45%" width="190%" height="190%">${nodes.join("")}<feMerge>${mergeNodes}</feMerge></filter>`;
 }
 
 function renderImageDefs(layer: OgLayer): string[] {
@@ -177,17 +210,17 @@ function renderEffectOverlays(layer: Extract<OgLayer, { kind: "background" | "sh
   const id = safeId(layer.id);
   const overlays: string[] = [];
   const radius = "borderRadius" in layer ? layer.borderRadius : layer.radius;
-  if (layer.effects.noise) {
+  if (layer.effects.noise && layer.effects.noise.amount > 0) {
     overlays.push(
       `<rect x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" rx="${radius}" filter="url(#gf-noise-${id})" opacity="${clamp(layer.effects.noise.amount, 0, 1)}" style="mix-blend-mode:${layer.effects.noise.blendMode}"/>`
     );
   }
-  if (layer.effects.lighting) {
+  if (layer.effects.lighting && layer.effects.lighting.intensity > 0) {
     overlays.push(
       `<rect x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" rx="${radius}" fill="url(#gf-lighting-${id})"/>`
     );
   }
-  if (layer.effects.vignette) {
+  if (layer.effects.vignette && layer.effects.vignette > 0) {
     overlays.push(
       `<rect x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" rx="${radius}" fill="url(#gf-vignette-${id})"/>`
     );
@@ -204,11 +237,11 @@ function isVisibleTextLayer(layer: OgLayer): layer is Extract<OgLayer, { kind: "
 }
 
 function getFilter(layer: OgLayer): string {
-  if ("effects" in layer) {
-    if (isGlowEffectEnabled(layer.effects.glow)) return `url(#gf-glow-${safeId(layer.id)})`;
-    if (layer.effects.shadow) return "url(#gf-shadow)";
-  }
-  return "";
+  return hasComposedFilter(layer) ? `url(#gf-filter-${safeId(layer.id)})` : "";
+}
+
+function hasComposedFilter(layer: OgLayer): boolean {
+  return "effects" in layer && (layer.effects.shadow || isGlowEffectEnabled(layer.effects.glow) || layer.effects.blur > 0);
 }
 
 function wrapText(text: string, maxChars: number): string[] {

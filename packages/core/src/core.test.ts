@@ -5,6 +5,7 @@ import {
   createPageVariantProjects,
   detectFramework,
   getExportPath,
+  getLayerEffectCapabilities,
   getPlatformWarnings,
   isGlowEffectEnabled,
   normalizeGlowEffect,
@@ -129,6 +130,33 @@ describe("GraphForge core", () => {
     expect(custom).toEqual({ enabled: true, color: "#f6c36b", radius: 80, intensity: 1, spread: 0 });
     expect(isGlowEffectEnabled(custom)).toBe(true);
     expect(isGlowEffectEnabled({ ...custom, intensity: 0 })).toBe(false);
+  });
+
+  it("defines which visual effects are actually supported per layer kind", () => {
+    expect(getLayerEffectCapabilities("shape")).toMatchObject({
+      gradient: "supported",
+      noise: "supported",
+      lighting: "supported",
+      vignette: "supported",
+      glow: "supported"
+    });
+    expect(getLayerEffectCapabilities("image")).toMatchObject({
+      noise: "supported",
+      lighting: "supported",
+      vignette: "supported",
+      glow: "supported"
+    });
+    expect(getLayerEffectCapabilities("text")).toMatchObject({
+      gradient: "disabled",
+      noise: "disabled",
+      lighting: "disabled",
+      vignette: "disabled",
+      blur: "supported",
+      shadow: "supported",
+      glow: "supported"
+    });
+    expect(getLayerEffectCapabilities("badge").lighting).toBe("disabled");
+    expect(getLayerEffectCapabilities("group").glow).toBe("disabled");
   });
 
   it("rejects projects without editable layers", () => {

@@ -5,10 +5,11 @@ import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { Toaster, toast } from "sonner";
 import { listProjectsViaApi, readProjectViaApi, readSessionBundleViaApi, saveProjectViaApi, saveSessionDocumentViaApi } from "../api";
 import { StudioSegmentedControl } from "../design-system/StudioControls";
+import { StudioTooltipProvider } from "../design-system/StudioTooltip";
 import { ArtboardEditor } from "./ArtboardEditor";
 import { InspectorTabs } from "./InspectorTabs";
 import { PreviewDock } from "./PlatformPreviewPanel";
-import { ProjectPicker } from "./ProjectPicker";
+import { ProjectPicker, type StartupMode } from "./ProjectPicker";
 import { SourceRail } from "./SourceRail";
 import { ToolPalette } from "./ToolPalette";
 import { useStudio } from "./studio-store";
@@ -24,6 +25,9 @@ export function SessionShell() {
   const setSession = useStudio((state) => state.setSession);
   const session = useStudio((state) => state.session);
   const setProjects = useStudio((state) => state.setProjects);
+  const [startupMode, setStartupMode] = useState<StartupMode>("global-hub");
+  const [startupRepo, setStartupRepo] = useState<string | undefined>();
+  const [recoveryMessage, setRecoveryMessage] = useState<string | undefined>();
 
   useEffect(() => {
     listProjectsViaApi().then(setProjects).catch(() => toast.warning("Local API unavailable; manual editing still works"));
@@ -31,16 +35,29 @@ export function SessionShell() {
     const sessionId = params.get("session");
     const repo = params.get("repo") ?? undefined;
     const projectId = params.get("project");
+    setStartupRepo(repo);
     if (sessionId) {
+      setStartupMode("recovery");
       readSessionBundleViaApi(fetch, { id: sessionId, repo })
         .then((bundle) => {
           setSession(bundle.session);
-          if (bundle.project) replaceProject(bundle.project);
-          else toast.warning("Session opened, but no editable .ogdoc document exists yet");
+          if (bundle.project) {
+            replaceProject(bundle.project);
+            setRecoveryMessage(undefined);
+          } else {
+            setRecoveryMessage("Session opened, but no editable .ogdoc document exists yet.");
+            toast.warning("Session opened, but no editable .ogdoc document exists yet");
+          }
         })
-        .catch((error) => toast.error(error instanceof Error ? error.message : "Could not open session"));
+        .catch((error) => {
+          setRecoveryMessage(error instanceof Error ? error.message : "Could not open session");
+          toast.error(error instanceof Error ? error.message : "Could not open session");
+        });
     } else if (projectId) {
+      setStartupMode("global-hub");
       openProject(projectId);
+    } else {
+      setStartupMode(repo ? "repo-hub" : "global-hub");
     }
   }, []);
 
@@ -83,6 +100,7 @@ export function SessionShell() {
   };
 
   return (
+    <StudioTooltipProvider>
     <div className="studio-shell" ref={shellRef}>
       <Toaster
         position="bottom-right"
@@ -114,8 +132,13 @@ export function SessionShell() {
 
       {!project ? (
         <div className="empty-workspace">
-          <SourceRail />
-          <ProjectPicker onOpenProject={openProject} />
+          <ProjectPicker
+            mode={startupMode}
+            repo={startupRepo}
+            recoveryMessage={recoveryMessage}
+            onOpenProject={openProject}
+            onRetrySession={startupMode === "recovery" ? () => window.location.reload() : undefined}
+          />
         </div>
       ) : (
         <PanelGroup direction="horizontal" autoSaveId="graphforge-final-layout" className="studio-workspace" data-enter>
@@ -139,6 +162,7 @@ export function SessionShell() {
         </PanelGroup>
       )}
     </div>
+    </StudioTooltipProvider>
   );
 }
 

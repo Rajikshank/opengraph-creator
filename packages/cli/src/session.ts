@@ -224,6 +224,22 @@ export async function createAgentRequest(input: CreateAgentRequestInput): Promis
   return request;
 }
 
+export async function cancelGraphForgeSession(repo: string, sessionId: string, reason: string): Promise<GraphForgeSession> {
+  const session = await readGraphForgeSession(repo, sessionId);
+  const next: GraphForgeSession = {
+    ...session,
+    status: "cancelled",
+    lastHeartbeatAt: new Date().toISOString(),
+    pendingAction: undefined
+  };
+  await writeGraphForgeSession(next);
+  await appendSessionEvent(repo, sessionId, {
+    type: "session.cancelled",
+    message: reason
+  });
+  return next;
+}
+
 export async function atomicWriteJson(path: string, value: unknown): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   const tmp = `${path}.${Date.now().toString(36)}.tmp`;

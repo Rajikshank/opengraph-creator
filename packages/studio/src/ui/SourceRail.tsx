@@ -3,6 +3,7 @@ import { FileCode2, PanelLeftClose, Send, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { unpackStudioDocument, type GraphForgeSourceArtifact, type SourceArtifactKind } from "@graphforge/core";
 import { createSessionAgentRequestViaApi, importSourceViaApi, saveSessionDocumentViaApi, uploadSessionAssetViaApi } from "../api";
+import { StudioSelect } from "../design-system/StudioSelect";
 import { createManualProject, createProjectWithImportedAsset, useStudio } from "./studio-store";
 
 export function SourceRail({ onClose }: { onClose?: () => void }) {
@@ -162,15 +163,17 @@ export function SourceRail({ onClose }: { onClose?: () => void }) {
           Source path
           <input value={source} onChange={(event) => setSource(event.target.value)} />
         </label>
-        <label>
-          Source kind
-          <select value={kind} onChange={(event) => setKind(event.target.value as SourceArtifactKind)}>
-            <option value="graphforge-json">Project JSON</option>
-            <option value="svg">SVG</option>
-            <option value="html">HTML</option>
-            <option value="image">Image</option>
-          </select>
-        </label>
+        <StudioSelect
+          label="Source kind"
+          value={kind}
+          options={[
+            { value: "graphforge-json", label: "Project JSON" },
+            { value: "svg", label: "SVG" },
+            { value: "html", label: "HTML" },
+            { value: "image", label: "Image" }
+          ]}
+          onValueChange={(value) => setKind(value as SourceArtifactKind)}
+        />
         <button type="button" className="primary-action" onClick={importGeneratedAsset}>
           <Upload size={15} /> Import into document
         </button>

@@ -7,6 +7,7 @@ import {
   appendSessionEvent,
   atomicWriteJson,
   createAgentRequest,
+  cancelGraphForgeSession,
   createGraphForgeSession,
   createPublishRequest,
   getSessionPaths,
@@ -123,5 +124,19 @@ describe("GraphForge durable sessions", () => {
     expect(session.publishRequests.some((request) => request.status === "confirmed")).toBe(true);
     expect(session.agentRequests?.[0]).toMatchObject({ prompt: "Revise the lighting and keep editable text." });
     expect(await readFile(paths.agentRequestJson, "utf8")).toContain("Revise the lighting");
+  });
+
+  it("records cancelled sessions as terminal user decisions", async () => {
+    const repo = await mkdtemp(join(tmpdir(), "graphforge-session-cancel-"));
+    await createGraphForgeSession({ repo, id: "session-cancel", agent: "opencode" });
+    const paths = getSessionPaths(repo, "session-cancel");
+
+    const cancelled = await cancelGraphForgeSession(repo, "session-cancel", "User stopped the handoff from Studio");
+    const eventLog = await readFile(paths.eventsJsonl, "utf8");
+
+    expect(cancelled.status).toBe("cancelled");
+    expect(cancelled.pendingAction).toBeUndefined();
+    expect(eventLog).toContain("session.cancelled");
+    expect(eventLog).toContain("User stopped the handoff from Studio");
   });
 });

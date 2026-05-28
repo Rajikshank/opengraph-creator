@@ -196,6 +196,12 @@ async function handleRequest(input: {
     return;
   }
 
+  if (url.pathname === "/api/connect-recipe" && input.request.method === "GET") {
+    const repo = url.searchParams.get("repo") ?? input.sessionRepo ?? input.library.root;
+    sendJson(input.response, 200, createConnectRecipe(repo));
+    return;
+  }
+
   if (url.pathname === "/api/session/document" && input.request.method === "POST") {
     const body = (await readJson(input.request)) as SessionDocumentBody;
     const repo = body.repo ?? input.sessionRepo ?? input.library.root;
@@ -384,6 +390,16 @@ async function handleRequest(input: {
   }
 
   await serveStatic(input.response, input.staticDir, url.pathname);
+}
+
+function createConnectRecipe(repo: string): { repo: string; command: string; prompt: string; sessionRoot: string } {
+  return {
+    repo,
+    command: `graphforge session create --repo "${repo}" --agent codex --strategy hybrid --mode template`,
+    prompt:
+      "Use the GraphForge skill to inspect this repo, ask only relevant OG design questions, create an editable .ogdoc at .graphforge/sessions/<id>/document.ogdoc, launch Studio, then wait with graphforge session wait --until next-action.",
+    sessionRoot: join(repo, ".graphforge", "sessions")
+  };
 }
 
 function normalizeImportKind(kind: SourceArtifactKind | undefined, source: string): SourceArtifactKind {

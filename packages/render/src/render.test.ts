@@ -18,7 +18,7 @@ describe("GraphForge renderer", () => {
     expect(svg).toContain('height="630"');
     expect(svg).toContain("Ship better previews");
     expect(svg).toContain("Codex generated, human polished");
-    expect(svg).toContain("<filter");
+    expect(svg).toContain("<defs>");
   });
 
   it("honors image fit modes in exported SVG image layers", () => {
@@ -99,12 +99,38 @@ describe("GraphForge renderer", () => {
 
     const svg = renderProjectToSvg(project);
 
-    expect(svg).toContain('id="gf-glow-headline"');
+    expect(svg).toContain('id="gf-filter-headline"');
     expect(svg).toContain('stdDeviation="12"');
     expect(svg).toContain('flood-color="#f6c36b"');
     expect(svg).toContain('flood-opacity="0.7"');
-    expect(svg).toContain('filter="url(#gf-glow-headline)"');
+    expect(svg).toContain('filter="url(#gf-filter-headline)"');
     expect(svg).not.toContain('id="gf-glow"');
+  });
+
+  it("composes blur, shadow, and glow into a single SVG filter for platform preview parity", () => {
+    const project = createDefaultProject({ name: "Composed Effects", strategy: "common" });
+    project.layers = project.layers.map((layer) =>
+      layer.id === "headline" && layer.kind === "text"
+        ? {
+            ...layer,
+            effects: {
+              ...layer.effects,
+              shadow: true,
+              blur: 8,
+              glow: { enabled: true, color: "#f6c36b", radius: 30, intensity: 0.6, spread: 2 }
+            }
+          }
+        : layer
+    );
+
+    const svg = renderProjectToSvg(project);
+
+    expect(svg).toContain('id="gf-filter-headline"');
+    expect(svg).toContain("gf-shadow-headline");
+    expect(svg).toContain("gf-glow-color-headline");
+    expect(svg).toContain("gf-layer-blur-headline");
+    expect(svg).toContain('filter="url(#gf-filter-headline)"');
+    expect(svg).not.toContain('style="filter: blur(8px)"');
   });
 
   it("clips image effects to image layer bounds in platform and export SVG", () => {
@@ -142,8 +168,8 @@ describe("GraphForge renderer", () => {
     expect(svg).toContain('id="gf-noise-hero-image"');
     expect(svg).toContain('id="gf-lighting-hero-image"');
     expect(svg).toContain('id="gf-vignette-hero-image"');
-    expect(svg).toContain('id="gf-glow-hero-image"');
-    expect(svg).toContain('filter="url(#gf-glow-hero-image)"');
+    expect(svg).toContain('id="gf-filter-hero-image"');
+    expect(svg).toContain('filter="url(#gf-filter-hero-image)"');
     expect(svg).toContain('mix-blend-mode:overlay');
     expect(svg).toContain('rx="18"');
   });

@@ -48,9 +48,10 @@ When the GraphForge Skill is invoked inside a user app:
 4. Generate the editable master document at `.graphforge/sessions/<id>/document.ogdoc`; put supporting assets in `.graphforge/sessions/<id>/incoming/` or inside the document package.
 5. Validate the document with `graphforge document validate --source ".graphforge/sessions/<id>/document.ogdoc"`.
 6. Open Studio with `graphforge session launch --repo "<repo>" --id "<id>" --open true --waitReady true --json`.
-7. Wait for Studio confirmation with `graphforge session wait --repo "<repo>" --id "<id>" --until publish-confirmed --timeout 0`.
-8. Resume from `session.json`, `events.jsonl`, `document.ogdoc`, `export.json`, `publish-request.json`, and `agent-request.json` if interrupted.
-9. Publish only after preview and user confirmation.
+7. Wait for the next Studio decision with `graphforge session wait --repo "<repo>" --id "<id>" --until next-action --timeout 0`.
+8. If the wait returns `agent-requested`, read `agent-request.json`, revise `document.ogdoc`, validate, relaunch Studio, and wait again. If it returns `published`, read confirmed `publish-request.json` and wire metadata. If it returns `cancelled` or `terminal`, stop without metadata mutation.
+9. Resume from `session.json`, `events.jsonl`, `document.ogdoc`, `export.json`, `publish-request.json`, and `agent-request.json` if interrupted.
+10. Publish only after preview and user confirmation.
 
 ## UI And UX Rules
 

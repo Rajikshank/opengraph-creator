@@ -8,7 +8,7 @@ import type {
   OgProject
 } from "@graphforge/core";
 
-export type AddableLayerKind = "text" | "image" | "shape" | "rectangle" | "rounded-rectangle" | "ellipse" | "line" | "frame";
+export type AddableLayerKind = "text" | "image" | "badge" | "background" | "shape" | "rectangle" | "rounded-rectangle" | "ellipse" | "line" | "frame";
 export type LayerAlignMode = "left" | "center" | "right" | "top" | "middle" | "bottom";
 export type LayerDistributeMode = "horizontal" | "vertical";
 export type LayerSnapTarget = "safe-zone" | "canvas-center" | "canvas-top-left" | "canvas-bottom-right";
@@ -243,11 +243,12 @@ export function moveLayerTo(session: EditorSession, layerId: string, position: {
 
 export function addLayer(session: EditorSession, kind: AddableLayerKind): EditorSession {
   const layer = createLayer(session.project, kind);
+  const layers = layer.kind === "background" ? [layer, ...session.project.layers] : [...session.project.layers, layer];
   return pushHistory(
     session,
     {
       ...session.project,
-      layers: [...session.project.layers, layer],
+      layers,
       updatedAt: new Date().toISOString()
     },
     layer.id
@@ -429,6 +430,25 @@ function createLayer(project: OgProject, kind: AddableLayerKind): OgLayer {
     };
   }
 
+  if (kind === "badge") {
+    return {
+      ...base,
+      kind: "badge",
+      name: "Badge Layer",
+      width: 220,
+      height: 42,
+      text: "New badge",
+      fontFamily: "Inter, Arial, sans-serif",
+      fontSize: 22,
+      fontWeight: 780,
+      color: project.brand.text,
+      align: "center",
+      lineHeight: 1,
+      letterSpacing: 0,
+      effects: { shadow: false, glow: false, blur: 0 }
+    };
+  }
+
   if (kind === "image") {
     return {
       ...base,
@@ -440,6 +460,22 @@ function createLayer(project: OgProject, kind: AddableLayerKind): OgLayer {
       fit: "cover",
       borderRadius: 8,
       effects: { shadow: true, glow: false, blur: 0 }
+    };
+  }
+
+  if (kind === "background") {
+    return {
+      ...base,
+      id: nextLayerId(project.layers, "background-layer"),
+      kind: "background",
+      name: "Background Layer",
+      x: 0,
+      y: 0,
+      width: project.canvas.width,
+      height: project.canvas.height,
+      fill: project.canvas.background,
+      radius: 0,
+      effects: { shadow: false, glow: false, blur: 0 }
     };
   }
 

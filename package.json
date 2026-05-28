@@ -14,6 +14,7 @@
     "smoke:studio": "node scripts/studio-smoke.mjs",
     "smoke:package": "node scripts/package-install-smoke.mjs",
     "smoke:agent-handoff": "node scripts/agent-handoff-smoke.mjs",
+    "smoke:agent-next-action": "node scripts/agent-next-action-smoke.mjs",
     "dev:studio": "npm run dev -w @graphforge/studio",
     "graphforge": "tsx packages/cli/src/index.ts"
   },

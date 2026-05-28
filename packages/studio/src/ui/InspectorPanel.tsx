@@ -1,5 +1,6 @@
 import type { ImageLayer, OgLayer, ShapeLayer, TextLayer } from "@graphforge/core";
 import { Crosshair, Maximize2, Scan, SlidersHorizontal, Upload } from "lucide-react";
+import { StudioSelect } from "../design-system/StudioSelect";
 import { StudioSlider } from "../design-system/StudioSlider";
 import { useStudio } from "./studio-store";
 
@@ -63,7 +64,15 @@ function TextControls({ layer }: { layer: TextLayer }) {
         <label>Font<input value={layer.fontFamily} onChange={(event) => updateLayer(layer.id, { fontFamily: event.target.value } as Partial<OgLayer>)} /></label>
         <label>Size<input type="number" value={layer.fontSize} onChange={(event) => updateLayer(layer.id, { fontSize: Number(event.target.value) } as Partial<OgLayer>)} /></label>
         <label>Weight<input type="number" step="100" value={layer.fontWeight} onChange={(event) => updateLayer(layer.id, { fontWeight: Number(event.target.value) } as Partial<OgLayer>)} /></label>
-        <label>Style<select value={layer.fontStyle ?? "normal"} onChange={(event) => updateLayer(layer.id, { fontStyle: event.target.value as TextLayer["fontStyle"] } as Partial<OgLayer>)}><option value="normal">Normal</option><option value="italic">Italic</option></select></label>
+        <StudioSelect
+          label="Style"
+          value={layer.fontStyle ?? "normal"}
+          options={[
+            { value: "normal", label: "Normal" },
+            { value: "italic", label: "Italic" }
+          ]}
+          onValueChange={(value) => updateLayer(layer.id, { fontStyle: value as TextLayer["fontStyle"] } as Partial<OgLayer>)}
+        />
         <label>Color<input type="color" value={layer.color} onChange={(event) => updateLayer(layer.id, { color: event.target.value } as Partial<OgLayer>)} /></label>
         <label>Line height<input type="number" min="0.8" max="2" step="0.05" value={layer.lineHeight} onChange={(event) => updateLayer(layer.id, { lineHeight: Number(event.target.value) } as Partial<OgLayer>)} /></label>
         <label>Letter spacing<input type="number" value={layer.letterSpacing ?? 0} onChange={(event) => updateLayer(layer.id, { letterSpacing: Number(event.target.value) } as Partial<OgLayer>)} /></label>
@@ -114,7 +123,16 @@ function ImageControls({ layer }: { layer: ImageLayer }) {
         />
       </label>
       <div className="grid-two">
-        <label>Fit<select value={layer.fit} onChange={(event) => updateLayer(layer.id, { fit: event.target.value as ImageLayer["fit"] } as Partial<OgLayer>)}><option value="cover">Cover</option><option value="contain">Contain</option><option value="fill">Fill</option></select></label>
+        <StudioSelect
+          label="Fit"
+          value={layer.fit}
+          options={[
+            { value: "cover", label: "Cover" },
+            { value: "contain", label: "Contain" },
+            { value: "fill", label: "Fill" }
+          ]}
+          onValueChange={(value) => updateLayer(layer.id, { fit: value as ImageLayer["fit"] } as Partial<OgLayer>)}
+        />
         <label>Focal X<input type="number" min="0" max="1" step="0.05" value={focalPoint.x} onChange={(event) => setImageFocalPoint(layer.id, { x: Number(event.target.value), y: focalPoint.y })} /></label>
         <label>Focal Y<input type="number" min="0" max="1" step="0.05" value={focalPoint.y} onChange={(event) => setImageFocalPoint(layer.id, { x: focalPoint.x, y: Number(event.target.value) })} /></label>
         <label>Crop X<input type="number" min="0" max="1" step="0.05" value={crop.x} onChange={(event) => setImageCrop(layer.id, { ...crop, x: Number(event.target.value) })} /></label>

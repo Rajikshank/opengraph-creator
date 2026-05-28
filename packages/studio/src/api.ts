@@ -90,6 +90,13 @@ export interface CreateSessionRequest {
   mode?: GenerationMode;
 }
 
+export interface ConnectRecipe {
+  repo: string;
+  command: string;
+  prompt: string;
+  sessionRoot: string;
+}
+
 export interface SessionEventRequest {
   repo?: string;
   sessionId: string;
@@ -220,6 +227,16 @@ export async function createSessionViaApi(
     }
   });
   return body.session;
+}
+
+export async function readConnectRecipeViaApi(fetcher: FetchLike = fetch, repo?: string): Promise<ConnectRecipe> {
+  const params = new URLSearchParams();
+  if (repo) params.set("repo", repo);
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return requestJson<ConnectRecipe>(fetcher, {
+    url: `/api/connect-recipe${suffix}`,
+    label: "Could not read agent connection recipe"
+  });
 }
 
 export async function readSessionViaApi(

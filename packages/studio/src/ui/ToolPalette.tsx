@@ -12,6 +12,12 @@ export function ToolPalette() {
       <button type="button" title="Add image" onClick={() => addLayer("image")}>
         <ImagePlus size={15} />
       </button>
+      <button type="button" title="Add badge" onClick={() => addLayer("badge")}>
+        <Type size={15} />
+      </button>
+      <button type="button" title="Add background" onClick={() => addLayer("background")}>
+        <Square size={15} />
+      </button>
       <button type="button" title="Add rectangle" onClick={() => addLayer("rectangle")}>
         <Square size={15} />
       </button>

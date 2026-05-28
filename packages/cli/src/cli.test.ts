@@ -548,6 +548,53 @@ describe("GraphForge CLI helpers", () => {
     expect(confirmedSession).toContain('"status": "confirmed"');
   });
 
+  it("waits for the next Studio decision across agent request and confirmed publish", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "graphforge-cli-next-action-"));
+
+    await runCli(["session", "create", "--repo", dir, "--id", "next-action", "--agent", "claude", "--strategy", "hybrid"]);
+    await runCli([
+      "session",
+      "wait",
+      "--repo",
+      dir,
+      "--id",
+      "next-action",
+      "--until",
+      "next-action",
+      "--timeout",
+      "100"
+    ]);
+
+    await runCli([
+      "publish",
+      "--confirm",
+      "--repo",
+      dir,
+      "--session",
+      "next-action",
+      "--framework",
+      "vite",
+      "--image",
+      "public/og.png"
+    ]);
+    await runCli([
+      "session",
+      "wait",
+      "--repo",
+      dir,
+      "--id",
+      "next-action",
+      "--until",
+      "next-action",
+      "--timeout",
+      "1000"
+    ]);
+    const confirmedSession = await readFile(join(dir, ".graphforge", "sessions", "next-action", "session.json"), "utf8");
+
+    expect(confirmedSession).toContain('"status": "published"');
+    expect(confirmedSession).toContain('"status": "confirmed"');
+  });
+
   it("imports generated SVG, HTML, and image assets into editable project wrappers", async () => {
     const dir = await mkdtemp(join(tmpdir(), "graphforge-import-"));
     const svgPath = join(dir, "generated.svg");

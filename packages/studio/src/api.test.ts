@@ -9,6 +9,7 @@ import {
   exportProjectViaApi,
   importSourceViaApi,
   listProjectsViaApi,
+  readConnectRecipeViaApi,
   readSessionViaApi,
   recordSessionExportViaApi,
   saveProjectViaApi
@@ -154,6 +155,25 @@ describe("studio API client", () => {
 
     await expect(listProjectsViaApi(fetchMock)).resolves.toEqual([{ projectId: "one", name: "One" }]);
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("reads provider-neutral agent connection recipes", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          repo: "D:/app",
+          command: "graphforge session create --repo \"D:/app\" --agent codex --strategy hybrid --mode template",
+          prompt: "Use the GraphForge skill and wait with next-action.",
+          sessionRoot: "D:/app/.graphforge/sessions"
+        })
+      )
+    );
+
+    await expect(readConnectRecipeViaApi(fetchMock, "D:/app")).resolves.toMatchObject({
+      repo: "D:/app",
+      sessionRoot: "D:/app/.graphforge/sessions"
+    });
+    expect(fetchMock).toHaveBeenCalledWith("/api/connect-recipe?repo=D%3A%2Fapp", undefined);
   });
 
   it("retries retryable server responses but not client errors", async () => {

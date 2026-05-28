@@ -51,6 +51,12 @@ export function LayerTree() {
         <button type="button" title="Add image layer" onClick={() => addLayer("image")}>
           <FileImage size={14} />
         </button>
+        <button type="button" title="Add badge layer" onClick={() => addLayer("badge")}>
+          <Type size={14} />
+        </button>
+        <button type="button" title="Add background layer" onClick={() => addLayer("background")}>
+          <Shapes size={14} />
+        </button>
         <button type="button" title="Add shape layer" onClick={() => addLayer("rectangle")}>
           <Shapes size={14} />
         </button>

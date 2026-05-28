@@ -22,7 +22,7 @@ const uiSource = [
   .map((file) => readFileSync(join(uiDir, file), "utf8"))
   .join("\n");
 const designSystemDir = join(process.cwd(), "packages", "studio", "src", "design-system");
-const designSystemSource = ["StudioSlider.tsx", "StudioControls.tsx"]
+const designSystemSource = ["StudioSlider.tsx", "StudioControls.tsx", "StudioSelect.tsx", "StudioSwitch.tsx", "StudioTooltip.tsx", "StudioField.tsx"]
   .map((file) => readFileSync(join(designSystemDir, file), "utf8"))
   .join("\n");
 
@@ -43,8 +43,9 @@ describe("reengineered studio UI contract", () => {
       "ExportPublishPanel",
       "Import into document",
       "Request agent revision",
-      "No agent detected",
-      "?session",
+      "No active agent session",
+      "Open .ogdoc",
+      "sessionId = params.get",
       "Ask agent to wire exports",
       "Safe zone",
       "Gradient",
@@ -55,6 +56,8 @@ describe("reengineered studio UI contract", () => {
       "Focal Y",
       "Crop W",
       "Image file",
+      "Add badge",
+      "Add background",
       "Framework",
       "Line height",
       "Shadow",
@@ -118,6 +121,9 @@ describe("reengineered studio UI contract", () => {
   it("uses owned controls instead of raw default form elements for studio editing", () => {
     expect(designSystemSource).toContain("StudioSlider");
     expect(designSystemSource).toContain("StudioSegmentedControl");
+    expect(designSystemSource).toContain("StudioSelect");
+    expect(designSystemSource).toContain("StudioSwitch");
+    expect(designSystemSource).toContain("StudioTooltip");
     expect(designSystemSource).toContain("slider-progress");
     expect(uiSource).toContain("StudioSlider");
     expect(uiSource).toContain("StudioSegmentedControl");
@@ -126,10 +132,24 @@ describe("reengineered studio UI contract", () => {
     expect(uiSource).toContain('value: "canvas"');
     expect(uiSource).toContain('value: "preview"');
     expect(uiSource).toContain('title="Add ellipse"');
+    expect(uiSource).toContain('addLayer("badge")');
+    expect(uiSource).toContain('addLayer("background")');
     expect(uiSource).toContain('addLayer("ellipse")');
     expect(uiSource).toContain('addLayer("line")');
     expect(uiSource).not.toContain('type="range"');
     expect(uiSource).not.toContain("source-peek");
+  });
+
+  it("keeps studio slider keyboard and pointer edits wired into React state", () => {
+    expect(designSystemSource).toContain("handleSliderChange");
+    expect(designSystemSource).toContain("onInput={handleSliderChange}");
+    expect(designSystemSource).toContain("onChange={handleSliderChange}");
+    expect(designSystemSource).toContain("onKeyUp={handleSliderChange}");
+    expect(designSystemSource).toContain("handlePointerDown");
+    expect(designSystemSource).toContain("commitValueFromClientX");
+    expect(stylesSource).toContain(".slider-shell input {\n  position: absolute;");
+    expect(stylesSource).toContain("z-index: 2;");
+    expect(stylesSource).toContain("pointer-events: none;");
   });
 
   it("does not rerun global shell entrance animation for every project edit", () => {

@@ -14,6 +14,9 @@ describe("skill installer", () => {
     expect(result.skillDir).toBe(join(target, "graphforge-og-studio"));
     expect(installed).toContain(".ogdoc");
     expect(installed).toContain("session launch");
+    expect(installed).toContain("--until next-action");
+    expect(installed).toContain("agent-request.json");
+    expect(installed).toContain("publish-request.json");
     expect(installed).toContain("preview before applying metadata");
     await expect(stat(join(target, "graphforge-og-studio", "agents", "openai.yaml"))).resolves.toMatchObject({ size: expect.any(Number) });
     await expect(stat(join(target, "graphforge-og-studio", "references", "agent-handoff.md"))).resolves.toMatchObject({ size: expect.any(Number) });
