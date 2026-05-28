@@ -241,4 +241,18 @@ describe("reengineered studio UI contract", () => {
     expect(artboardSource).toContain("rotateAnchorOffset");
     expect(artboardSource).not.toContain("#0000ff");
   });
+
+  it("lets Konva measure text height and scales text by font size during vertical transforms", () => {
+    const artboardSource = readFileSync(join(uiDir, "ArtboardEditor.tsx"), "utf8");
+
+    expect(artboardSource).toContain("getTextDisplayMetrics(layer)");
+    expect(artboardSource).toContain("estimateTextLineWidth");
+    expect(artboardSource).toContain("measureCanvasText");
+    expect(artboardSource).toContain('wrap="none"');
+    expect(artboardSource).toContain("fontSize: Math.max(6, Math.round(layer.fontSize * scaleY))");
+    expect(artboardSource).toContain("width={metrics.width}");
+    expect(artboardSource).toContain("text={metrics.lines.join");
+    expect(artboardSource).not.toContain("height={layer.height}\n          text={layer.text}");
+    expect(artboardSource).not.toContain("width={layer.width}\n          text={layer.text}");
+  });
 });

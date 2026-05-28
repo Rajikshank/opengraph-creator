@@ -8,6 +8,7 @@ const canvasWidth = 1200;
 const canvasHeight = 630;
 const STUDIO_TRANSFORM_ACCENT = "#ecb052";
 const STUDIO_TRANSFORM_HANDLE = "#171511";
+const TEXT_WIDTH_FACTOR = 0.54;
 
 interface ArtboardEditorProps {
   sourceRailOpen?: boolean;
@@ -64,6 +65,17 @@ export function ArtboardEditor({ sourceRailOpen = true, onOpenSourceRail }: Artb
     const scaleY = node.scaleY();
     node.scaleX(1);
     node.scaleY(1);
+    if (isTextLayer(layer)) {
+      const metrics = getTextDisplayMetrics(layer);
+      updateLayer(layer.id, {
+        x: Math.round(node.x() - metrics.offsetX),
+        y: Math.round(node.y()),
+        width: Math.max(1, Math.round(metrics.width * scaleX)),
+        fontSize: Math.max(6, Math.round(layer.fontSize * scaleY)),
+        rotation: Math.round(node.rotation())
+      } as Partial<OgLayer>);
+      return;
+    }
     updateLayer(layer.id, {
       x: Math.round(node.x()),
       y: Math.round(node.y()),
@@ -99,27 +111,30 @@ export function ArtboardEditor({ sourceRailOpen = true, onOpenSourceRail }: Artb
           <Stage width={stageWidth} height={stageHeight} scaleX={scale} scaleY={scale}>
             <KonvaLayer>
               <Rect width={canvasWidth} height={canvasHeight} fill={project.canvas.background} />
-              {visibleLayers.map((layer) => (
-                <Group
-                  key={layer.id}
-                  ref={(node) => {
-                    if (node) nodeRefs.current[layer.id] = node;
-                  }}
-                  x={layer.x}
-                  y={layer.y}
-                  width={layer.width}
-                  height={layer.height}
-                  rotation={layer.rotation}
-                  opacity={layer.opacity}
-                  draggable={!layer.locked}
-                  onClick={() => setSelectedLayerId(layer.id)}
-                  onTap={() => setSelectedLayerId(layer.id)}
-                  onDragEnd={(event) => updateLayer(layer.id, { x: Math.round(event.target.x()), y: Math.round(event.target.y()) } as Partial<OgLayer>)}
-                  onTransformEnd={(event) => commitTransform(layer, event.target)}
-                >
-                  <KonvaLayerNode layer={layer} accent={project.brand.accent} />
-                </Group>
-              ))}
+              {visibleLayers.map((layer) => {
+                const frame = getLayerFrame(layer);
+                return (
+                  <Group
+                    key={layer.id}
+                    ref={(node) => {
+                      if (node) nodeRefs.current[layer.id] = node;
+                    }}
+                    x={layer.x + frame.offsetX}
+                    y={layer.y}
+                    width={frame.width}
+                    height={frame.height}
+                    rotation={layer.rotation}
+                    opacity={layer.opacity}
+                    draggable={!layer.locked}
+                    onClick={() => setSelectedLayerId(layer.id)}
+                    onTap={() => setSelectedLayerId(layer.id)}
+                    onDragEnd={(event) => updateLayer(layer.id, { x: Math.round(event.target.x() - frame.offsetX), y: Math.round(event.target.y()) } as Partial<OgLayer>)}
+                    onTransformEnd={(event) => commitTransform(layer, event.target)}
+                  >
+                    <KonvaLayerNode layer={layer} accent={project.brand.accent} />
+                  </Group>
+                );
+              })}
               {showSafeZone ? (
                 <Rect
                   x={project.canvas.safeInset}
@@ -158,12 +173,14 @@ export function ArtboardEditor({ sourceRailOpen = true, onOpenSourceRail }: Artb
 
 function KonvaLayerNode({ layer, accent }: { layer: OgLayer; accent: string }) {
   if (isTextLayer(layer)) {
+    const metrics = getTextDisplayMetrics(layer);
     return (
-      <EffectfulNode effects={layer.effects} accent={accent} cacheKey={`${layer.text}:${layer.width}:${layer.height}:${layer.fontSize}:${layer.color}`}>
+      <EffectfulNode effects={layer.effects} accent={accent} cacheKey={`${layer.text}:${metrics.width}:${metrics.height}:${layer.fontSize}:${layer.color}`}>
         <KonvaText
-          width={layer.width}
-          height={layer.height}
-          text={layer.text}
+          width={metrics.width}
+          height={metrics.height}
+          text={metrics.lines.join("\n")}
+          wrap="none"
           fontFamily={layer.fontFamily}
           fontSize={layer.fontSize}
           fontStyle={`${layer.fontStyle ?? "normal"} ${layer.fontWeight}`}
@@ -213,6 +230,55 @@ function KonvaLayerNode({ layer, accent }: { layer: OgLayer; accent: string }) {
     return <ImageLayerNode layer={layer} accent={accent} />;
   }
   return <Rect width={layer.width} height={layer.height} fill="#eef1eb" stroke="#a9b3a8" />;
+}
+
+function getLayerFrame(layer: OgLayer): { offsetX: number; width: number; height: number } {
+  if (!isTextLayer(layer)) return { offsetX: 0, width: layer.width, height: layer.height };
+  return getTextDisplayMetrics(layer);
+}
+
+function getTextDisplayMetrics(layer: TextLayer): { offsetX: number; width: number; height: number; lines: string[] } {
+  const maxChars = Math.max(8, Math.floor(layer.width / (layer.fontSize * TEXT_WIDTH_FACTOR)));
+  const lines = wrapText(layer.text, maxChars);
+  const lineWidths = lines.map((line) => estimateTextLineWidth(layer, line));
+  const width = Math.max(1, Math.ceil(Math.max(...lineWidths)));
+  const height = Math.max(1, Math.ceil(lines.length * layer.fontSize * layer.lineHeight));
+  const offsetX = layer.align === "center" ? (layer.width - width) / 2 : layer.align === "right" ? layer.width - width : 0;
+  return { offsetX, width, height, lines };
+}
+
+function estimateTextLineWidth(layer: TextLayer, line: string): number {
+  const spacing = layer.letterSpacing ?? 0;
+  const measured = measureCanvasText(layer, line);
+  return measured + Math.max(0, line.length - 1) * spacing + (layer.strokeWidth ?? 0) * 2;
+}
+
+function measureCanvasText(layer: TextLayer, line: string): number {
+  if (typeof document === "undefined") return line.length * layer.fontSize * 0.64;
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d");
+  if (!context) return line.length * layer.fontSize * 0.64;
+  const style = layer.fontStyle && layer.fontStyle !== "normal" ? `${layer.fontStyle} ` : "";
+  context.font = `${style}${layer.fontWeight} ${layer.fontSize}px ${layer.fontFamily}`;
+  return Math.ceil(context.measureText(line).width);
+}
+
+function wrapText(text: string, maxChars: number): string[] {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return [""];
+  const lines: string[] = [];
+  let current = "";
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word;
+    if (next.length > maxChars && current) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = next;
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
 }
 
 function ImageLayerNode({ layer, accent }: { layer: ImageLayer; accent: string }) {
