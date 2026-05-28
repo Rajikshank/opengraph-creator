@@ -318,7 +318,7 @@ function ImagePlaceholderThumbnail({ layer, accent }: { layer: ImageLayer; accen
   const artworkWidth = Math.max(24, layer.width - padding * 2);
   const artworkHeight = Math.max(18, layer.height - padding * 2);
   const midY = artworkY + artworkHeight * 0.58;
-  const title = layer.kind === "screenshot" ? "Screenshot slot" : layer.kind === "logo" ? "Logo slot" : "Image slot";
+  const title = "Image slot";
 
   return (
     <Group clipX={0} clipY={0} clipWidth={layer.width} clipHeight={layer.height}>

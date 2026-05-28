@@ -104,7 +104,7 @@ function renderImagePlaceholderLayer(layer: ImageLayer, project: OgProject, comm
   const labelSize = Math.max(12, Math.min(18, layer.height * 0.09));
   const captionSize = Math.max(10, Math.min(13, layer.height * 0.065));
   const midY = artworkY + artworkHeight * 0.58;
-  const title = layer.kind === "screenshot" ? "Screenshot slot" : "Image slot";
+  const title = "Image slot";
   const mountainStroke = Math.max(2, Math.min(5, layer.height * 0.018));
 
   return `<g ${common}><g${filterAttr} clip-path="url(#${clipId})">` +
