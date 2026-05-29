@@ -8,6 +8,7 @@ import {
   getActivePage,
   getExportPath,
   getLayerEffectCapabilities,
+  getNoiseDisplayOpacity,
   getRenderableProject,
   getPlatformWarnings,
   isGlowEffectEnabled,
@@ -162,6 +163,12 @@ describe("GraphForge core", () => {
     });
     expect(getLayerEffectCapabilities("badge").lighting).toBe("disabled");
     expect(getLayerEffectCapabilities("group").glow).toBe("disabled");
+  });
+
+  it("normalizes noise opacity for canvas and platform preview parity", () => {
+    expect(getNoiseDisplayOpacity(0.06)).toBe(0.192);
+    expect(getNoiseDisplayOpacity(0.001)).toBe(0.05);
+    expect(getNoiseDisplayOpacity(0.5)).toBe(0.56);
   });
 
   it("rejects projects without editable layers", () => {

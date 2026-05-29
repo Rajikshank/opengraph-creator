@@ -268,7 +268,7 @@ export async function restartGraphForgeSession(
   const request: GraphForgeAgentRequest = {
     path: paths.agentRequestJson,
     prompt:
-      "Restart OG generation from the question gate. Ask the user fresh setup questions before creating a new document. Do not reuse the previous visual brief unless the user explicitly chooses to keep it.",
+      "Restart OG generation from the Question Gate while keeping this session alive. Ask fresh coverage, visual build style, asset permission, visual direction, reference, route, and export questions before creating a new document. Generate a fresh editable .ogdoc master; use generated image/SVG/HTML only as editable document assets, and keep headline/subtitle/badge/route text editable. Validate, relaunch Studio, then wait again with graphforge session wait --until next-action --timeout 0. Do not reuse the previous visual brief unless the user explicitly chooses to keep it.",
     documentPath: paths.documentFile,
     expectedOutput: paths.documentFile,
     status: "requested",
@@ -287,9 +287,9 @@ export async function restartGraphForgeSession(
     recoverInstructions: [
       `Read ${paths.sessionJson}.`,
       `Review restart archive ${archiveDir} only if the user asks to recover old work.`,
-      "Ask the GraphForge Question Gate setup questions again.",
-      `Generate a fresh editable Studio document package at ${paths.documentFile}.`,
-      "Validate, launch Studio, and wait for the next user decision."
+      "Ask the GraphForge Question Gate setup questions again; restart is not terminal.",
+      `Generate a fresh editable .ogdoc master at ${paths.documentFile}; keep text and key layout layers editable.`,
+      "Validate, launch Studio, and run graphforge session wait --until next-action --timeout 0 again."
     ]
   };
   await atomicWriteJson(paths.agentRequestJson, request);

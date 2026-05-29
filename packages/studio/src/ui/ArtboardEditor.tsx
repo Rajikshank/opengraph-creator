@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Konva from "konva";
 import { Ellipse, Group, Image as KonvaImage, Layer as KonvaLayer, Line, Rect, Stage, Text as KonvaText, Transformer } from "react-konva";
-import { isGlowEffectEnabled, normalizeGlowEffect, type ImageLayer, type LayerEffects, type NoiseEffect, type OgLayer, type ShapeLayer, type TextLayer } from "@graphforge/core";
+import { getNoiseDisplayOpacity, isGlowEffectEnabled, normalizeGlowEffect, type ImageLayer, type LayerEffects, type NoiseEffect, type OgLayer, type ShapeLayer, type TextLayer } from "@graphforge/core";
 import { useStudio } from "./studio-store";
 
 const canvasWidth = 1200;
@@ -23,6 +23,7 @@ export function ArtboardEditor({ sourceRailOpen = true, onOpenSourceRail }: Artb
   const [showSafeZone, setShowSafeZone] = useState(true);
   const [zoom, setZoom] = useState(1);
   const [workspaceSize, setWorkspaceSize] = useState({ width: 0, height: 0 });
+  const [editingTextLayerId, setEditingTextLayerId] = useState<string | null>(null);
   const workspaceRef = useRef<HTMLDivElement>(null);
   const transformerRef = useRef<Konva.Transformer>(null);
   const nodeRefs = useRef<Record<string, Konva.Node>>({});
@@ -59,6 +60,9 @@ export function ArtboardEditor({ sourceRailOpen = true, onOpenSourceRail }: Artb
   }, [selectedLayerId, visibleLayers]);
 
   if (!project) return null;
+  const editingTextLayer = editingTextLayerId
+    ? visibleLayers.find((layer): layer is TextLayer => layer.id === editingTextLayerId && isTextLayer(layer))
+    : undefined;
 
   const commitTransform = (layer: OgLayer, node: Konva.Node) => {
     const scaleX = node.scaleX();
@@ -128,6 +132,18 @@ export function ArtboardEditor({ sourceRailOpen = true, onOpenSourceRail }: Artb
                     draggable={!layer.locked}
                     onClick={() => setSelectedLayerId(layer.id)}
                     onTap={() => setSelectedLayerId(layer.id)}
+                    onDblClick={() => {
+                      if (isTextLayer(layer) && !layer.locked) {
+                        setSelectedLayerId(layer.id);
+                        setEditingTextLayerId(layer.id);
+                      }
+                    }}
+                    onDblTap={() => {
+                      if (isTextLayer(layer) && !layer.locked) {
+                        setSelectedLayerId(layer.id);
+                        setEditingTextLayerId(layer.id);
+                      }
+                    }}
                     onDragEnd={(event) => updateLayer(layer.id, { x: Math.round(event.target.x() - frame.offsetX), y: Math.round(event.target.y()) } as Partial<OgLayer>)}
                     onTransformEnd={(event) => commitTransform(layer, event.target)}
                   >
@@ -165,9 +181,66 @@ export function ArtboardEditor({ sourceRailOpen = true, onOpenSourceRail }: Artb
               />
             </KonvaLayer>
           </Stage>
+          {editingTextLayer ? (
+            <CanvasTextEditor
+              layer={editingTextLayer}
+              scale={scale}
+              onChange={(text) => updateLayer(editingTextLayer.id, { text } as Partial<OgLayer>)}
+              onClose={() => setEditingTextLayerId(null)}
+            />
+          ) : null}
         </div>
       </div>
     </section>
+  );
+}
+
+function CanvasTextEditor({ layer, scale, onChange, onClose }: { layer: TextLayer; scale: number; onChange: (text: string) => void; onClose: () => void }) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const metrics = getTextDisplayMetrics(layer);
+
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.focus();
+    textarea.select();
+  }, [layer.id]);
+
+  return (
+    <textarea
+      ref={textareaRef}
+      className="canvas-text-editor"
+      aria-label="Edit text layer on canvas"
+      value={layer.text}
+      onChange={(event) => onChange(event.currentTarget.value)}
+      onBlur={onClose}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          onClose();
+        }
+        if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+          event.preventDefault();
+          onClose();
+        }
+      }}
+      style={{
+        left: (layer.x + metrics.offsetX) * scale,
+        top: layer.y * scale,
+        width: Math.max(80, metrics.width * scale),
+        minHeight: Math.max(36, metrics.height * scale),
+        fontFamily: layer.fontFamily,
+        fontSize: layer.fontSize * scale,
+        fontWeight: layer.fontWeight,
+        fontStyle: layer.fontStyle ?? "normal",
+        lineHeight: layer.lineHeight,
+        letterSpacing: `${layer.letterSpacing ?? 0}px`,
+        color: layer.color,
+        textAlign: layer.align,
+        transform: `rotate(${layer.rotation}deg)`,
+        transformOrigin: "left top"
+      }}
+    />
   );
 }
 
@@ -175,7 +248,7 @@ function KonvaLayerNode({ layer, accent }: { layer: OgLayer; accent: string }) {
   if (isTextLayer(layer)) {
     const metrics = getTextDisplayMetrics(layer);
     return (
-      <EffectfulNode effects={layer.effects} accent={accent} cacheKey={`${layer.text}:${metrics.width}:${metrics.height}:${layer.fontSize}:${layer.color}`}>
+      <EffectfulNode effects={layer.effects} accent={accent} cacheKey={`${layer.text}:${metrics.width}:${metrics.height}:${layer.fontFamily}:${layer.fontWeight}:${layer.fontStyle}:${layer.fontSize}:${layer.color}:${layer.lineHeight}:${layer.letterSpacing}`}>
         <KonvaText
           width={metrics.width}
           height={metrics.height}
@@ -456,7 +529,7 @@ function NoiseOverlay({ x, y, width, height, radius, noise }: { x: number; y: nu
       height={height}
       cornerRadius={radius}
       listening={false}
-      opacity={Math.min(0.56, Math.max(0.05, noise.amount * 3.2))}
+      opacity={getNoiseDisplayOpacity(noise.amount)}
       globalCompositeOperation={getCompositeOperation(noise.blendMode)}
     />
   );

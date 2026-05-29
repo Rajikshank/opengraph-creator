@@ -15,7 +15,7 @@ export function SourceRail({ onClose }: { onClose?: () => void }) {
   const selectPageVariant = useStudio((state) => state.selectPageVariant);
   const [source, setSource] = useState(".graphforge/sessions/<id>/document.ogdoc");
   const [kind, setKind] = useState<SourceArtifactKind>("svg");
-  const [prompt, setPrompt] = useState("Revise the current OG document. Keep text and layout objects editable; use generated images only as asset layers unless pure-image mode was selected.");
+  const [prompt, setPrompt] = useState("Revise the current OG document. Keep text and layout objects editable; use generated images, SVG, or HTML only as document asset layers.");
 
   const attachArtifact = (artifact: GraphForgeSourceArtifact) => {
     if (artifact.inline && (artifact.kind === "svg" || artifact.kind === "image")) {

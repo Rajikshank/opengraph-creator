@@ -85,6 +85,11 @@ describe("reengineered studio UI contract", () => {
       "Glow color",
       "Texture",
       "Depth",
+      "Text editor",
+      "Space Grotesk",
+      "Text alignment",
+      "canvas-text-editor",
+      "Edit text layer on canvas",
       "OG Pages",
       "Apply style to all",
       "Export all pages",
@@ -114,6 +119,8 @@ describe("reengineered studio UI contract", () => {
     expect(stylesSource).toContain(".platform-switcher");
     expect(stylesSource).toContain(".platform-preview-body");
     expect(stylesSource).toContain(".studio-slider");
+    expect(stylesSource).toContain(".text-editor-panel");
+    expect(stylesSource).toContain(".canvas-text-editor");
     expect(stylesSource).toContain(".effect-control-section");
     expect(stylesSource).toContain(".color-swatch-field");
     expect(stylesSource).toContain(".toolbar-source-action");
@@ -192,6 +199,9 @@ describe("reengineered studio UI contract", () => {
     const sessionShell = readFileSync(join(uiDir, "SessionShell.tsx"), "utf8");
 
     expect(artboardSource).toContain("EffectfulNode");
+    expect(artboardSource).toContain("CanvasTextEditor");
+    expect(artboardSource).toContain("onDblClick");
+    expect(artboardSource).toContain("Edit text layer on canvas");
     expect(artboardSource).toContain("Konva.Filters.Blur");
     expect(artboardSource).toContain("node.cache");
     expect(artboardSource).not.toContain("effects.blur * 1.5");
@@ -260,6 +270,8 @@ describe("reengineered studio UI contract", () => {
     expect(artboardSource).toContain("measureCanvasText");
     expect(artboardSource).toContain('wrap="none"');
     expect(artboardSource).toContain("fontSize: Math.max(6, Math.round(layer.fontSize * scaleY))");
+    expect(artboardSource).toContain("fontFamily:");
+    expect(artboardSource).toContain("fontWeight:");
     expect(artboardSource).toContain("width={metrics.width}");
     expect(artboardSource).toContain("text={metrics.lines.join");
     expect(artboardSource).not.toContain("height={layer.height}\n          text={layer.text}");

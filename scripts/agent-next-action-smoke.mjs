@@ -44,13 +44,17 @@ if (!restartWaitOutput.includes('"status": "agent-requested"') || !restartWaitOu
 const request = await readFile(join(repo, ".graphforge", "sessions", "agent-loop", "agent-request.json"), "utf8");
 const publish = await readFile(join(repo, ".graphforge", "sessions", "publish-loop", "publish-request.json"), "utf8");
 const restart = await readFile(join(repo, ".graphforge", "sessions", "restart-loop", "agent-request.json"), "utf8");
+const restartRequest = JSON.parse(restart);
+if (!restartRequest.prompt.includes("Generate a fresh editable .ogdoc master") || !restartRequest.prompt.includes("wait again with graphforge session wait --until next-action --timeout 0")) {
+  throw new Error(`Restart request did not preserve the regenerate-and-wait loop:\n${restart}`);
+}
 
 console.log(JSON.stringify({
   ok: true,
   repo,
   agentRequest: JSON.parse(request).status,
   publishRequest: JSON.parse(publish).status,
-  restartRequest: JSON.parse(restart).status
+  restartRequest: restartRequest.status
 }, null, 2));
 
 function runCli(args) {

@@ -1,8 +1,27 @@
 import type { ImageLayer, OgLayer, ShapeLayer, TextLayer } from "@graphforge/core";
-import { Crosshair, Maximize2, Scan, SlidersHorizontal, Upload } from "lucide-react";
+import { AlignCenter, AlignLeft, AlignRight, Crosshair, Maximize2, Scan, SlidersHorizontal, Type, Upload } from "lucide-react";
 import { StudioSelect } from "../design-system/StudioSelect";
+import { StudioSegmentedControl } from "../design-system/StudioControls";
 import { StudioSlider } from "../design-system/StudioSlider";
 import { useStudio } from "./studio-store";
+
+const FONT_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: "Inter, Arial, sans-serif", label: "Inter" },
+  { value: "Manrope, Inter, Arial, sans-serif", label: "Manrope" },
+  { value: "Space Grotesk, Inter, Arial, sans-serif", label: "Space Grotesk" },
+  { value: "Sora, Inter, Arial, sans-serif", label: "Sora" },
+  { value: "IBM Plex Sans, Inter, Arial, sans-serif", label: "IBM Plex Sans" },
+  { value: "Georgia, serif", label: "Georgia" }
+];
+
+const FONT_WEIGHT_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: "400", label: "Regular" },
+  { value: "500", label: "Medium" },
+  { value: "600", label: "Semibold" },
+  { value: "700", label: "Bold" },
+  { value: "800", label: "Extra Bold" },
+  { value: "900", label: "Black" }
+];
 
 export function InspectorPanel() {
   const project = useStudio((state) => state.project);
@@ -58,12 +77,25 @@ export function InspectorPanel() {
 function TextControls({ layer }: { layer: TextLayer }) {
   const updateLayer = useStudio((state) => state.updateLayer);
   return (
-    <>
-      <label>Text<textarea value={layer.text} onChange={(event) => updateLayer(layer.id, { text: event.target.value } as Partial<OgLayer>)} /></label>
+    <section className="text-editor-panel" aria-label="Text editor">
+      <h3 className="mini-section-heading">
+        <Type size={14} />
+        <span>Text</span>
+      </h3>
+      <label className="text-copy-field">Copy<textarea value={layer.text} onChange={(event) => updateLayer(layer.id, { text: event.target.value } as Partial<OgLayer>)} /></label>
+      <StudioSelect
+        label="Font"
+        value={normalizeFontValue(layer.fontFamily)}
+        options={FONT_OPTIONS}
+        onValueChange={(value) => updateLayer(layer.id, { fontFamily: value } as Partial<OgLayer>)}
+      />
       <div className="grid-two">
-        <label>Font<input value={layer.fontFamily} onChange={(event) => updateLayer(layer.id, { fontFamily: event.target.value } as Partial<OgLayer>)} /></label>
-        <label>Size<input type="number" value={layer.fontSize} onChange={(event) => updateLayer(layer.id, { fontSize: Number(event.target.value) } as Partial<OgLayer>)} /></label>
-        <label>Weight<input type="number" step="100" value={layer.fontWeight} onChange={(event) => updateLayer(layer.id, { fontWeight: Number(event.target.value) } as Partial<OgLayer>)} /></label>
+        <StudioSelect
+          label="Weight"
+          value={String(layer.fontWeight)}
+          options={FONT_WEIGHT_OPTIONS}
+          onValueChange={(value) => updateLayer(layer.id, { fontWeight: Number(value) } as Partial<OgLayer>)}
+        />
         <StudioSelect
           label="Style"
           value={layer.fontStyle ?? "normal"}
@@ -73,14 +105,33 @@ function TextControls({ layer }: { layer: TextLayer }) {
           ]}
           onValueChange={(value) => updateLayer(layer.id, { fontStyle: value as TextLayer["fontStyle"] } as Partial<OgLayer>)}
         />
-        <label>Color<input type="color" value={layer.color} onChange={(event) => updateLayer(layer.id, { color: event.target.value } as Partial<OgLayer>)} /></label>
-        <label>Line height<input type="number" min="0.8" max="2" step="0.05" value={layer.lineHeight} onChange={(event) => updateLayer(layer.id, { lineHeight: Number(event.target.value) } as Partial<OgLayer>)} /></label>
-        <label>Letter spacing<input type="number" value={layer.letterSpacing ?? 0} onChange={(event) => updateLayer(layer.id, { letterSpacing: Number(event.target.value) } as Partial<OgLayer>)} /></label>
-        <label>Stroke<input type="color" value={layer.stroke ?? "#171918"} onChange={(event) => updateLayer(layer.id, { stroke: event.target.value } as Partial<OgLayer>)} /></label>
-        <label>Stroke width<input type="number" value={layer.strokeWidth ?? 0} onChange={(event) => updateLayer(layer.id, { strokeWidth: Number(event.target.value) } as Partial<OgLayer>)} /></label>
       </div>
-    </>
+      <StudioSegmentedControl
+        label="Text alignment"
+        value={layer.align}
+        segments={[
+          { value: "left", label: "Left", icon: <AlignLeft size={14} /> },
+          { value: "center", label: "Center", icon: <AlignCenter size={14} /> },
+          { value: "right", label: "Right", icon: <AlignRight size={14} /> }
+        ]}
+        onValueChange={(value) => updateLayer(layer.id, { align: value as TextLayer["align"] } as Partial<OgLayer>)}
+      />
+      <div className="text-slider-stack">
+        <StudioSlider label="Size" min={8} max={140} step={1} value={layer.fontSize} unit="px" onValueChange={(value) => updateLayer(layer.id, { fontSize: value } as Partial<OgLayer>)} />
+        <StudioSlider label="Line height" min={0.8} max={1.8} step={0.02} value={layer.lineHeight} onValueChange={(value) => updateLayer(layer.id, { lineHeight: value } as Partial<OgLayer>)} />
+        <StudioSlider label="Tracking" min={-2} max={10} step={0.25} value={layer.letterSpacing ?? 0} unit="px" onValueChange={(value) => updateLayer(layer.id, { letterSpacing: value } as Partial<OgLayer>)} />
+        <StudioSlider label="Stroke width" min={0} max={12} step={0.5} value={layer.strokeWidth ?? 0} unit="px" onValueChange={(value) => updateLayer(layer.id, { strokeWidth: value } as Partial<OgLayer>)} />
+      </div>
+      <div className="grid-two">
+        <label className="color-swatch-field">Fill<input type="color" value={layer.color} onChange={(event) => updateLayer(layer.id, { color: event.target.value } as Partial<OgLayer>)} /></label>
+        <label className="color-swatch-field">Stroke<input type="color" value={layer.stroke ?? "#171918"} onChange={(event) => updateLayer(layer.id, { stroke: event.target.value } as Partial<OgLayer>)} /></label>
+      </div>
+    </section>
   );
+}
+
+function normalizeFontValue(fontFamily: string): string {
+  return FONT_OPTIONS.some((option) => option.value === fontFamily) ? fontFamily : FONT_OPTIONS[0].value;
 }
 
 function ShapeControls({ layer }: { layer: ShapeLayer }) {

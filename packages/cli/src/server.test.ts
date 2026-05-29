@@ -227,8 +227,8 @@ describe("GraphForge studio local API", () => {
 
     expect(restartResponse.status).toBe(200);
     expect(body.session).toMatchObject({ id: "api-restart", status: "agent-requested", pendingAction: "agent-restart-from-question-gate" });
-    expect(body.request.prompt).toContain("Restart OG generation from the question gate");
-    expect(request.prompt).toContain("fresh setup questions");
+    expect(body.request.prompt).toContain("Restart OG generation from the Question Gate while keeping this session alive");
+    expect(request.prompt).toContain("Generate a fresh editable .ogdoc master");
   });
 
   it("opens a session from the repo bound to session open without a repo query parameter", async () => {

@@ -85,6 +85,10 @@ export interface LayerEffects {
   vignette?: number;
 }
 
+export function getNoiseDisplayOpacity(amount: number): number {
+  return Math.min(0.56, Math.max(0.05, amount * 3.2));
+}
+
 export function getLayerEffectCapabilities(kind: LayerKind): Record<EffectName, EffectCapability> {
   const supportedSurfaceEffects: Record<EffectName, EffectCapability> = {
     gradient: "supported",

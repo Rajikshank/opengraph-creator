@@ -1,4 +1,4 @@
-import { getRenderableProject, isGlowEffectEnabled, normalizeGlowEffect, type ImageLayer, type OgLayer, type OgProject } from "@graphforge/core";
+import { getNoiseDisplayOpacity, getRenderableProject, isGlowEffectEnabled, normalizeGlowEffect, type ImageLayer, type OgLayer, type OgProject } from "@graphforge/core";
 
 export function renderProjectToSvg(project: OgProject): string {
   const renderableProject = getRenderableProject(project);
@@ -264,7 +264,7 @@ function renderEffectOverlays(
   const mask = options.maskId ? ` mask="url(#${options.maskId})"` : "";
   if (layer.effects.noise && layer.effects.noise.amount > 0) {
     overlays.push(
-      `<rect x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" rx="${radius}" filter="url(#gf-noise-${id})" opacity="${clamp(layer.effects.noise.amount, 0, 1)}" style="mix-blend-mode:${layer.effects.noise.blendMode}"${mask}/>`
+      `<rect x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" rx="${radius}" filter="url(#gf-noise-${id})" opacity="${getNoiseDisplayOpacity(layer.effects.noise.amount)}" style="mix-blend-mode:${layer.effects.noise.blendMode}"${mask}/>`
     );
   }
   if (layer.effects.lighting && layer.effects.lighting.intensity > 0) {

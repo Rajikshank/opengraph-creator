@@ -215,8 +215,10 @@ describe("GraphForge durable sessions", () => {
       exports: [],
       publishRequests: []
     });
-    expect(restarted.agentRequests?.at(-1)?.prompt).toContain("Restart OG generation from the question gate");
-    expect(request.prompt).toContain("Ask the user fresh setup questions before creating a new document");
+    expect(restarted.agentRequests?.at(-1)?.prompt).toContain("Restart OG generation from the Question Gate while keeping this session alive");
+    expect(request.prompt).toContain("Generate a fresh editable .ogdoc master");
+    expect(request.prompt).toContain("wait again with graphforge session wait --until next-action --timeout 0");
+    expect(restarted.recoverInstructions.join(" ")).toContain("restart is not terminal");
     await expect(stat(join(archiveDir, "document.ogdoc"))).resolves.toMatchObject({ size: expect.any(Number) });
     await expect(stat(join(archiveDir, "export.json"))).resolves.toMatchObject({ size: expect.any(Number) });
     await expect(stat(join(archiveDir, "publish-request.json"))).resolves.toMatchObject({ size: expect.any(Number) });

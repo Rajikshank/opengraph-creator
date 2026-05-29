@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createDefaultProject, createMultiPageProject, type ImageLayer } from "@graphforge/core";
+import { createDefaultProject, createMultiPageProject, getNoiseDisplayOpacity, type ImageLayer } from "@graphforge/core";
 import { renderProjectToSvg } from "./index";
 
 describe("GraphForge renderer", () => {
@@ -128,6 +128,28 @@ describe("GraphForge renderer", () => {
     expect(svg).toContain("gf-lighting-background");
     expect(svg).toContain("gf-vignette-background");
     expect(svg).toContain("mix-blend-mode:soft-light");
+    expect(svg).toContain(`opacity="${getNoiseDisplayOpacity(0.05)}"`);
+  });
+
+  it("uses the same visible noise opacity as the Studio canvas for platform preview parity", () => {
+    const project = createDefaultProject({ name: "Noise Parity", strategy: "common" });
+    project.layers = project.layers.map((layer) =>
+      layer.id === "background" && "effects" in layer
+        ? {
+            ...layer,
+            effects: {
+              ...layer.effects,
+              noise: { amount: 0.06, blendMode: "overlay" }
+            }
+          }
+        : layer
+    );
+
+    const svg = renderProjectToSvg(project);
+
+    expect(svg).toContain('id="gf-noise-background"');
+    expect(svg).toContain(`opacity="${getNoiseDisplayOpacity(0.06)}"`);
+    expect(svg).not.toContain('opacity="0.06"');
   });
 
   it("exports per-layer glow settings instead of a single global glow filter", () => {
