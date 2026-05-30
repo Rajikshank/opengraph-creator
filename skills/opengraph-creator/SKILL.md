@@ -29,6 +29,8 @@ Always create an editable `.ogdoc` master document. The `.ogdoc` package is the 
 
 Do not bake headline, subtitle, badge, route, CTA, logo text, or important layout objects into one flat SVG/image. Generated images, SVG snippets, HTML captures, screenshots, logos, textures, and fantasy backgrounds may be used only as source assets inside the editable `.ogdoc`, with text and main composition layers editable above or around them.
 
+Never invent custom `ogcreator://` URLs for generated art, emblems, screenshots, SVGs, HTML captures, or images. Internal `ogcreator://` URLs are reserved for built-in Studio placeholders only. Generated assets must be actual editable layers, packaged `assets/*.svg` / `assets/*.png` / `assets/*.webp` files, or inline `data:image/svg+xml` / image data URLs that `opengraph-creator document validate` can verify.
+
 Pure-image fallback is allowed only when the user explicitly asks for a flat image after being warned that it reduces Studio editability. Do not offer pure image as a normal first-choice path.
 
 ## Mandatory State Machine
@@ -124,7 +126,7 @@ If the command returns `published`, read `publish-request.json`, verify the requ
    - If the user chooses page-specific or hybrid, generate one `.ogdoc` with internal page variants, not disconnected documents per route.
    - Every page variant must keep a shared visual system while changing route-specific text, badges, and image context.
    - If image generation tools are available and allowed, use them only for non-text asset layers unless the user explicitly requested pure-image fallback.
-8. If raw project JSON is generated first, pack it with `opengraph-creator document pack --project "<project.json>" --out ".opengraph-creator/sessions/<id>/document.ogdoc"`, then delete or ignore the temporary JSON. If SVG/image/HTML assets were generated, import or package them as assets inside the document.
+8. If raw project JSON is generated first, pack it with `opengraph-creator document pack --project "<project.json>" --out ".opengraph-creator/sessions/<id>/document.ogdoc"`, then delete or ignore the temporary JSON. If SVG/image/HTML assets were generated, import or package them as assets inside the document. Do not use invented `ogcreator://` asset URLs; use real `assets/*` entries, data URLs, or editable vector/shape layers.
 9. Validate with `opengraph-creator document validate --source ".opengraph-creator/sessions/<id>/document.ogdoc"`. If validation fails because important text is baked into one SVG/image, regenerate editable layers.
 10. Launch Studio with `opengraph-creator session launch --repo "<repo>" --id "<id>" --open true --waitReady true --json`. This is mandatory; do not wait for the user to ask again.
 11. Wait while the user edits with `opengraph-creator session wait --repo "<repo>" --id "<id>" --until next-action --timeout 0`.

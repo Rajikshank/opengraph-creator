@@ -79,6 +79,19 @@ Use HTML/CSS assets when layout precision is more important than illustration:
 
 Keep text that the user should edit as `.ogdoc` text layers, not only HTML text inside a flat capture.
 
+## Asset Serialization Rules
+
+Do not use invented `ogcreator://` URLs for generated emblems, SVG art, screenshots, HTML captures, or images. Custom `ogcreator://` names will fail validation or render as missing art.
+
+Use one of these instead:
+
+- editable OpenGraph Creator text, badge, shape, and background layers
+- packaged `assets/*.svg`, `assets/*.png`, `assets/*.webp`, or `assets/*.jpg` files inside the `.ogdoc`
+- inline `data:image/svg+xml` or image data URLs
+- built-in placeholders only when the user is expected to replace the asset manually
+
+If the design brief promises an emblem, illustration, texture, screenshot, or background, the `.ogdoc` must contain a real visible layer for it before Studio launch.
+
 ## Visual Taste Rules
 
 Design one clear visual thesis. The viewer should understand the page or product direction within one second.

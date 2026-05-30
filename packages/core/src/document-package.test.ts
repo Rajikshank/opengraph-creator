@@ -113,4 +113,38 @@ describe("Studio document package", () => {
       errors: ["Missing package asset: assets/logo.png."]
     });
   });
+
+  it("rejects invented internal asset URLs that are not built-in placeholders", () => {
+    const project = createDefaultProject({ name: "Invented Asset URL", strategy: "common" });
+    project.layers.push({
+      id: "fake-emblem",
+      kind: "image",
+      name: "Fake SVG Emblem",
+      x: 780,
+      y: 180,
+      width: 260,
+      height: 260,
+      rotation: 0,
+      opacity: 0.55,
+      locked: false,
+      hidden: false,
+      src: "ogcreator://svg-emblem",
+      fit: "contain",
+      borderRadius: 0,
+      effects: { shadow: false, glow: false, blur: 0 }
+    });
+
+    expect(validateStudioDocument(project, {})).toMatchObject({
+      ok: false,
+      errors: [
+        "Unknown internal asset URL on layer Fake SVG Emblem: ogcreator://svg-emblem. Use a packaged assets/* file, a data URL, or a built-in placeholder."
+      ]
+    });
+  });
+
+  it("allows built-in internal placeholders for manual Studio drafts", () => {
+    const project = createDefaultProject({ name: "Built-in Placeholders", strategy: "common" });
+
+    expect(validateStudioDocument(project, {})).toMatchObject({ ok: true, errors: [] });
+  });
 });

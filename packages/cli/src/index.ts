@@ -130,6 +130,7 @@ export interface SessionDocumentPreflightResult {
   repaired: boolean;
   projectId?: string;
   errors: string[];
+  warnings: string[];
   recovery: string[];
 }
 
@@ -869,6 +870,7 @@ export async function preflightSessionDocument(
 ): Promise<SessionDocumentPreflightResult> {
   const session = await readOpenGraphCreatorSession(repo, sessionId);
   const paths = getSessionPaths(repo, sessionId);
+  const warnings = await getSessionHealthWarnings(repo, sessionId, session);
   const recovery = [
     `Create a valid editable Studio document at ${paths.documentFile}.`,
     `Validate it with opengraph-creator document validate --source "${paths.documentFile}".`,
@@ -887,6 +889,7 @@ export async function preflightSessionDocument(
           repaired: false,
           projectId: document.project.projectId,
           errors: validation.errors,
+          warnings,
           recovery
         };
       }
@@ -897,6 +900,7 @@ export async function preflightSessionDocument(
         repaired: false,
         projectId: document.project.projectId,
         errors: [],
+        warnings,
         recovery: []
       };
     } catch (error) {
@@ -906,6 +910,7 @@ export async function preflightSessionDocument(
         documentPath: paths.documentFile,
         repaired: false,
         errors: [`Invalid Studio document package: ${error instanceof Error ? error.message : String(error)}`],
+        warnings,
         recovery
       };
     }
@@ -920,6 +925,7 @@ export async function preflightSessionDocument(
         documentPath: paths.documentFile,
         repaired: false,
         errors: [`Session document is missing: ${paths.documentFile}. Legacy project JSON exists at ${paths.projectJson}.`],
+        warnings,
         recovery: [packCommand, ...recovery]
       };
     }
@@ -931,7 +937,7 @@ export async function preflightSessionDocument(
         activeProjectId: project.projectId,
         activeDocumentPath: paths.documentFile,
         lastHeartbeatAt: new Date().toISOString()
-      });
+      }, repo);
       await appendSessionEvent(repo, sessionId, {
         type: "document.recovered",
         message: "Packed legacy project JSON into document.ogdoc before Studio launch",
@@ -944,6 +950,7 @@ export async function preflightSessionDocument(
         repaired: true,
         projectId: project.projectId,
         errors: [],
+        warnings,
         recovery: []
       };
     } catch (error) {
@@ -953,6 +960,7 @@ export async function preflightSessionDocument(
         documentPath: paths.documentFile,
         repaired: false,
         errors: [`Could not pack legacy project JSON into .ogdoc: ${error instanceof Error ? error.message : String(error)}`],
+        warnings,
         recovery: [packCommand, ...recovery]
       };
     }
@@ -964,8 +972,26 @@ export async function preflightSessionDocument(
     documentPath: paths.documentFile,
     repaired: false,
     errors: [`Session document is missing: ${paths.documentFile}.`],
+    warnings,
     recovery
   };
+}
+
+async function getSessionHealthWarnings(repo: string, sessionId: string, session: Awaited<ReturnType<typeof readOpenGraphCreatorSession>>): Promise<string[]> {
+  const paths = getSessionPaths(repo, sessionId);
+  const warnings: string[] = [];
+  try {
+    const exportState = JSON.parse(await readFile(paths.exportJson, "utf8")) as { exports?: unknown[] };
+    const hasExportFileEntries = Array.isArray(exportState.exports) && exportState.exports.length > 0;
+    if (hasExportFileEntries && session.exports.length === 0 && session.pendingAction === "agent-generate-og-source") {
+      warnings.push(
+        "Session has export.json entries but session.json is still waiting for generated OG source. Run export through OpenGraph Creator or repair the session before waiting/publishing."
+      );
+    }
+  } catch {
+    // Missing or malformed export state should not hide document validation results.
+  }
+  return warnings;
 }
 
 function formatSessionDocumentPreflightError(result: SessionDocumentPreflightResult): string {

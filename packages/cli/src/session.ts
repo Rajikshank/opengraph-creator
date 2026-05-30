@@ -131,11 +131,13 @@ export async function readOpenGraphCreatorSession(repo: string, sessionId: strin
   return session;
 }
 
-export async function writeOpenGraphCreatorSession(session: OpenGraphCreatorSession): Promise<OpenGraphCreatorSession> {
-  const paths = getSessionPaths(session.repo, session.id);
+export async function writeOpenGraphCreatorSession(session: OpenGraphCreatorSession, repoOverride?: string): Promise<OpenGraphCreatorSession> {
+  const repo = repoOverride ?? session.repo;
+  const sessionToWrite = repoOverride ? { ...session, repo: repoOverride } : session;
+  const paths = getSessionPaths(repo, session.id);
   await mkdir(paths.sessionDir, { recursive: true });
-  await atomicWriteJson(paths.sessionJson, session);
-  return session;
+  await atomicWriteJson(paths.sessionJson, sessionToWrite);
+  return sessionToWrite;
 }
 
 export async function appendSessionEvent(
@@ -168,7 +170,7 @@ export async function recordSessionExport(
     exports: [...session.exports, exportRecord],
     latest: exportRecord
   });
-  await writeOpenGraphCreatorSession(next);
+  await writeOpenGraphCreatorSession(next, repo);
   await appendSessionEvent(repo, sessionId, {
     type: "session.exported",
     message: `Exported ${exportRecord.path}`,
@@ -197,7 +199,7 @@ export async function createPublishRequest(input: CreatePublishRequestInput): Pr
     pendingAction: input.confirmed ? undefined : "agent-preview-metadata"
   };
   await atomicWriteJson(paths.publishRequestJson, request);
-  await writeOpenGraphCreatorSession(next);
+  await writeOpenGraphCreatorSession(next, input.repo);
   await appendSessionEvent(input.repo, input.sessionId, {
     type: input.confirmed ? "session.publish.confirmed" : "session.publish.preview",
     message: input.confirmed ? "Publish confirmed" : "Publish preview requested",
@@ -225,7 +227,7 @@ export async function createAgentRequest(input: CreateAgentRequestInput): Promis
     pendingAction: "agent-revise-document"
   };
   await atomicWriteJson(paths.agentRequestJson, request);
-  await writeOpenGraphCreatorSession(next);
+  await writeOpenGraphCreatorSession(next, input.repo);
   await appendSessionEvent(input.repo, input.sessionId, {
     type: "agent.requested",
     message: "Agent revision requested",
@@ -242,7 +244,7 @@ export async function cancelOpenGraphCreatorSession(repo: string, sessionId: str
     lastHeartbeatAt: new Date().toISOString(),
     pendingAction: undefined
   };
-  await writeOpenGraphCreatorSession(next);
+  await writeOpenGraphCreatorSession(next, repo);
   await appendSessionEvent(repo, sessionId, {
     type: "session.cancelled",
     message: reason
@@ -293,7 +295,7 @@ export async function restartOpenGraphCreatorSession(
     ]
   };
   await atomicWriteJson(paths.agentRequestJson, request);
-  await writeOpenGraphCreatorSession(next);
+  await writeOpenGraphCreatorSession(next, repo);
   await appendSessionEvent(repo, sessionId, {
     type: "session.restart.requested",
     message: reason,

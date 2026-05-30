@@ -1,6 +1,6 @@
 {
   "name": "opengraph-creator",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Agent-first local Open Graph Creator studio and CLI.",
   "license": "MIT",
   "repository": {
@@ -36,8 +36,8 @@
     "build": "tsc -p tsconfig.json --outDir dist --declaration --emitDeclarationOnly false && node scripts/copy-studio-dist.mjs && node scripts/copy-bundled-workspace-deps.mjs"
   },
   "dependencies": {
-    "@opengraph-creator/core": "0.1.3",
-    "@opengraph-creator/render": "0.1.3",
+    "@opengraph-creator/core": "0.1.4",
+    "@opengraph-creator/render": "0.1.4",
     "fflate": "^0.8.3",
     "sharp": "^0.33.5"
   },

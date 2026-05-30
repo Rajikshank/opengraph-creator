@@ -15,7 +15,7 @@ import {
   readReusableStudioLaunch,
   runCli
 } from "./index";
-import { createOpenGraphCreatorSession, getSessionPaths } from "./session";
+import { createOpenGraphCreatorSession, getSessionPaths, recordSessionExport } from "./session";
 
 describe("OpenGraphCreator CLI helpers", () => {
   it("creates a project from CLI-like args without touching app files", () => {
@@ -556,6 +556,60 @@ describe("OpenGraphCreator CLI helpers", () => {
     const request = await readFile(join(dir, ".opengraph-creator", "sessions", "cli-session", "publish-request.json"), "utf8");
     expect(request).toContain('"status": "preview"');
     await expect(readFile(join(dir, "app", "layout.tsx"), "utf8")).rejects.toThrow();
+  });
+
+  it("updates the active session file when stored repo path differs from the current repo path", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-cli-cross-agent-path-"));
+    const session = await createOpenGraphCreatorSession({
+      repo: dir,
+      id: "cross-agent-path",
+      agent: "opencode",
+      strategy: "pages"
+    });
+    const paths = getSessionPaths(dir, session.id);
+    await writeFile(paths.sessionJson, JSON.stringify({ ...session, repo: "/mnt/c/Users/kraji/Desktop/news-app" }, null, 2));
+
+    await recordSessionExport(dir, session.id, {
+      path: "public/og/home.png",
+      format: "png",
+      width: 1200,
+      height: 630,
+      page: "/",
+      fileSizeBytes: 1234,
+      createdAt: "2026-05-30T16:32:21.813Z"
+    });
+
+    const updated = JSON.parse(await readFile(paths.sessionJson, "utf8"));
+    expect(updated.repo).toBe(dir);
+    expect(updated.status).toBe("exported");
+    expect(updated.pendingAction).toBe("publish-preview");
+    expect(updated.exports).toHaveLength(1);
+  });
+
+  it("flags stale sessions when export artifacts exist but the session still waits for generation", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-cli-stale-export-state-"));
+    const session = await createOpenGraphCreatorSession({
+      repo: dir,
+      id: "stale-export-state",
+      agent: "opencode",
+      strategy: "pages",
+      project: createDefaultProject({ name: "Stale Export State", strategy: "pages" })
+    });
+    const paths = getSessionPaths(dir, session.id);
+    await writeFile(
+      paths.exportJson,
+      JSON.stringify({
+        exports: [{ path: "public/og/home.png", format: "png", width: 1200, height: 630, page: "/" }],
+        latest: { path: "public/og/home.png", format: "png", width: 1200, height: 630, page: "/" }
+      }, null, 2)
+    );
+
+    const result = await preflightSessionDocument(dir, session.id);
+
+    expect(result.ok).toBe(true);
+    expect(result.warnings).toContain(
+      "Session has export.json entries but session.json is still waiting for generated OG source. Run export through OpenGraph Creator or repair the session before waiting/publishing."
+    );
   });
 
   it("reuses an already-live Studio launch for the same repo session", async () => {

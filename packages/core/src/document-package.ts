@@ -43,6 +43,12 @@ export interface StudioDocumentValidationResult {
   warnings: string[];
 }
 
+const BUILT_IN_INTERNAL_ASSET_URLS = new Set([
+  "ogcreator://logo-placeholder",
+  "ogcreator://image-placeholder",
+  "ogcreator://html-source"
+]);
+
 export async function packStudioDocument(input: PackStudioDocumentInput): Promise<Uint8Array> {
   const assets = normalizePackageEntries(input.assets ?? {});
   const previews = normalizePackageEntries(input.previews ?? {});
@@ -136,10 +142,13 @@ export function validateStudioDocument(
     errors.push("Template documents cannot be a single full-canvas imported image/SVG layer.");
   }
 
-  for (const layer of project.layers) {
+  for (const layer of getAllProjectLayers(project)) {
     const assetPath = isImageLikeLayer(layer) ? layer.assetPath ?? (layer.src.startsWith("assets/") ? layer.src : undefined) : undefined;
     if (assetPath && !packageAssetPaths.has(assetPath)) {
       errors.push(`Missing package asset: ${assetPath}.`);
+    }
+    if (isImageLikeLayer(layer) && layer.src.startsWith("ogcreator://") && !BUILT_IN_INTERNAL_ASSET_URLS.has(layer.src)) {
+      errors.push(`Unknown internal asset URL on layer ${layer.name}: ${layer.src}. Use a packaged assets/* file, a data URL, or a built-in placeholder.`);
     }
     if (layer.width <= 0 || layer.height <= 0) {
       errors.push(`Layer ${layer.name} must have positive dimensions.`);
@@ -164,6 +173,13 @@ function validateProjectBasics(project: OgProject): string[] {
     }
   }
   return errors;
+}
+
+function getAllProjectLayers(project: OgProject): OgLayer[] {
+  return [
+    ...project.layers,
+    ...(project.pages ?? []).flatMap((page) => page.layers)
+  ];
 }
 
 export function createAssetPath(fileName: string, existing: Iterable<string> = []): string {
