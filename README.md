@@ -8,10 +8,10 @@ OpenGraph Creator does not call OpenAI, Anthropic, or image-generation providers
 
 ## Install
 
-Install the skill from GitHub:
+Install the skill from GitHub for all supported local agents:
 
 ```bash
-npx skills add -g Rajikshank/opengraph-creator --skill opengraph-creator -y
+npx skills add -g Rajikshank/opengraph-creator --skill opengraph-creator --agent "*" -y
 ```
 
 Check the Studio runtime:
@@ -109,6 +109,14 @@ Use the latest Studio runtime:
 npx -y opengraph-creator@latest doctor --json
 ```
 
+To target only one agent:
+
+```bash
+npx skills add -g Rajikshank/opengraph-creator --skill opengraph-creator --agent codex -y
+npx skills add -g Rajikshank/opengraph-creator --skill opengraph-creator --agent claude-code -y
+npx skills add -g Rajikshank/opengraph-creator --skill opengraph-creator --agent opencode -y
+```
+
 For local repair only, use:
 
 ```bash
@@ -177,7 +185,7 @@ npm publish -w opengraph-creator --access public
 5. Test a real install from a separate app:
 
 ```bash
-npx skills add -g Rajikshank/opengraph-creator --skill opengraph-creator -y
+npx skills add -g Rajikshank/opengraph-creator --skill opengraph-creator --agent "*" -y
 npx -y opengraph-creator@latest doctor --json
 ```
 

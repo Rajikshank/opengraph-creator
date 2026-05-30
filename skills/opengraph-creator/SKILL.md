@@ -11,7 +11,7 @@ Use the `opengraph-creator` CLI. If no local binary exists, run the public runti
 
 ## Distribution Contract
 
-This skill is installed through the skills ecosystem, for example `npx skills add -g Rajikshank/opengraph-creator --skill opengraph-creator -y`. Do not ask the user to separately run `opengraph-creator install-skill` in normal setup. The fallback installer exists only for local development or recovery when the skills CLI cannot be used or when an agent-specific install must be repaired.
+This skill is installed through the skills ecosystem, for example `npx skills add -g Rajikshank/opengraph-creator --skill opengraph-creator --agent "*" -y` for all supported local agents. Do not ask the user to separately run `opengraph-creator install-skill` in normal setup. The fallback installer exists only for local development or recovery when the skills CLI cannot be used or when an agent-specific install must be repaired.
 
 ## Update And Doctor
 
@@ -20,7 +20,7 @@ Use the standard skills updater for the skill and npm for the Studio runtime:
 1. Check the installed skill with `npx skills check`.
 2. Update installed skills with `npx skills update`.
 3. Check the Studio runtime with `opengraph-creator doctor --json` or `npx -y opengraph-creator@latest doctor --json`.
-4. If the doctor reports a missing agent skill, prefer reinstalling from the skill repo with `npx skills add -g Rajikshank/opengraph-creator --skill opengraph-creator -y`; use `opengraph-creator install-skill --agent codex|claude-code|opencode --scope global` only as a local repair fallback.
+4. If the doctor reports a missing agent skill, prefer reinstalling from the skill repo with `npx skills add -g Rajikshank/opengraph-creator --skill opengraph-creator --agent "*" -y`; use `opengraph-creator install-skill --agent codex|claude-code|opencode --scope global` only as a local repair fallback.
 5. Do not clone or build the OpenGraph Creator source repo for normal users.
 
 ## Non-Negotiable Editable Master Rule

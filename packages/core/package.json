@@ -1,6 +1,6 @@
 {
   "name": "@opengraph-creator/core",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Core schema and document package helpers for OpenGraph Creator.",
   "license": "MIT",
   "repository": {

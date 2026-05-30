@@ -9,7 +9,7 @@ OpenGraph Creator does not call OpenAI, Anthropic, or image-generation providers
 ## Install The Skill
 
 ```bash
-npx skills add -g Rajikshank/opengraph-creator --skill opengraph-creator -y
+npx skills add -g Rajikshank/opengraph-creator --skill opengraph-creator --agent "*" -y
 ```
 
 ## Run The Studio
