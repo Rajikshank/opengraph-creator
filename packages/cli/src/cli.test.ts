@@ -11,9 +11,11 @@ import {
   createMetadataPlan,
   exportProjectPages,
   exportProjectFile,
+  preflightSessionDocument,
   readReusableStudioLaunch,
   runCli
 } from "./index";
+import { createOpenGraphCreatorSession, getSessionPaths } from "./session";
 
 describe("OpenGraphCreator CLI helpers", () => {
   it("creates a project from CLI-like args without touching app files", () => {
@@ -785,6 +787,48 @@ describe("OpenGraphCreator CLI helpers", () => {
       src: "assets/generated.svg",
       assetPath: "assets/generated.svg"
     });
+  });
+
+  it("preflights session documents with actionable missing and invalid document errors", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-session-preflight-"));
+    await createOpenGraphCreatorSession({ repo: dir, id: "missing-doc", agent: "opencode" });
+    const paths = getSessionPaths(dir, "missing-doc");
+
+    const missing = await preflightSessionDocument(dir, "missing-doc");
+    expect(missing).toMatchObject({
+      ok: false,
+      documentPath: paths.documentFile,
+      errors: [expect.stringContaining("Session document is missing")]
+    });
+    expect(missing.recovery.join(" ")).toContain("opengraph-creator document validate");
+    await expect(runCli(["session", "launch", "--repo", dir, "--id", "missing-doc", "--open", "false"])).rejects.toThrow(
+      /Session document preflight failed/
+    );
+
+    await writeFile(paths.documentFile, "not an ogdoc", "utf8");
+    const invalid = await preflightSessionDocument(dir, "missing-doc");
+    expect(invalid).toMatchObject({
+      ok: false,
+      errors: [expect.stringContaining("Invalid Studio document package")]
+    });
+  });
+
+  it("repairs legacy project JSON into a session .ogdoc before launch", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-session-repair-"));
+    await createOpenGraphCreatorSession({ repo: dir, id: "legacy-project", agent: "opencode" });
+    const paths = getSessionPaths(dir, "legacy-project");
+    const project = createDefaultProject({ name: "Legacy Project", strategy: "common" });
+    await writeFile(paths.projectJson, JSON.stringify(project), "utf8");
+
+    const repaired = await preflightSessionDocument(dir, "legacy-project", { repairLegacyProject: true });
+    const document = await unpackStudioDocument(await readFile(paths.documentFile));
+
+    expect(repaired).toMatchObject({
+      ok: true,
+      repaired: true,
+      projectId: project.projectId
+    });
+    expect(document.project.name).toBe("Legacy Project");
   });
 
   it("writes an agent handoff plan without calling a provider", async () => {

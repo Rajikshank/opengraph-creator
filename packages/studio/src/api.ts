@@ -298,10 +298,10 @@ export async function readSessionViaApi(
 export async function readSessionBundleViaApi(
   fetcher: FetchLike = fetch,
   request: { id: string; repo?: string }
-): Promise<{ session: OpenGraphCreatorSession; project?: OgProject; documentPath?: string; documentRevision?: string }> {
+): Promise<{ session: OpenGraphCreatorSession; project?: OgProject; documentPath?: string; documentRevision?: string; documentError?: string }> {
   const params = new URLSearchParams({ id: request.id });
   if (request.repo) params.set("repo", request.repo);
-  return requestJson<{ session: OpenGraphCreatorSession; project?: OgProject; documentPath?: string; documentRevision?: string }>(fetcher, {
+  return requestJson<{ session: OpenGraphCreatorSession; project?: OgProject; documentPath?: string; documentRevision?: string; documentError?: string }>(fetcher, {
     url: `/api/session?${params.toString()}`,
     label: "Could not read session"
   });

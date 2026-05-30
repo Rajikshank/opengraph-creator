@@ -1,6 +1,6 @@
 {
   "name": "@opengraph-creator/render",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Renderer and raster export pipeline for OpenGraph Creator.",
   "license": "MIT",
   "repository": {
@@ -28,7 +28,7 @@
     "build": "tsc -p tsconfig.json --outDir dist --declaration --emitDeclarationOnly false"
   },
   "dependencies": {
-    "@opengraph-creator/core": "0.1.2",
+    "@opengraph-creator/core": "0.1.3",
     "sharp": "^0.33.5"
   }
 }

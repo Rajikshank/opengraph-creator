@@ -20,7 +20,7 @@ Use the standard skills updater for the skill and npm for the Studio runtime:
 1. Check the installed skill with `npx skills check`.
 2. Update installed skills with `npx skills update`.
 3. Check the Studio runtime with `opengraph-creator doctor --json` or `npx -y opengraph-creator@latest doctor --json`.
-4. If the doctor reports a missing agent skill, prefer reinstalling from the skill repo with `npx skills add -g Rajikshank/opengraph-creator --skill opengraph-creator --agent "*" -y`; use `opengraph-creator install-skill --agent codex|claude-code|opencode --scope global` only as a local repair fallback.
+4. If the doctor reports a missing agent skill, prefer reinstalling from the skill repo with `npx skills add -g Rajikshank/opengraph-creator --skill opengraph-creator --agent "*" -y`; use the fallback installer only for local repair, for example `opengraph-creator install-skill --agent opencode --scope global` or `opengraph-creator install-skill --agent all --scope global`.
 5. Do not clone or build the OpenGraph Creator source repo for normal users.
 
 ## Non-Negotiable Editable Master Rule
@@ -39,15 +39,26 @@ Follow this state machine exactly:
 
 Do not skip the Question Gate. Do not create a session, document, image, SVG, HTML, or launch Studio before the Question Gate is complete. Do not end the chat after launch. The agent task remains active while Studio is open.
 
-## Hard Stop: Question Gate
+## Hard Stop: Capability And Question Gate
 
-Inspect the repo first, then ask concise designer-style questions. Stop and wait for answers if any required answer is missing. A vague prompt such as "create me an electrifying OG image" is not permission to generate immediately.
+Inspect the repo and current agent capabilities first, then ask concise designer-style questions. Stop and wait for answers if any required answer is missing. A vague prompt such as "create me an electrifying OG image" is not permission to generate immediately.
+
+Before asking visual questions, record the capability gate in the generation brief:
+
+- `imageGeneration`: whether this agent has a real image-generation tool available in the current environment.
+- `webReferenceResearch`: whether this agent can browse/search for reference direction.
+- `svgGeneration`: whether this agent can write SVG/vector assets.
+- `htmlGeneration`: whether this agent can write HTML/CSS source assets.
+- `repoAssetAccess`: whether this agent can inspect local screenshots, logos, copy, metadata, and product UI.
+- `studioRuntime`: whether this agent can run `opengraph-creator` and launch Studio.
+
+Do not assume image generation exists. If `imageGeneration` is unavailable, say that this agent cannot create new raster art in the current environment and ask whether SVG/vector, HTML/CSS, screenshot, logo, icon, and repo-asset composition is acceptable. If `imageGeneration` is available and the user permits it, use it only for non-text assets while keeping main text editable. If capability is unknown, ask one short capability question before offering image-heavy directions.
 
 Ask these decisions before generation:
 
 1. Coverage: one common OG for the whole app, page-specific OG images, or a hybrid?
-2. Visual build style: mostly editable vector/layout layers, generated image assets under editable layers, SVG/HTML source assets inside `.ogdoc`, or a flexible mix?
-3. Asset permission: may the agent use available image-generation tools for non-text assets such as backgrounds, fantasy art, product scenes, textures, lighting, or illustrations?
+2. Visual build style: mostly editable vector/layout layers, SVG/HTML source assets inside `.ogdoc`, repo screenshot/brand-asset composition, generated image assets under editable layers if available, or a flexible mix?
+3. Asset permission: if this agent has image-generation tools, may it use them for non-text assets such as backgrounds, product scenes, textures, lighting, or illustrations? If it does not, ask whether a non-image-generation path is acceptable instead of implying generated art is available.
 4. Visual direction: what mood should it carry, such as premium, electrifying, cinematic, minimal, playful, futuristic, luxury, brutalist, or another direction?
 5. Reference inputs: any reference image, screenshot, logo, brand asset, color direction, or example OG style to follow?
 6. Pages/routes: which routes should be covered, or should the agent infer the important pages from the app?
@@ -55,7 +66,7 @@ Ask these decisions before generation:
 
 Only treat the Question Gate as complete when the user explicitly answers these decisions in the current task or directly relevant earlier answers. If the user says "you decide", choose conservatively from repo evidence and record that decision in the brief.
 
-Write the resolved answers into `.opengraph-creator/sessions/<id>/generation-brief.json` after session creation. The brief must record `coverage`, `visualBuildStyle`, `assetPermission`, `visualDirection`, `references`, `targetPages`, `exportFormats`, `referenceResearch`, `styleThesis`, `compositionPlan`, `assetPlan`, `negativeDirection`, `routeVariantRules`, and any assumptions.
+Write the resolved answers into `.opengraph-creator/sessions/<id>/generation-brief.json` after session creation. The brief must record `capabilities`, `coverage`, `visualBuildStyle`, `assetPermission`, `visualDirection`, `references`, `targetPages`, `exportFormats`, `referenceResearch`, `styleThesis`, `compositionPlan`, `assetPlan`, `negativeDirection`, `routeVariantRules`, and any assumptions.
 
 ## Reference Research And Style Thesis
 
@@ -73,6 +84,7 @@ Then write a Style Thesis:
 - Define the asset plan: which generated images, SVG/HTML captures, screenshots, textures, lighting, or references become editable asset layers.
 - Define the negative direction: what the design must avoid, including generic AI dashboard styling, flat baked text, copied references, unreadable detail, or disconnected variants.
 - Define routeVariantRules for common, page-specific, or hybrid output.
+- Read `references/visual-generation-guide.md` before generating SVG, HTML, image, screenshot, or mixed visual assets. Use the guide to choose the best path for the current capabilities; no-image agents should produce strong SVG/HTML/repo-asset compositions rather than weak fake image art.
 
 ### Required First Response Example
 
@@ -104,9 +116,9 @@ If the command returns `published`, read `publish-request.json`, verify the requ
 
 1. Run `opengraph-creator doctor --json`. If `opengraph-creator` is not available, use `npx -y opengraph-creator@latest doctor --json`, or run `node scripts/ensure-opengraph-creator.mjs` for local install guidance. Do not clone or build the Studio repo for normal user runtime.
 2. Inspect the repo for framework, routes, metadata files, brand assets, screenshots, copy, product tone, and existing OG metadata.
-3. Complete the Hard Stop Question Gate and wait for missing answers.
+3. Complete the Hard Stop Capability And Question Gate and wait for missing answers.
 4. Run the Reference Research and Style Thesis phases. Record `referenceResearch`, `styleThesis`, `compositionPlan`, `assetPlan`, `negativeDirection`, and `routeVariantRules`.
-5. Create a durable session with `opengraph-creator session create --repo "<repo>" --agent codex|claude|opencode --strategy common|pages|hybrid --mode template`.
+5. Create a durable session with the current agent name, for example `opengraph-creator session create --repo "<repo>" --agent opencode --strategy hybrid --mode template`. Use `--agent codex` in Codex, `--agent claude` in Claude Code, and `--agent opencode` in OpenCode.
 6. Run `opengraph-creator brief --repo "<repo>" --name "<app>" --strategy common|pages|hybrid --mode template --out ".opengraph-creator/brief.json"` and write the resolved question gate answers plus research/thesis fields into `.opengraph-creator/sessions/<id>/generation-brief.json`.
 7. Generate the OG source as an editable `.ogdoc` package. The document must contain separate layers for text, badges, shapes, screenshots, logos, generated art, SVG/HTML source assets, references, and backgrounds.
    - If the user chooses page-specific or hybrid, generate one `.ogdoc` with internal page variants, not disconnected documents per route.
@@ -131,6 +143,7 @@ If the command returns `published`, read `publish-request.json`, verify the requ
 - Read `references/agent-handoff.md` when a revision or generation handoff is needed.
 - Read `references/agent-waiting.md` before deciding whether to keep waiting, recover, restart, revise, or resume publishing.
 - Read `references/project-schema.md` before producing editable OpenGraph Creator JSON.
+- Read `references/visual-generation-guide.md` before generating SVG, HTML, image, screenshot, or mixed visual assets.
 - Read `references/metadata-apply.md` before applying metadata.
 
 ## Safety

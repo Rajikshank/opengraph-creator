@@ -39,7 +39,8 @@ import {
   createPublishRequest,
   getSessionPaths,
   readOpenGraphCreatorSession,
-  recordSessionExport
+  recordSessionExport,
+  writeOpenGraphCreatorSession
 } from "./session.js";
 import { installCodexSkill } from "./skill-install.js";
 
@@ -120,6 +121,16 @@ export interface DoctorReportInput {
 export interface DoctorReport {
   ready: boolean;
   checks: DoctorCheck[];
+}
+
+export interface SessionDocumentPreflightResult {
+  ok: boolean;
+  sessionId: string;
+  documentPath: string;
+  repaired: boolean;
+  projectId?: string;
+  errors: string[];
+  recovery: string[];
 }
 
 type SessionWaitTarget = "default" | "exported" | "publish-preview" | "publish-confirmed" | "agent-request" | "next-action" | "terminal";
@@ -321,6 +332,13 @@ export async function runCli(argv: string[]): Promise<void> {
       console.log(JSON.stringify(await readOpenGraphCreatorSession(repo, args.id), null, 2));
       return;
     }
+    if (subcommand === "validate") {
+      if (!args.id) throw new Error("--id is required");
+      const result = await preflightSessionDocument(repo, args.id, { repairLegacyProject: args.repair === "true" });
+      console.log(JSON.stringify(result, null, 2));
+      if (!result.ok) process.exitCode = 1;
+      return;
+    }
     if (subcommand === "cancel") {
       if (!args.id) throw new Error("--id is required");
       console.log(JSON.stringify(await cancelOpenGraphCreatorSession(repo, args.id, args.reason ?? "User cancelled the Studio handoff"), null, 2));
@@ -355,7 +373,8 @@ export async function runCli(argv: string[]): Promise<void> {
     }
     if (subcommand === "launch") {
       if (!args.id) throw new Error("--id is required");
-      await readOpenGraphCreatorSession(repo, args.id);
+      const preflight = await preflightSessionDocument(repo, args.id, { repairLegacyProject: true });
+      if (!preflight.ok) throw new Error(formatSessionDocumentPreflightError(preflight));
       if (args.forceNew !== "true") {
         const reusable = await readReusableStudioLaunch(repo, args.id);
         if (reusable) {
@@ -405,7 +424,7 @@ export async function runCli(argv: string[]): Promise<void> {
       console.log(args.json === "true" ? JSON.stringify(launch, null, 2) : `OpenGraph Creator Studio launched at ${url}`);
       return;
     }
-    throw new Error("Unknown session command. Use create, open, launch, wait, cancel, or status.");
+    throw new Error("Unknown session command. Use create, open, launch, wait, cancel, validate, or status.");
   }
 
   if (command === "document") {
@@ -843,6 +862,121 @@ async function applyPageImageMetadataPlans(input: {
   };
 }
 
+export async function preflightSessionDocument(
+  repo: string,
+  sessionId: string,
+  options: { repairLegacyProject?: boolean } = {}
+): Promise<SessionDocumentPreflightResult> {
+  const session = await readOpenGraphCreatorSession(repo, sessionId);
+  const paths = getSessionPaths(repo, sessionId);
+  const recovery = [
+    `Create a valid editable Studio document at ${paths.documentFile}.`,
+    `Validate it with opengraph-creator document validate --source "${paths.documentFile}".`,
+    `Then relaunch with opengraph-creator session launch --repo "${repo}" --id "${sessionId}" --open true --waitReady true --json.`
+  ];
+
+  if (await pathExists(paths.documentFile)) {
+    try {
+      const document = await readStudioDocumentFile(paths.documentFile);
+      const validation = validateStudioDocument(document.project, document.assets);
+      if (!validation.ok) {
+        return {
+          ok: false,
+          sessionId,
+          documentPath: paths.documentFile,
+          repaired: false,
+          projectId: document.project.projectId,
+          errors: validation.errors,
+          recovery
+        };
+      }
+      return {
+        ok: true,
+        sessionId,
+        documentPath: paths.documentFile,
+        repaired: false,
+        projectId: document.project.projectId,
+        errors: [],
+        recovery: []
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        sessionId,
+        documentPath: paths.documentFile,
+        repaired: false,
+        errors: [`Invalid Studio document package: ${error instanceof Error ? error.message : String(error)}`],
+        recovery
+      };
+    }
+  }
+
+  if (await pathExists(paths.projectJson)) {
+    const packCommand = `opengraph-creator document pack --project "${paths.projectJson}" --out "${paths.documentFile}"`;
+    if (!options.repairLegacyProject) {
+      return {
+        ok: false,
+        sessionId,
+        documentPath: paths.documentFile,
+        repaired: false,
+        errors: [`Session document is missing: ${paths.documentFile}. Legacy project JSON exists at ${paths.projectJson}.`],
+        recovery: [packCommand, ...recovery]
+      };
+    }
+    try {
+      const project = JSON.parse(await readFile(paths.projectJson, "utf8")) as OgProject;
+      await writeStudioDocumentFile(paths.documentFile, project);
+      await writeOpenGraphCreatorSession({
+        ...session,
+        activeProjectId: project.projectId,
+        activeDocumentPath: paths.documentFile,
+        lastHeartbeatAt: new Date().toISOString()
+      });
+      await appendSessionEvent(repo, sessionId, {
+        type: "document.recovered",
+        message: "Packed legacy project JSON into document.ogdoc before Studio launch",
+        data: { projectJson: paths.projectJson, documentPath: paths.documentFile }
+      });
+      return {
+        ok: true,
+        sessionId,
+        documentPath: paths.documentFile,
+        repaired: true,
+        projectId: project.projectId,
+        errors: [],
+        recovery: []
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        sessionId,
+        documentPath: paths.documentFile,
+        repaired: false,
+        errors: [`Could not pack legacy project JSON into .ogdoc: ${error instanceof Error ? error.message : String(error)}`],
+        recovery: [packCommand, ...recovery]
+      };
+    }
+  }
+
+  return {
+    ok: false,
+    sessionId,
+    documentPath: paths.documentFile,
+    repaired: false,
+    errors: [`Session document is missing: ${paths.documentFile}.`],
+    recovery
+  };
+}
+
+function formatSessionDocumentPreflightError(result: SessionDocumentPreflightResult): string {
+  return [
+    "Session document preflight failed.",
+    ...result.errors.map((error) => `- ${error}`),
+    "Recovery:",
+    ...result.recovery.map((step) => `- ${step}`)
+  ].join("\n");
+}
+
 function parseSessionWaitTarget(value?: string): SessionWaitTarget {
   if (!value) return "default";
   if (
@@ -963,13 +1097,14 @@ Commands:
   opengraph-creator scan --repo <path>
   opengraph-creator brief --repo <path> --name <app> --strategy common|pages|hybrid --mode template|pure-image --reference image.png --out .opengraph-creator/brief.json
   opengraph-creator import --source generated.svg --kind svg --name <app> --out project.og.json
-  opengraph-creator install-skill --agent codex|claude-code|opencode|all --scope global|project  (fallback only; prefer npx skills add)
+  opengraph-creator install-skill --agent codex --scope global|project  (fallback only; valid agents: codex, claude-code, opencode, all)
   opengraph-creator document new --name <app> --out project.ogdoc
   opengraph-creator document pack --project project.og.json --out project.ogdoc
   opengraph-creator document validate --source project.ogdoc
-  opengraph-creator session create --repo <path> --agent codex|claude|opencode --strategy common|pages|hybrid
+  opengraph-creator session create --repo <path> --agent codex --strategy common|pages|hybrid
   opengraph-creator session open --repo <path> --id <session-id>
   opengraph-creator session launch --repo <path> --id <session-id> --open true --waitReady true --json
+  opengraph-creator session validate --repo <path> --id <session-id> --repair true
   opengraph-creator session wait --id <session-id> --until exported|publish-preview|publish-confirmed|agent-request|next-action|terminal --timeout 30000|0|never
   opengraph-creator session cancel --repo <path> --id <session-id> --reason "User cancelled"
   opengraph-creator session status --id <session-id>

@@ -194,6 +194,7 @@ async function handleRequest(input: {
     let project: OgProject | undefined;
     let documentPath: string | undefined;
     let documentRevision: string | undefined;
+    let documentError: string | undefined;
     try {
       const { getSessionPaths } = await import("./session.js");
       const paths = getSessionPaths(repo, id);
@@ -201,7 +202,8 @@ async function handleRequest(input: {
       const document = await readStudioDocumentFile(paths.documentFile);
       project = hydrateProjectAssetSources(document.project, document.assets);
       documentRevision = await readFileRevision(paths.documentFile);
-    } catch {
+    } catch (error) {
+      documentError = error instanceof Error ? error.message : String(error);
       try {
         const { getSessionPaths } = await import("./session.js");
         const projectJson = getSessionPaths(repo, id).projectJson;
@@ -215,7 +217,8 @@ async function handleRequest(input: {
       session: await readOpenGraphCreatorSession(repo, id),
       project,
       documentPath,
-      documentRevision
+      documentRevision,
+      documentError
     });
     return;
   }

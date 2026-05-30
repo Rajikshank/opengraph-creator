@@ -77,10 +77,12 @@ export function SessionShell() {
       readSessionBundleViaApi(fetch, { id: sessionId, repo })
         .then((bundle) => {
           if (!loadSessionBundle(bundle)) {
-            setRecoveryMessage("Session opened, but no editable .ogdoc document exists yet.");
+            setRecoveryMessage(bundle.documentError ?? "Session opened, but no editable .ogdoc document exists yet.");
             notifyStudioWarning(
               "Session document missing",
-              "Ask the coding agent to regenerate the editable .ogdoc document, then reopen this session."
+              bundle.documentError
+                ? `Ask the coding agent to repair the editable .ogdoc document: ${bundle.documentError}`
+                : "Ask the coding agent to regenerate the editable .ogdoc document, then reopen this session."
             );
           }
         })
