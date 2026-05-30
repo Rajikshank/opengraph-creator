@@ -1,6 +1,13 @@
 {
   "name": "@opengraph-creator/core",
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "Core schema and document package helpers for OpenGraph Creator.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Rajikshank/opengraph-creator.git",
+    "directory": "packages/core"
+  },
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

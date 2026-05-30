@@ -36,6 +36,6 @@ process.stdout.write(
     "opengraph-creator doctor --json",
     "",
     "Normal users should install the skill with:",
-    "npx skills add -g <owner>/opengraph-creator --skill opengraph-creator -y"
+    "npx skills add -g Rajikshank/opengraph-creator --skill opengraph-creator -y"
   ].join("\n")
 );

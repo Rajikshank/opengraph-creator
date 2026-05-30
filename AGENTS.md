@@ -37,7 +37,7 @@ When working on OpenGraph Creator itself:
 
 ## Publishing And Distribution
 
-- Public skill distribution is through the skills ecosystem: `npx skills add -g <owner>/opengraph-creator --skill opengraph-creator -y`.
+- Public skill distribution is through the skills ecosystem: `npx skills add -g Rajikshank/opengraph-creator --skill opengraph-creator -y`.
 - Runtime distribution is through the npm package `opengraph-creator`, invoked by the skill as `npx -y opengraph-creator@latest`.
 - Do not make normal users clone or build this repository to run Studio.
 - The fallback `opengraph-creator install-skill --agent codex|claude-code|opencode --scope global` command is for local development or recovery only; it is not the primary public setup path.

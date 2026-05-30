@@ -1,6 +1,26 @@
 {
   "name": "opengraph-creator",
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "Agent-first local Open Graph Creator studio and CLI.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Rajikshank/opengraph-creator.git",
+    "directory": "packages/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/Rajikshank/opengraph-creator/issues"
+  },
+  "homepage": "https://github.com/Rajikshank/opengraph-creator#readme",
+  "keywords": [
+    "open-graph",
+    "og-image",
+    "social-preview",
+    "codex",
+    "claude-code",
+    "opencode",
+    "agent-skill"
+  ],
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -16,8 +36,8 @@
     "build": "tsc -p tsconfig.json --outDir dist --declaration --emitDeclarationOnly false && node scripts/copy-studio-dist.mjs && node scripts/copy-bundled-workspace-deps.mjs"
   },
   "dependencies": {
-    "@opengraph-creator/core": "0.0.0",
-    "@opengraph-creator/render": "0.0.0",
+    "@opengraph-creator/core": "0.1.0",
+    "@opengraph-creator/render": "0.1.0",
     "fflate": "^0.8.3",
     "sharp": "^0.33.5"
   },

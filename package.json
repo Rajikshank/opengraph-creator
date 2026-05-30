@@ -1,9 +1,10 @@
 {
   "name": "opengraph-creator-monorepo",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "description": "Agent-first local Open Graph Creator studio with editable layered projects.",
+  "license": "MIT",
   "scripts": {
     "clean": "node scripts/clean.mjs",
     "build": "npm run clean && npm run build -w @opengraph-creator/core && npm run build -w @opengraph-creator/render && npm run build -w @opengraph-creator/studio && npm run build -w opengraph-creator",
