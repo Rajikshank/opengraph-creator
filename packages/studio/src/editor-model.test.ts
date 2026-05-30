@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createDefaultProject, createMultiPageProject } from "@graphforge/core";
+import { createDefaultProject, createMultiPageProject } from "@opengraph-creator/core";
 import {
   addLayer,
   createEditorSession,
@@ -177,7 +177,7 @@ describe("editor model", () => {
       id: "image-layer",
       kind: "image",
       name: "Image Layer",
-      src: "graphforge://image-placeholder",
+      src: "ogcreator://image-placeholder",
       fit: "contain"
     });
     expect(withBadge.project.layers.at(-1)).toMatchObject({
@@ -226,7 +226,7 @@ describe("editor model", () => {
     const withSource = attachSourceArtifact(session, {
       kind: "svg",
       origin: "codex",
-      path: ".graphforge/generated/og.svg",
+      path: ".opengraph-creator/generated/og.svg",
       createdAt: "2026-05-26T00:00:00.000Z"
     });
     const withEffects = setLayerEffects(withSource, "background", {

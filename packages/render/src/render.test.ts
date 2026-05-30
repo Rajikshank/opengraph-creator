@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { createDefaultProject, createMultiPageProject, getNoiseDisplayOpacity, type ImageLayer } from "@graphforge/core";
+import { createDefaultProject, createMultiPageProject, getNoiseDisplayOpacity, type ImageLayer } from "@opengraph-creator/core";
 import { renderProjectToSvg } from "./index";
 
-describe("GraphForge renderer", () => {
+describe("OpenGraphCreator renderer", () => {
   it("renders layer JSON into a nonblank 1200x630 SVG with editable text content", () => {
     const project = createDefaultProject({
       name: "Renderer",
@@ -67,7 +67,7 @@ describe("GraphForge renderer", () => {
     expect(svg).not.toContain(">Home<");
   });
 
-  it("renders internal image placeholders as real SVG artwork instead of leaking graphforge URLs", () => {
+  it("renders internal image placeholders as real SVG artwork instead of leaking OpenGraphCreator URLs", () => {
     const project = createDefaultProject({ name: "Placeholder Render", strategy: "common" });
     const imageLayer: ImageLayer = {
       id: "image-slot",
@@ -81,7 +81,7 @@ describe("GraphForge renderer", () => {
       opacity: 1,
       locked: false,
       hidden: false,
-      src: "graphforge://image-placeholder",
+      src: "ogcreator://image-placeholder",
       fit: "cover",
       borderRadius: 18,
       effects: { shadow: false, glow: false, blur: 0 }
@@ -94,7 +94,7 @@ describe("GraphForge renderer", () => {
     expect(svg).toContain("Replace with source art");
     expect(svg).toContain('id="gf-image-clip-image-slot"');
     expect(svg).toContain('id="gf-image-mask-image-slot"');
-    expect(svg).not.toContain("href=\"graphforge://image-placeholder\"");
+    expect(svg).not.toContain("href=\"ogcreator://image-placeholder\"");
   });
 
   it("renders rich layer effects as SVG defs and overlays", () => {

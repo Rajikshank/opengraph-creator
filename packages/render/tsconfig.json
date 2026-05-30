@@ -7,7 +7,7 @@
     "outDir": "dist",
     "rootDir": "src",
     "paths": {
-      "@graphforge/core": ["packages/core/dist/index.d.ts"]
+      "@opengraph-creator/core": ["packages/core/dist/index.d.ts"]
     },
     "declaration": true
   },

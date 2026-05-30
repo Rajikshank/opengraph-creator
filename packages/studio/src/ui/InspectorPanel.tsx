@@ -1,18 +1,11 @@
-import type { ImageLayer, OgLayer, ShapeLayer, TextLayer } from "@graphforge/core";
+import type { ImageLayer, OgLayer, ShapeLayer, TextLayer } from "@opengraph-creator/core";
 import { AlignCenter, AlignLeft, AlignRight, Crosshair, Maximize2, Scan, SlidersHorizontal, Type, Upload } from "lucide-react";
+import { useEffect, useMemo } from "react";
 import { StudioSelect } from "../design-system/StudioSelect";
 import { StudioSegmentedControl } from "../design-system/StudioControls";
 import { StudioSlider } from "../design-system/StudioSlider";
+import { getStudioFontOptions, getStudioFontValue, preloadFontFamily } from "../typography/fonts";
 import { useStudio } from "./studio-store";
-
-const FONT_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: "Inter, Arial, sans-serif", label: "Inter" },
-  { value: "Manrope, Inter, Arial, sans-serif", label: "Manrope" },
-  { value: "Space Grotesk, Inter, Arial, sans-serif", label: "Space Grotesk" },
-  { value: "Sora, Inter, Arial, sans-serif", label: "Sora" },
-  { value: "IBM Plex Sans, Inter, Arial, sans-serif", label: "IBM Plex Sans" },
-  { value: "Georgia, serif", label: "Georgia" }
-];
 
 const FONT_WEIGHT_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "400", label: "Regular" },
@@ -76,6 +69,21 @@ export function InspectorPanel() {
 
 function TextControls({ layer }: { layer: TextLayer }) {
   const updateLayer = useStudio((state) => state.updateLayer);
+  const fontOptions = useMemo(
+    () =>
+      getStudioFontOptions(layer.fontFamily).map((option) => ({
+        value: option.value,
+        label: option.label,
+        previewStyle: { fontFamily: option.previewFamily }
+      })),
+    [layer.fontFamily]
+  );
+  const fontValue = getStudioFontValue(layer.fontFamily);
+
+  useEffect(() => {
+    void preloadFontFamily(fontValue);
+  }, [fontValue]);
+
   return (
     <section className="text-editor-panel" aria-label="Text editor">
       <h3 className="mini-section-heading">
@@ -85,9 +93,12 @@ function TextControls({ layer }: { layer: TextLayer }) {
       <label className="text-copy-field">Copy<textarea value={layer.text} onChange={(event) => updateLayer(layer.id, { text: event.target.value } as Partial<OgLayer>)} /></label>
       <StudioSelect
         label="Font"
-        value={normalizeFontValue(layer.fontFamily)}
-        options={FONT_OPTIONS}
-        onValueChange={(value) => updateLayer(layer.id, { fontFamily: value } as Partial<OgLayer>)}
+        value={fontValue}
+        options={fontOptions}
+        onValueChange={(value) => {
+          updateLayer(layer.id, { fontFamily: value } as Partial<OgLayer>);
+          void preloadFontFamily(value);
+        }}
       />
       <div className="grid-two">
         <StudioSelect
@@ -123,15 +134,29 @@ function TextControls({ layer }: { layer: TextLayer }) {
         <StudioSlider label="Stroke width" min={0} max={12} step={0.5} value={layer.strokeWidth ?? 0} unit="px" onValueChange={(value) => updateLayer(layer.id, { strokeWidth: value } as Partial<OgLayer>)} />
       </div>
       <div className="grid-two">
-        <label className="color-swatch-field">Fill<input type="color" value={layer.color} onChange={(event) => updateLayer(layer.id, { color: event.target.value } as Partial<OgLayer>)} /></label>
-        <label className="color-swatch-field">Stroke<input type="color" value={layer.stroke ?? "#171918"} onChange={(event) => updateLayer(layer.id, { stroke: event.target.value } as Partial<OgLayer>)} /></label>
+        <ColorTextField label="Fill" value={layer.color} onChange={(value) => updateLayer(layer.id, { color: value } as Partial<OgLayer>)} />
+        <ColorTextField label="Stroke" value={layer.stroke ?? "#171918"} onChange={(value) => updateLayer(layer.id, { stroke: value } as Partial<OgLayer>)} />
       </div>
     </section>
   );
 }
 
-function normalizeFontValue(fontFamily: string): string {
-  return FONT_OPTIONS.some((option) => option.value === fontFamily) ? fontFamily : FONT_OPTIONS[0].value;
+function ColorTextField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  const colorValue = isHexColor(value) ? value : "#171918";
+  return (
+    <label className="studio-field color-text-control">
+      <span>{label}</span>
+      <span className="color-swatch-field precise-color-field">
+        <span className="color-swatch-preview" style={{ background: colorValue }} aria-hidden="true" />
+        <input type="color" aria-label={`${label} color picker`} value={colorValue} onChange={(event) => onChange(event.target.value)} />
+        <input type="text" aria-label={label} value={value} spellCheck={false} onChange={(event) => onChange(event.target.value)} />
+      </span>
+    </label>
+  );
+}
+
+function isHexColor(value: string): boolean {
+  return /^#[0-9a-fA-F]{6}$/.test(value);
 }
 
 function ShapeControls({ layer }: { layer: ShapeLayer }) {

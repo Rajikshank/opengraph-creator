@@ -1,6 +1,6 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 import { join, relative } from "node:path";
-import { detectFramework, type Framework } from "@graphforge/core";
+import { detectFramework, type Framework } from "@opengraph-creator/core";
 
 export interface RepoScanResult {
   root: string;

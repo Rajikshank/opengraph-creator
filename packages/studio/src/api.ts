@@ -2,16 +2,16 @@ import type {
   AgentKind,
   ExportFormat,
   Framework,
-  GraphForgeAgentRequest,
+  OpenGraphCreatorAgentRequest,
   GenerationMode,
   GenerationStrategy,
-  GraphForgePublishRequest,
-  GraphForgeSession,
-  GraphForgeSessionEvent,
+  OpenGraphCreatorPublishRequest,
+  OpenGraphCreatorSession,
+  OpenGraphCreatorSessionEvent,
   OgProject,
   SourceArtifactKind,
   SourceArtifactOrigin
-} from "@graphforge/core";
+} from "@opengraph-creator/core";
 
 export interface ProjectSummary {
   projectId: string;
@@ -45,6 +45,15 @@ export interface ExportProjectResponse {
   width?: number;
   height?: number;
   fileSizeBytes?: number;
+  qualityReport?: {
+    mimeType: string;
+    width: number;
+    height: number;
+    fileSizeBytes: number;
+    nonblank: boolean;
+    socialReady: boolean;
+    warnings: string[];
+  };
 }
 
 export interface AgentHandoffRequest {
@@ -153,8 +162,8 @@ export interface RestartSessionRequestInput {
 }
 
 export interface RestartSessionResponse {
-  session: GraphForgeSession;
-  request: GraphForgeAgentRequest;
+  session: OpenGraphCreatorSession;
+  request: OpenGraphCreatorAgentRequest;
 }
 
 type FetchLike = typeof fetch;
@@ -256,8 +265,8 @@ export async function importSourceViaApi(
 export async function createSessionViaApi(
   fetcher: FetchLike = fetch,
   request: CreateSessionRequest
-): Promise<GraphForgeSession> {
-  const body = await requestJson<{ session: GraphForgeSession }>(fetcher, {
+): Promise<OpenGraphCreatorSession> {
+  const body = await requestJson<{ session: OpenGraphCreatorSession }>(fetcher, {
     url: "/api/session",
     label: "Could not create session",
     init: {
@@ -282,17 +291,17 @@ export async function readConnectRecipeViaApi(fetcher: FetchLike = fetch, repo?:
 export async function readSessionViaApi(
   fetcher: FetchLike = fetch,
   request: { id: string; repo?: string }
-): Promise<GraphForgeSession> {
+): Promise<OpenGraphCreatorSession> {
   return (await readSessionBundleViaApi(fetcher, request)).session;
 }
 
 export async function readSessionBundleViaApi(
   fetcher: FetchLike = fetch,
   request: { id: string; repo?: string }
-): Promise<{ session: GraphForgeSession; project?: OgProject; documentPath?: string }> {
+): Promise<{ session: OpenGraphCreatorSession; project?: OgProject; documentPath?: string; documentRevision?: string }> {
   const params = new URLSearchParams({ id: request.id });
   if (request.repo) params.set("repo", request.repo);
-  return requestJson<{ session: GraphForgeSession; project?: OgProject; documentPath?: string }>(fetcher, {
+  return requestJson<{ session: OpenGraphCreatorSession; project?: OgProject; documentPath?: string; documentRevision?: string }>(fetcher, {
     url: `/api/session?${params.toString()}`,
     label: "Could not read session"
   });
@@ -331,8 +340,8 @@ export async function uploadSessionAssetViaApi(
 export async function appendSessionEventViaApi(
   fetcher: FetchLike = fetch,
   request: SessionEventRequest
-): Promise<GraphForgeSessionEvent> {
-  const body = await requestJson<{ event: GraphForgeSessionEvent }>(fetcher, {
+): Promise<OpenGraphCreatorSessionEvent> {
+  const body = await requestJson<{ event: OpenGraphCreatorSessionEvent }>(fetcher, {
     url: "/api/session/event",
     label: "Could not append session event",
     init: {
@@ -347,8 +356,8 @@ export async function appendSessionEventViaApi(
 export async function recordSessionExportViaApi(
   fetcher: FetchLike = fetch,
   request: SessionExportRequest
-): Promise<GraphForgeSession> {
-  const body = await requestJson<{ session: GraphForgeSession }>(fetcher, {
+): Promise<OpenGraphCreatorSession> {
+  const body = await requestJson<{ session: OpenGraphCreatorSession }>(fetcher, {
     url: "/api/session/export",
     label: "Could not record session export",
     init: {
@@ -363,8 +372,8 @@ export async function recordSessionExportViaApi(
 export async function createPublishRequestViaApi(
   fetcher: FetchLike = fetch,
   request: PublishRequestInput
-): Promise<GraphForgePublishRequest> {
-  const body = await requestJson<{ request: GraphForgePublishRequest }>(fetcher, {
+): Promise<OpenGraphCreatorPublishRequest> {
+  const body = await requestJson<{ request: OpenGraphCreatorPublishRequest }>(fetcher, {
     url: "/api/session/publish-request",
     label: "Could not create publish request",
     init: {
@@ -379,8 +388,8 @@ export async function createPublishRequestViaApi(
 export async function createSessionAgentRequestViaApi(
   fetcher: FetchLike = fetch,
   request: AgentRevisionRequestInput
-): Promise<GraphForgeAgentRequest> {
-  const body = await requestJson<{ request: GraphForgeAgentRequest }>(fetcher, {
+): Promise<OpenGraphCreatorAgentRequest> {
+  const body = await requestJson<{ request: OpenGraphCreatorAgentRequest }>(fetcher, {
     url: "/api/session/agent-request",
     label: "Could not create agent revision request",
     init: {
@@ -418,7 +427,7 @@ async function requestJson<T>(
       const response = await fetcher(input.url, input.init);
       if (response.ok) {
         if (!isJsonResponse(response)) {
-          throw new Error(`${input.label}: Local Studio API returned HTML instead of JSON. Launch Studio through graphforge studio, not the frontend-only dev server.`);
+          throw new Error(`${input.label}: Local Studio API returned HTML instead of JSON. Launch Studio through opengraph-creator studio, not the frontend-only dev server.`);
         }
         return (await response.json()) as T;
       }

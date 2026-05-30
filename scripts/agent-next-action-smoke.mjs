@@ -3,11 +3,11 @@ import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createAgentRequest, getSessionPaths, restartGraphForgeSession } from "../packages/cli/dist/session.js";
+import { createAgentRequest, getSessionPaths, restartOpenGraphCreatorSession } from "../packages/cli/dist/session.js";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const cli = join(root, "packages", "cli", "dist", "index.js");
-const repo = await mkdtemp(join(tmpdir(), "graphforge-next-action-"));
+const repo = await mkdtemp(join(tmpdir(), "OpenGraphCreator-next-action-"));
 
 await runCli(["session", "create", "--repo", repo, "--id", "agent-loop", "--agent", "codex", "--strategy", "hybrid"]);
 const agentWait = waitCli(["session", "wait", "--repo", repo, "--id", "agent-loop", "--until", "next-action", "--timeout", "30000"]);
@@ -35,17 +35,17 @@ if (!publishWaitOutput.includes('"status": "published"') || !publishWaitOutput.i
 await runCli(["session", "create", "--repo", repo, "--id", "restart-loop", "--agent", "opencode", "--strategy", "hybrid"]);
 const restartWait = waitCli(["session", "wait", "--repo", repo, "--id", "restart-loop", "--until", "next-action", "--timeout", "30000"]);
 await delay(250);
-await restartGraphForgeSession(repo, "restart-loop", "Smoke test restart");
+await restartOpenGraphCreatorSession(repo, "restart-loop", "Smoke test restart");
 const restartWaitOutput = await restartWait;
 if (!restartWaitOutput.includes('"status": "agent-requested"') || !restartWaitOutput.includes('"pendingAction": "agent-restart-from-question-gate"')) {
   throw new Error(`Expected restart next action, got:\n${restartWaitOutput}`);
 }
 
-const request = await readFile(join(repo, ".graphforge", "sessions", "agent-loop", "agent-request.json"), "utf8");
-const publish = await readFile(join(repo, ".graphforge", "sessions", "publish-loop", "publish-request.json"), "utf8");
-const restart = await readFile(join(repo, ".graphforge", "sessions", "restart-loop", "agent-request.json"), "utf8");
+const request = await readFile(join(repo, ".opengraph-creator", "sessions", "agent-loop", "agent-request.json"), "utf8");
+const publish = await readFile(join(repo, ".opengraph-creator", "sessions", "publish-loop", "publish-request.json"), "utf8");
+const restart = await readFile(join(repo, ".opengraph-creator", "sessions", "restart-loop", "agent-request.json"), "utf8");
 const restartRequest = JSON.parse(restart);
-if (!restartRequest.prompt.includes("Generate a fresh editable .ogdoc master") || !restartRequest.prompt.includes("wait again with graphforge session wait --until next-action --timeout 0")) {
+if (!restartRequest.prompt.includes("Generate a fresh editable .ogdoc master") || !restartRequest.prompt.includes("wait again with opengraph-creator session wait --until next-action --timeout 0")) {
   throw new Error(`Restart request did not preserve the regenerate-and-wait loop:\n${restart}`);
 }
 
@@ -77,7 +77,7 @@ function waitCli(args) {
     child.on("error", reject);
     child.on("close", (code) => {
       if (code === 0) resolveOutput(output);
-      else reject(new Error(output || `graphforge exited with ${code}`));
+      else reject(new Error(output || `opengraph-creator exited with ${code}`));
     });
   });
 }

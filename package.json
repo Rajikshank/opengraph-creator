@@ -1,12 +1,12 @@
 {
-  "name": "graphforge-og-studio",
+  "name": "opengraph-creator-monorepo",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Codex-first local Open Graph image studio with editable layered projects.",
+  "description": "Agent-first local Open Graph Creator studio with editable layered projects.",
   "scripts": {
     "clean": "node scripts/clean.mjs",
-    "build": "npm run clean && npm run build -w @graphforge/core && npm run build -w @graphforge/render && npm run build -w @graphforge/studio && npm run build -w @graphforge/cli",
+    "build": "npm run clean && npm run build -w @opengraph-creator/core && npm run build -w @opengraph-creator/render && npm run build -w @opengraph-creator/studio && npm run build -w opengraph-creator",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint .",
@@ -15,8 +15,8 @@
     "smoke:package": "node scripts/package-install-smoke.mjs",
     "smoke:agent-handoff": "node scripts/agent-handoff-smoke.mjs",
     "smoke:agent-next-action": "node scripts/agent-next-action-smoke.mjs",
-    "dev:studio": "npm run dev -w @graphforge/studio",
-    "graphforge": "tsx packages/cli/src/index.ts"
+    "dev:studio": "npm run dev -w @opengraph-creator/studio",
+    "opengraph-creator": "tsx packages/cli/src/index.ts"
   },
   "workspaces": [
     "packages/*"

@@ -1,4 +1,14 @@
-import { getNoiseDisplayOpacity, getRenderableProject, isGlowEffectEnabled, normalizeGlowEffect, type ImageLayer, type OgLayer, type OgProject } from "@graphforge/core";
+import {
+  getNoiseDisplayOpacity,
+  getRenderableProject,
+  getSvgShadowVisual,
+  hasComposedLayerEffect,
+  isGlowEffectEnabled,
+  normalizeGlowEffect,
+  type ImageLayer,
+  type OgLayer,
+  type OgProject
+} from "@opengraph-creator/core";
 
 export function renderProjectToSvg(project: OgProject): string {
   const renderableProject = getRenderableProject(project);
@@ -52,11 +62,11 @@ function renderLayer(layer: OgLayer, project: OgProject): string {
     return `<text x="${x}" y="${layer.y + layer.fontSize}" width="${layer.width}" font-family="${escapeXml(layer.fontFamily)}" font-size="${layer.fontSize}" font-weight="${layer.fontWeight}"${fontStyle}${letterSpacing} fill="${layer.color}"${stroke}${strokeWidth} text-anchor="${anchor}" ${commonWithFilter}>${tspans}</text>`;
   }
 
-  if (layer.kind === "logo" && layer.src === "graphforge://logo-placeholder") {
+  if (layer.kind === "logo" && layer.src === "ogcreator://logo-placeholder") {
     return `<g ${commonWithFilter}><rect x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" rx="${layer.borderRadius}" fill="${project.brand.text}"/><path d="M ${layer.x + 20} ${layer.y + 42} L ${layer.x + 32} ${layer.y + 21} L ${layer.x + 44} ${layer.y + 42} Z" fill="${project.brand.surface}"/></g>`;
   }
 
-  if ((layer.kind === "image" || layer.kind === "screenshot") && layer.src === "graphforge://image-placeholder") {
+  if ((layer.kind === "image" || layer.kind === "screenshot") && layer.src === "ogcreator://image-placeholder") {
     return renderImagePlaceholderLayer(layer, project, common, filter);
   }
 
@@ -208,8 +218,9 @@ function renderComposedFilter(layer: OgLayer, project: OgProject): string {
   const nodes: string[] = [];
 
   if (effects.shadow) {
+    const shadow = getSvgShadowVisual(effects, project.brand.accent);
     nodes.push(
-      `<feDropShadow in="SourceAlpha" dx="0" dy="18" stdDeviation="18" flood-color="#020617" flood-opacity="0.34" result="gf-shadow-${id}"/>`
+      `<feDropShadow in="SourceAlpha" dx="${shadow.dx}" dy="${shadow.dy}" stdDeviation="${shadow.stdDeviation}" flood-color="${escapeXml(shadow.color)}" flood-opacity="${shadow.floodOpacity}" result="gf-shadow-${id}"/>`
     );
   }
 
@@ -242,7 +253,7 @@ function renderImageDefs(layer: OgLayer): string[] {
   if (!(layer.kind === "image" || layer.kind === "logo" || layer.kind === "screenshot")) return [];
   const preserveAspectRatio = getImagePreserveAspectRatio(layer.fit, layer.focalPoint);
   const crop = layer.crop;
-  const image = layer.src.startsWith("graphforge://")
+  const image = layer.src.startsWith("ogcreator://")
     ? `<rect x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" rx="${layer.borderRadius}" fill="#ffffff"/>`
     : crop
     ? getCroppedImageGeometry(layer, preserveAspectRatio)
@@ -312,7 +323,7 @@ function getFilter(layer: OgLayer): string {
 }
 
 function hasComposedFilter(layer: OgLayer): boolean {
-  return "effects" in layer && (layer.effects.shadow || isGlowEffectEnabled(layer.effects.glow) || layer.effects.blur > 0);
+  return "effects" in layer && hasComposedLayerEffect(layer.effects);
 }
 
 function wrapText(text: string, maxChars: number): string[] {

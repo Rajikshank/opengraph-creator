@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -9,7 +9,9 @@ const uiSource = [
   "App.tsx",
   "SessionShell.tsx",
   "ProjectPicker.tsx",
+  "ConnectAgentPanel.tsx",
   "SourceRail.tsx",
+  "PageVariantNavigator.tsx",
   "ArtboardEditor.tsx",
   "ToolPalette.tsx",
   "LayerTree.tsx",
@@ -41,6 +43,8 @@ const designSystemDir = join(process.cwd(), "packages", "studio", "src", "design
 const designSystemSource = ["StudioSlider.tsx", "StudioControls.tsx", "StudioSelect.tsx", "StudioSwitch.tsx", "StudioTooltip.tsx", "StudioField.tsx"]
   .map((file) => readFileSync(join(designSystemDir, file), "utf8"))
   .join("\n");
+const scrollAreaPath = join(designSystemDir, "StudioScrollArea.tsx");
+const typographySource = readFileSync(join(process.cwd(), "packages", "studio", "src", "typography", "fonts.ts"), "utf8");
 
 describe("reengineered studio UI contract", () => {
   it("uses modular session-first Studio surfaces instead of a static demo", () => {
@@ -62,7 +66,7 @@ describe("reengineered studio UI contract", () => {
       "No active agent session",
       "Open .ogdoc",
       "sessionId = params.get",
-      "Ask agent to wire exports",
+      "Publish with agent",
       "Safe zone",
       "Gradient",
       "Noise",
@@ -74,7 +78,7 @@ describe("reengineered studio UI contract", () => {
       "Image file",
       "Add badge",
       "Add background",
-      "Framework",
+      "Framework detection is handled by the coding agent",
       "Line height",
       "Shadow",
       "Blend mode",
@@ -86,20 +90,29 @@ describe("reengineered studio UI contract", () => {
       "Texture",
       "Depth",
       "Text editor",
-      "Space Grotesk",
+      "Segoe UI",
+      "Bahnschrift",
       "Text alignment",
       "canvas-text-editor",
       "Edit text layer on canvas",
       "OG Pages",
+      "PageVariantNavigator",
+      "page-variant-navigator",
+      "page-variant-route",
+      "page-variant-status",
       "Apply style to all",
       "Export all pages",
       "Restart OG generation",
       "Restart from question gate",
       "restartSessionViaApi",
       "restart-confirm-dialog"
-    ].forEach((token) => expect(uiSource).toContain(token));
+    ].forEach((token) => expect(`${uiSource}\n${typographySource}`).toContain(token));
 
     expect(uiSource).toContain("readSessionBundleViaApi");
+    expect(uiSource).toContain("documentRevision");
+    expect(uiSource).toContain("Agent update ready");
+    expect(uiSource).toContain("Load update");
+    expect(uiSource).toContain("Keep current");
     expect(appSource).not.toContain("const initialProject");
     expect(appSource).not.toContain("Untitled OG");
     expect(appSource).not.toContain("Demo project loaded");
@@ -123,8 +136,9 @@ describe("reengineered studio UI contract", () => {
     expect(stylesSource).toContain(".canvas-text-editor");
     expect(stylesSource).toContain(".effect-control-section");
     expect(stylesSource).toContain(".color-swatch-field");
+    expect(stylesSource).toContain(".precise-color-field");
     expect(stylesSource).toContain(".toolbar-source-action");
-    expect(stylesSource).toContain(".graphforge-toast");
+    expect(stylesSource).toContain(".opengraph-creator-toast");
     expect(stylesSource).toContain(".platform-frame-shell");
     expect(stylesSource).toContain(".platform-preview-image-slot");
     expect(stylesSource).toContain(".platform-tab-list");
@@ -134,10 +148,19 @@ describe("reengineered studio UI contract", () => {
     expect(stylesSource).toContain("oklch");
     expect(stylesSource).toContain("scrollbar-color");
     expect(stylesSource).toContain(".source-dropzone");
+    expect(stylesSource).toContain(".page-variant-navigator");
+    expect(stylesSource).toContain(".page-variant-card");
+    expect(stylesSource).toContain(".agent-update-banner");
     expect(stylesSource).toContain(".safe-zone-overlay");
     expect(stylesSource).toContain(".effect-control-grid");
     expect(stylesSource).toContain(".arrange-tools");
     expect(stylesSource).toContain(".perspective-grid");
+    expect(existsSync(scrollAreaPath)).toBe(true);
+    expect(stylesSource).toContain(".studio-scroll-area");
+    expect(stylesSource).toContain(".studio-scroll-thumb");
+    expect(stylesSource).toContain(".source-rail-body");
+    expect(stylesSource).toContain(".agent-connect-card");
+    expect(stylesSource).toContain("font-family: var(--font-ui)");
     expect(stylesSource).not.toContain("radial-gradient");
     expect(stylesSource).not.toContain("linear-gradient(180deg");
     expect(stylesSource).not.toContain("#070a12");
@@ -161,13 +184,18 @@ describe("reengineered studio UI contract", () => {
     expect(designSystemSource).toContain("StudioSlider");
     expect(designSystemSource).toContain("StudioSegmentedControl");
     expect(designSystemSource).toContain("StudioSelect");
+    expect(designSystemSource).toContain("previewStyle");
     expect(designSystemSource).toContain("StudioSwitch");
     expect(designSystemSource).toContain("StudioTooltip");
     expect(designSystemSource).toContain("slider-progress");
     expect(uiSource).toContain("StudioSlider");
     expect(uiSource).toContain("StudioSegmentedControl");
+    expect(uiSource).toContain("StudioScrollArea");
+    expect(uiSource).toContain("ConnectAgentPanel");
+    expect(uiSource).toContain("repoPath");
+    expect(uiSource).toContain("Get connection recipe");
     expect(uiSource).toContain("toolbar-source-action");
-    expect(uiSource).toContain("graphforge-toast");
+    expect(uiSource).toContain("opengraph-creator-toast");
     expect(`${uiSource}\n${previewFrameSource}`).toContain("platform-tab-list");
     expect(uiSource).toContain("platform-preview-viewport");
     expect(uiSource).toContain('value: "canvas"');
@@ -179,6 +207,20 @@ describe("reengineered studio UI contract", () => {
     expect(uiSource).toContain('addLayer("line")');
     expect(uiSource).not.toContain('type="range"');
     expect(uiSource).not.toContain("source-peek");
+  });
+
+  it("keeps page variants as non-overlapping explicit rows with reachable revision controls", () => {
+    const pageNavigator = readFileSync(join(uiDir, "PageVariantNavigator.tsx"), "utf8");
+    const sourceRail = readFileSync(join(uiDir, "SourceRail.tsx"), "utf8");
+
+    expect(pageNavigator).toContain("page-variant-title-row");
+    expect(pageNavigator).toContain("page-variant-meta-row");
+    expect(pageNavigator).toContain("StudioScrollArea");
+    expect(sourceRail).toContain("source-rail-body");
+    expect(sourceRail).toContain("agent-revision-card");
+    expect(stylesSource).toContain("grid-template-columns: 28px minmax(0, 1fr) auto");
+    expect(stylesSource).toContain(".page-variant-list > div");
+    expect(stylesSource).not.toContain(".page-variant-status {\n  grid-column: 2;");
   });
 
   it("keeps studio slider keyboard and pointer edits wired into React state", () => {
@@ -199,11 +241,16 @@ describe("reengineered studio UI contract", () => {
     const sessionShell = readFileSync(join(uiDir, "SessionShell.tsx"), "utf8");
 
     expect(artboardSource).toContain("EffectfulNode");
+    expect(artboardSource).toContain("getCanvasEffectCachePadding");
+    expect(artboardSource).toContain("getCanvasShadowVisual");
+    expect(artboardSource).toContain("hasComposedLayerEffect");
     expect(artboardSource).toContain("CanvasTextEditor");
     expect(artboardSource).toContain("onDblClick");
     expect(artboardSource).toContain("Edit text layer on canvas");
     expect(artboardSource).toContain("Konva.Filters.Blur");
     expect(artboardSource).toContain("node.cache");
+    expect(artboardSource).toContain("pixelRatio: window.devicePixelRatio");
+    expect(artboardSource).toContain("width: bounds.width + padding * 2");
     expect(artboardSource).not.toContain("effects.blur * 1.5");
     expect(layerTreeSource).not.toContain("Add text layer");
     expect(layerTreeSource).not.toContain("Add image layer");
@@ -264,10 +311,17 @@ describe("reengineered studio UI contract", () => {
 
   it("lets Konva measure text height and scales text by font size during vertical transforms", () => {
     const artboardSource = readFileSync(join(uiDir, "ArtboardEditor.tsx"), "utf8");
+    const inspectorSource = readFileSync(join(uiDir, "InspectorPanel.tsx"), "utf8");
 
     expect(artboardSource).toContain("getTextDisplayMetrics(layer)");
     expect(artboardSource).toContain("estimateTextLineWidth");
     expect(artboardSource).toContain("measureCanvasText");
+    expect(artboardSource).toContain("preloadFontFamily");
+    expect(artboardSource).toContain("fontReadyVersion");
+    expect(artboardSource).toContain("letterSpacing: `${(layer.letterSpacing ?? 0) * scale}px`");
+    expect(inspectorSource).toContain("getStudioFontOptions");
+    expect(inspectorSource).toContain("ColorTextField");
+    expect(inspectorSource).not.toContain("normalizeFontValue");
     expect(artboardSource).toContain('wrap="none"');
     expect(artboardSource).toContain("fontSize: Math.max(6, Math.round(layer.fontSize * scaleY))");
     expect(artboardSource).toContain("fontFamily:");

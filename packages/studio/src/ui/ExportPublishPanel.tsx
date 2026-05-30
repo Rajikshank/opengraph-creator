@@ -1,10 +1,9 @@
 import { useState } from "react";
 import { Download, RotateCcw, Send } from "lucide-react";
-import type { ExportFormat, Framework } from "@graphforge/core";
+import type { ExportFormat } from "@opengraph-creator/core";
 import {
   createAgentHandoffViaApi,
   createPublishRequestViaApi,
-  createSessionAgentRequestViaApi,
   exportProjectPagesViaApi,
   exportProjectViaApi,
   recordSessionExportViaApi,
@@ -23,15 +22,13 @@ export function ExportPublishPanel() {
   const session = useStudio((state) => state.session);
   const setLastExportSizeBytes = useStudio((state) => state.setLastExportSizeBytes);
   const [format, setFormat] = useState<ExportFormat>("png");
-  const [framework, setFramework] = useState<Framework>("unknown");
   const [quality, setQuality] = useState(82);
   const [target, setTarget] = useState("public/og.png");
   const [pageImages, setPageImages] = useState<Array<{ page: string; imagePath: string }>>([]);
   const [hasExported, setHasExported] = useState(false);
-  const [hasPreviewRequest, setHasPreviewRequest] = useState(false);
   const [hasConfirmedPublish, setHasConfirmedPublish] = useState(false);
   const [restartConfirmOpen, setRestartConfirmOpen] = useState(false);
-  const [busyAction, setBusyAction] = useState<"export" | "preview" | "confirm" | "handoff" | "restart" | null>(null);
+  const [busyAction, setBusyAction] = useState<"export" | "publish" | "restart" | null>(null);
   const isBusy = busyAction !== null;
 
   const runGuardedOperation = async (action: NonNullable<typeof busyAction>, operation: () => Promise<void>) => {
@@ -53,7 +50,6 @@ export function ExportPublishPanel() {
       setLastExportSizeBytes(result.fileSizeBytes);
       setHasExported(true);
       setPageImages(project.pages?.length ? [{ page: project.targetPages[0] ?? "/", imagePath: result.target }] : []);
-      setHasPreviewRequest(false);
       setHasConfirmedPublish(false);
       if (session) {
         await recordSessionExportViaApi(fetch, {
@@ -94,7 +90,6 @@ export function ExportPublishPanel() {
       setPageImages(mappings);
       setLastExportSizeBytes(result.exports.reduce((total, item) => total + (item.fileSizeBytes ?? 0), 0));
       setHasExported(true);
-      setHasPreviewRequest(false);
       setHasConfirmedPublish(false);
       if (session) {
         for (const item of result.exports) {
@@ -122,112 +117,48 @@ export function ExportPublishPanel() {
     }
   };
 
-  const createPublishPreview = async () => {
-    if (!session) {
-      notifyStudioError(
-        normalizeStudioError("Open an agent session before creating a publish request", {
-          kind: "publish",
-          title: "No agent session connected",
-          recovery: "Open Studio from a GraphForge agent session before creating a publish preview."
-        })
-      );
-      return;
-    }
-    try {
-      await createPublishRequestViaApi(fetch, { repo: session.repo, sessionId: session.id, imagePath: pageImages[0]?.imagePath ?? target, pageImages: pageImages.length ? pageImages : undefined, framework, confirmed: false });
-      setHasPreviewRequest(true);
-      setHasConfirmedPublish(false);
-      notifyStudioSuccess("Publish preview request created");
-    } catch (error) {
-      notifyStudioError(
-        normalizeStudioError(error, {
-          kind: "publish",
-          title: "Publish request failed",
-          recovery: "No metadata was changed. Retry after saving the document or reopening the session."
-        })
-      );
-    }
-  };
-
-  const confirmPublishHandoff = async () => {
-    if (!session) {
-      notifyStudioError(
-        normalizeStudioError("Open an agent session before confirming publish", {
-          kind: "publish",
-          title: "No agent session connected",
-          recovery: "Open Studio from a GraphForge agent session before confirming publish."
-        })
-      );
-      return;
-    }
+  const publishWithAgent = async () => {
     if (!hasExported) {
       notifyStudioError(
         normalizeStudioError("Export the OG image before confirming publish", {
           kind: "publish",
           title: "Export required",
-          recovery: "Export the optimized OG image first, then create a publish preview."
+          recovery: "Export the optimized OG image first, then hand it to the coding agent for publish."
         })
       );
       return;
     }
-    if (!hasPreviewRequest) {
-      notifyStudioError(
-        normalizeStudioError("Create a publish preview before confirming handoff", {
-          kind: "publish",
-          title: "Preview required",
-          recovery: "Create the publish preview before confirming the coding-agent handoff."
-        })
-      );
-      return;
-    }
-    try {
-      await createPublishRequestViaApi(fetch, { repo: session.repo, sessionId: session.id, imagePath: pageImages[0]?.imagePath ?? target, pageImages: pageImages.length ? pageImages : undefined, framework, confirmed: true });
-      setHasPreviewRequest(true);
-      setHasConfirmedPublish(true);
-      notifyStudioSuccess("Publish confirmed for agent handoff");
-    } catch (error) {
-      notifyStudioError(
-        normalizeStudioError(error, {
-          kind: "publish",
-          title: "Publish confirmation failed",
-          recovery: "The preview request is still available. Retry confirmation after checking the local session."
-        })
-      );
-    }
-  };
-
-  const askAgentToWire = async () => {
-    if (!project) return;
     try {
       if (session) {
-        await saveSessionDocumentViaApi(fetch, { repo: session.repo, sessionId: session.id, project });
-        const request = await createSessionAgentRequestViaApi(fetch, {
+        await createPublishRequestViaApi(fetch, {
           repo: session.repo,
           sessionId: session.id,
-          prompt: pageImages.length
-            ? `Wire the confirmed page-specific OG exports into the app metadata after previewing metadata. Page mappings: ${pageImages.map((item) => `${item.page} -> ${item.imagePath}`).join(", ")}.`
-            : `Wire the confirmed OG export into the app metadata. Use ${target} as the selected raster OG image after previewing metadata.`,
-          documentPath: session.activeDocumentPath,
-          expectedOutput: session.activeDocumentPath
+          imagePath: pageImages[0]?.imagePath ?? target,
+          pageImages: pageImages.length ? pageImages : undefined,
+          framework: "unknown",
+          confirmed: true
         });
-        notifyStudioSuccess(`Agent request saved: ${request.path}`);
+        setHasConfirmedPublish(true);
+        notifyStudioSuccess("Publish handoff sent to agent");
         return;
       }
+      if (!project) return;
       const result = await createAgentHandoffViaApi(fetch, {
         project,
         prompt: pageImages.length
-          ? `Ask agent to wire page-specific exports after previewing metadata. Page mappings: ${pageImages.map((item) => `${item.page} -> ${item.imagePath}`).join(", ")}.`
-          : `Ask agent to wire exports. Use ${target} as the selected raster OG image after previewing metadata.`,
+          ? `Wire the confirmed page-specific OG exports into the app metadata after detecting the framework and previewing metadata. Page mappings: ${pageImages.map((item) => `${item.page} -> ${item.imagePath}`).join(", ")}.`
+          : `Wire the confirmed OG export into the app metadata after detecting the framework and previewing metadata. Use ${target} as the selected raster OG image.`,
         target,
         format: format === "jpg" ? "jpeg" : format
       });
-      notifyStudioSuccess(`Ask agent to wire exports: ${result.path}`);
+      setHasConfirmedPublish(true);
+      notifyStudioSuccess(`Agent publish handoff saved: ${result.path}`);
     } catch (error) {
       notifyStudioError(
         normalizeStudioError(error, {
           kind: "agent-handoff",
-          title: "Agent wiring handoff failed",
-          recovery: "Your document is still editable. Retry handoff after saving the project."
+          title: "Publish handoff failed",
+          recovery: "Your export and editable document are still safe. Retry after saving or reopening the session."
         })
       );
     }
@@ -244,7 +175,6 @@ export function ExportPublishPanel() {
       });
       setPageImages([]);
       setHasExported(false);
-      setHasPreviewRequest(false);
       setHasConfirmedPublish(false);
       setRestartConfirmOpen(false);
       notifyStudioSuccess("Restart requested. The agent will ask fresh OG setup questions.");
@@ -275,59 +205,38 @@ export function ExportPublishPanel() {
           { value: "svg", label: "SVG source" }
         ]}
         onValueChange={(value) => {
-            const next = value as ExportFormat;
-            setFormat(next);
-            setTarget(next === "png" ? "public/og.png" : next === "webp" ? "public/og.webp" : next === "jpg" ? "public/og.jpg" : "public/og.svg");
-          }}
+          const next = value as ExportFormat;
+          setFormat(next);
+          setTarget(next === "png" ? "public/og.png" : next === "webp" ? "public/og.webp" : next === "jpg" ? "public/og.jpg" : "public/og.svg");
+        }}
       />
       <label>Output path<input value={target} onChange={(event) => setTarget(event.target.value)} /></label>
-      <StudioSelect
-        label="Framework"
-        value={framework}
-        options={[
-          { value: "unknown", label: "Detect later" },
-          { value: "next", label: "Next.js" },
-          { value: "astro", label: "Astro" },
-          { value: "nuxt", label: "Nuxt" },
-          { value: "remix", label: "Remix" },
-          { value: "vite", label: "Vite" },
-          { value: "html", label: "HTML" }
-        ]}
-        onValueChange={(value) => setFramework(value as Framework)}
-      />
+      <p className="export-readiness-note">Framework detection is handled by the coding agent during publish.</p>
       <StudioSlider label="Quality" min={40} max={100} value={quality} unit="%" onValueChange={setQuality} />
       <button type="button" className="primary-action" disabled={isBusy} onClick={() => void runGuardedOperation("export", exportProject)}>
-        <Download size={15} /> {busyAction === "export" ? "Exporting..." : "Export OG image"}
+        <Download size={15} /> {busyAction === "export" ? "Exporting..." : "Export images"}
       </button>
       {project?.pages?.length ? (
         <button type="button" className="secondary-action" disabled={isBusy} onClick={() => void runGuardedOperation("export", exportAllPages)}>
           <Download size={15} /> {busyAction === "export" ? "Exporting..." : "Export all pages"}
         </button>
       ) : null}
-      <button type="button" className="secondary-action" disabled={isBusy} onClick={() => void runGuardedOperation("preview", createPublishPreview)}>
-        <Send size={15} /> {busyAction === "preview" ? "Creating preview..." : "Create publish preview"}
-      </button>
       <button
         type="button"
         className="secondary-action"
-        disabled={isBusy || !hasExported || !hasPreviewRequest || hasConfirmedPublish}
+        disabled={isBusy || !hasExported || hasConfirmedPublish}
         title={
           !hasExported
             ? "Export first"
-            : !hasPreviewRequest
-              ? "Create publish preview first"
-              : hasConfirmedPublish
-                ? "Publish already confirmed"
-                : "Confirm publish handoff for the coding agent"
+            : hasConfirmedPublish
+              ? "Publish handoff already sent"
+              : "Send confirmed export handoff to the coding agent"
         }
-        onClick={() => void runGuardedOperation("confirm", confirmPublishHandoff)}
+        onClick={() => void runGuardedOperation("publish", publishWithAgent)}
       >
-        <Send size={15} /> {busyAction === "confirm" ? "Confirming..." : "Confirm publish handoff"}
+        <Send size={15} /> {busyAction === "publish" ? "Publishing..." : "Publish with agent"}
       </button>
-      {hasConfirmedPublish ? <p className="quiet-copy">Waiting for agent to wire metadata.</p> : hasPreviewRequest ? <p className="quiet-copy">Preview ready. Confirm when the metadata handoff is approved.</p> : null}
-      <button type="button" className="secondary-action" disabled={isBusy} onClick={() => void runGuardedOperation("handoff", askAgentToWire)}>
-        <Send size={15} /> {busyAction === "handoff" ? "Saving handoff..." : "Ask agent to wire exports"}
-      </button>
+      {hasConfirmedPublish ? <p className="quiet-copy">Waiting for the agent to preview and wire metadata.</p> : null}
       <button
         type="button"
         className="secondary-action danger-action"
@@ -342,7 +251,7 @@ export function ExportPublishPanel() {
           <section className="restart-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="restart-confirm-title">
             <h3 id="restart-confirm-title">Restart from question gate</h3>
             <p>
-              GraphForge will archive the current generated document and hand the session back to the agent. The agent must ask fresh
+              OpenGraph Creator will archive the current generated document and hand the session back to the agent. The agent must ask fresh
               setup questions before creating a new OG document.
             </p>
             <div className="dialog-actions">

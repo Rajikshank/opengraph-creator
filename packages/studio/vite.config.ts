@@ -8,15 +8,15 @@ export default defineConfig({
   resolve: {
     alias: [
       {
-        find: "@graphforge/render/browser",
+        find: "@opengraph-creator/render/browser",
         replacement: fileURLToPath(new URL("../render/src/browser.ts", import.meta.url))
       },
       {
-        find: "@graphforge/render",
+        find: "@opengraph-creator/render",
         replacement: fileURLToPath(new URL("../render/src/index.ts", import.meta.url))
       },
       {
-        find: "@graphforge/core",
+        find: "@opengraph-creator/core",
         replacement: fileURLToPath(new URL("../core/src/index.ts", import.meta.url))
       }
     ]

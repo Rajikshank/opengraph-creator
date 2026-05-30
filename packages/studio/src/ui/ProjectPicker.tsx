@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState, type ChangeEvent } from "react";
-import { AlertTriangle, FileArchive, FolderOpen, Link2, PencilRuler, RefreshCw, Sparkles } from "lucide-react";
-import { unpackStudioDocument } from "@graphforge/core";
-import { readConnectRecipeViaApi, type ConnectRecipe, type ProjectSummary } from "../api";
+import { useRef, type ChangeEvent } from "react";
+import { AlertTriangle, FileArchive, FolderOpen, PencilRuler, RefreshCw } from "lucide-react";
+import { unpackStudioDocument } from "@opengraph-creator/core";
+import type { ProjectSummary } from "../api";
 import { normalizeStudioError } from "../lib/studio-errors";
-import { notifyStudioError, notifyStudioSuccess, notifyStudioWarning } from "../lib/studio-toast";
+import { notifyStudioError, notifyStudioSuccess } from "../lib/studio-toast";
+import { ConnectAgentPanel } from "./ConnectAgentPanel";
 import { createManualProject, useStudio } from "./studio-store";
 
 export type StartupMode = "global-hub" | "repo-hub" | "recovery";
@@ -20,13 +21,7 @@ export function ProjectPicker({ mode = "global-hub", repo, recoveryMessage, onOp
   const projects = useStudio((state) => state.projects);
   const replaceProject = useStudio((state) => state.replaceProject);
   const session = useStudio((state) => state.session);
-  const [recipe, setRecipe] = useState<ConnectRecipe | null>(null);
   const openDocumentInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (mode !== "repo-hub" && mode !== "recovery") return;
-    readConnectRecipeViaApi(fetch, repo).then(setRecipe).catch(() => setRecipe(null));
-  }, [mode, repo]);
 
   const startManualDraft = () => replaceProject(createManualProject("Manual OG Draft"));
 
@@ -53,15 +48,6 @@ export function ProjectPicker({ mode = "global-hub", repo, recoveryMessage, onOp
       }
     });
     reader.readAsArrayBuffer(file);
-  };
-
-  const copyRecipe = async (value: string, label: string) => {
-    try {
-      await navigator.clipboard.writeText(value);
-      notifyStudioSuccess(`${label} copied`);
-    } catch {
-      notifyStudioWarning(`${label}: ${value}`);
-    }
   };
 
   return (
@@ -126,24 +112,7 @@ export function ProjectPicker({ mode = "global-hub", repo, recoveryMessage, onOp
       </section>
 
       <section className="picker-panel project-hub-connect">
-        <div className="section-heading">
-          <Link2 size={15} />
-          <span>Agent connection</span>
-        </div>
-        {recipe ? (
-          <>
-            <p className="quiet-copy">Use this from Codex, Claude Code, or OpenCode when Studio was opened manually.</p>
-            <code className="recipe-code">{recipe.command}</code>
-            <button type="button" className="secondary-action" onClick={() => copyRecipe(recipe.command, "Command")}>
-              <Link2 size={15} /> Copy command
-            </button>
-            <button type="button" className="secondary-action" onClick={() => copyRecipe(recipe.prompt, "Agent prompt")}>
-              <Sparkles size={15} /> Copy agent prompt
-            </button>
-          </>
-        ) : (
-          <p className="quiet-copy">Launch with `graphforge studio --repo &lt;path&gt;` to get a repo-scoped agent connection recipe.</p>
-        )}
+        <ConnectAgentPanel repo={repo} />
       </section>
     </main>
   );

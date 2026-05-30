@@ -5,7 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
-const workspace = await mkdtemp(join(tmpdir(), "graphforge-workflow-"));
+const workspace = await mkdtemp(join(tmpdir(), "OpenGraphCreator-workflow-"));
 const appRepo = join(workspace, "app");
 const home = join(workspace, "home");
 const cli = ["packages/cli/dist/index.js"];
@@ -43,20 +43,20 @@ const agentPlanPath = join(workspace, "agent-plan.json");
 const sessionId = "workflow-session";
 
 await mkdir(dirname(exportPath), { recursive: true });
-await runGraphForge(["doctor", "--home", home, "--json"]);
-await runGraphForge(["session", "create", "--repo", appRepo, "--id", sessionId, "--agent", "codex", "--strategy", "hybrid"]);
-await runGraphForge(["brief", "--repo", appRepo, "--name", "Workflow App", "--strategy", "hybrid", "--mode", "template", "--out", briefPath]);
-await runGraphForge(["brief", "--repo", appRepo, "--name", "Workflow App", "--strategy", "common", "--mode", "pure-image", "--out", pureBriefPath]);
-await runGraphForge(["new", "--name", "Workflow App", "--strategy", "pages", "--mode", "pure-image", "--repo", appRepo, "--pages", "/,/pricing", "--out", projectPath, "--library", "true", "--home", home]);
-await runGraphForge(["document", "pack", "--project", projectPath, "--out", documentPath]);
-await runGraphForge(["document", "validate", "--source", documentPath]);
-await runGraphForge(["variants", "--project", projectPath, "--outDir", variantsDir, "--library", "true", "--home", home]);
-await runGraphForge(["render", "--project", projectPath, "--out", renderPath]);
-await runGraphForge(["export", "--project", projectPath, "--format", "webp", "--quality", "82", "--out", exportPath, "--session", sessionId, "--repo", appRepo]);
-await runGraphForge(["export", "--project", projectPath, "--format", "webp", "--quality", "82", "--allPages", "true", "--outDir", "public/og", "--session", sessionId, "--repo", appRepo]);
-await runGraphForge(["agent-handoff", "--project", projectPath, "--prompt", "premium local workflow smoke", "--out", join(appRepo, "public", "og-agent.png"), "--plan", agentPlanPath]);
-const preview = await runGraphForge(["publish", "--preview", "--repo", appRepo, "--session", sessionId, "--framework", "next", "--allPages", "true"]);
-await runGraphForge(["publish", "--confirm", "--repo", appRepo, "--session", sessionId, "--framework", "next", "--allPages", "true"]);
+await runOpenGraphCreator(["doctor", "--home", home, "--json"]);
+await runOpenGraphCreator(["session", "create", "--repo", appRepo, "--id", sessionId, "--agent", "codex", "--strategy", "hybrid"]);
+await runOpenGraphCreator(["brief", "--repo", appRepo, "--name", "Workflow App", "--strategy", "hybrid", "--mode", "template", "--out", briefPath]);
+await runOpenGraphCreator(["brief", "--repo", appRepo, "--name", "Workflow App", "--strategy", "common", "--mode", "pure-image", "--out", pureBriefPath]);
+await runOpenGraphCreator(["new", "--name", "Workflow App", "--strategy", "pages", "--mode", "pure-image", "--repo", appRepo, "--pages", "/,/pricing", "--out", projectPath, "--library", "true", "--home", home]);
+await runOpenGraphCreator(["document", "pack", "--project", projectPath, "--out", documentPath]);
+await runOpenGraphCreator(["document", "validate", "--source", documentPath]);
+await runOpenGraphCreator(["variants", "--project", projectPath, "--outDir", variantsDir, "--library", "true", "--home", home]);
+await runOpenGraphCreator(["render", "--project", projectPath, "--out", renderPath]);
+await runOpenGraphCreator(["export", "--project", projectPath, "--format", "webp", "--quality", "82", "--out", exportPath, "--session", sessionId, "--repo", appRepo]);
+await runOpenGraphCreator(["export", "--project", projectPath, "--format", "webp", "--quality", "82", "--allPages", "true", "--outDir", "public/og", "--session", sessionId, "--repo", appRepo]);
+await runOpenGraphCreator(["agent-handoff", "--project", projectPath, "--prompt", "premium local workflow smoke", "--out", join(appRepo, "public", "og-agent.png"), "--plan", agentPlanPath]);
+const preview = await runOpenGraphCreator(["publish", "--preview", "--repo", appRepo, "--session", sessionId, "--framework", "next", "--allPages", "true"]);
+await runOpenGraphCreator(["publish", "--confirm", "--repo", appRepo, "--session", sessionId, "--framework", "next", "--allPages", "true"]);
 
 const brief = JSON.parse(await readFile(briefPath, "utf8"));
 const pureBrief = JSON.parse(await readFile(pureBriefPath, "utf8"));
@@ -70,8 +70,8 @@ const pageHomeImage = await stat(pageExportHomePath);
 const pagePricingImage = await stat(pageExportPricingPath);
 const plan = JSON.parse(await readFile(agentPlanPath, "utf8"));
 const previewPlan = JSON.parse(preview.stdout);
-const session = JSON.parse(await readFile(join(appRepo, ".graphforge", "sessions", sessionId, "session.json"), "utf8"));
-const publishRequest = JSON.parse(await readFile(join(appRepo, ".graphforge", "sessions", sessionId, "publish-request.json"), "utf8"));
+const session = JSON.parse(await readFile(join(appRepo, ".opengraph-creator", "sessions", sessionId, "session.json"), "utf8"));
+const publishRequest = JSON.parse(await readFile(join(appRepo, ".opengraph-creator", "sessions", sessionId, "publish-request.json"), "utf8"));
 
 assert(brief.codexPrompt.includes("Workflow App"), "brief did not include Codex prompt context");
 assert(brief.codexPrompt.includes("Route context:"), "brief did not include route context");
@@ -117,7 +117,7 @@ console.log(
   )
 );
 
-async function runGraphForge(args) {
+async function runOpenGraphCreator(args) {
   return run(process.execPath, [...cli, ...args], { cwd: root });
 }
 

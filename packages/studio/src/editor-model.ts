@@ -1,19 +1,19 @@
 import type {
   GenerationMode,
   GenerationStrategy,
-  GraphForgeSourceArtifact,
+  OpenGraphCreatorSourceArtifact,
   ImageLayer,
   LayerEffects,
   OgLayer,
   OgProject
-} from "@graphforge/core";
+} from "@opengraph-creator/core";
 import {
   createMultiPageProject,
   getRenderableProject,
   normalizeTargetPages,
   setActivePage,
   updateActivePageLayers
-} from "@graphforge/core";
+} from "@opengraph-creator/core";
 
 export type AddableLayerKind = "text" | "image" | "badge" | "background" | "shape" | "rectangle" | "rounded-rectangle" | "ellipse" | "line" | "frame";
 export type LayerAlignMode = "left" | "center" | "right" | "top" | "middle" | "bottom";
@@ -65,7 +65,7 @@ export function updateSelectedLayer(session: EditorSession, patch: Partial<OgLay
   return updateLayer(session, session.selectedLayerId, patch);
 }
 
-export function attachSourceArtifact(session: EditorSession, artifact: GraphForgeSourceArtifact): EditorSession {
+export function attachSourceArtifact(session: EditorSession, artifact: OpenGraphCreatorSourceArtifact): EditorSession {
   return pushHistory(session, {
     ...session.project,
     sourceArtifacts: [...(session.project.sourceArtifacts ?? []), artifact],
@@ -464,7 +464,7 @@ function createLayer(project: OgProject, kind: AddableLayerKind): OgLayer {
       name: "Image Layer",
       width: 280,
       height: 180,
-      src: "graphforge://image-placeholder",
+      src: "ogcreator://image-placeholder",
       fit: "contain",
       borderRadius: 8,
       effects: { shadow: true, glow: false, blur: 0 }

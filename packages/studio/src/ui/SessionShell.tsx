@@ -16,6 +16,8 @@ import { SourceRail } from "./SourceRail";
 import { ToolPalette } from "./ToolPalette";
 import { useStudio } from "./studio-store";
 
+type SessionBundle = Awaited<ReturnType<typeof readSessionBundleViaApi>>;
+
 export function SessionShell() {
   const shellRef = useRef<HTMLDivElement>(null);
   const hasPlayedEntranceRef = useRef(false);
@@ -26,6 +28,8 @@ export function SessionShell() {
   const replaceProject = useStudio((state) => state.replaceProject);
   const setSession = useStudio((state) => state.setSession);
   const session = useStudio((state) => state.session);
+  const dirty = useStudio((state) => state.dirty);
+  const markSaved = useStudio((state) => state.markSaved);
   const setProjects = useStudio((state) => state.setProjects);
   const canUndo = useStudio((state) => state.past.length > 0);
   const canRedo = useStudio((state) => state.future.length > 0);
@@ -34,6 +38,22 @@ export function SessionShell() {
   const [startupMode, setStartupMode] = useState<StartupMode>("global-hub");
   const [startupRepo, setStartupRepo] = useState<string | undefined>();
   const [recoveryMessage, setRecoveryMessage] = useState<string | undefined>();
+  const [loadedDocumentRevision, setLoadedDocumentRevision] = useState<string | undefined>();
+  const [pendingAgentBundle, setPendingAgentBundle] = useState<SessionBundle | undefined>();
+  const refreshStateRef = useRef({ dirty: false, loadedDocumentRevision: undefined as string | undefined });
+
+  const loadSessionBundle = (bundle: SessionBundle, options: { notify?: boolean } = {}) => {
+    setSession(bundle.session);
+    if (bundle.project) {
+      replaceProject(bundle.project);
+      setLoadedDocumentRevision(bundle.documentRevision);
+      setPendingAgentBundle(undefined);
+      setRecoveryMessage(undefined);
+      if (options.notify) notifyStudioSuccess("Loaded agent update");
+      return true;
+    }
+    return false;
+  };
 
   useEffect(() => {
     listProjectsViaApi()
@@ -56,11 +76,7 @@ export function SessionShell() {
       setStartupMode("recovery");
       readSessionBundleViaApi(fetch, { id: sessionId, repo })
         .then((bundle) => {
-          setSession(bundle.session);
-          if (bundle.project) {
-            replaceProject(bundle.project);
-            setRecoveryMessage(undefined);
-          } else {
+          if (!loadSessionBundle(bundle)) {
             setRecoveryMessage("Session opened, but no editable .ogdoc document exists yet.");
             notifyStudioWarning(
               "Session document missing",
@@ -84,6 +100,35 @@ export function SessionShell() {
       setStartupMode(repo ? "repo-hub" : "global-hub");
     }
   }, []);
+
+  useEffect(() => {
+    refreshStateRef.current = { dirty, loadedDocumentRevision };
+  }, [dirty, loadedDocumentRevision]);
+
+  useEffect(() => {
+    if (!session) return;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const bundle = await readSessionBundleViaApi(fetch, { id: session.id, repo: session.repo });
+        if (cancelled || !bundle.documentRevision || bundle.documentRevision === refreshStateRef.current.loadedDocumentRevision) return;
+        if (refreshStateRef.current.dirty) {
+          setPendingAgentBundle(bundle);
+          return;
+        }
+        loadSessionBundle(bundle, { notify: true });
+      } catch {
+        // Session refresh is opportunistic; normal API error handling remains on explicit user actions.
+      }
+    };
+    const timer = window.setInterval(() => {
+      void poll();
+    }, 1600);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [session]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -144,10 +189,12 @@ export function SessionShell() {
     try {
       if (session) {
         const result = await saveSessionDocumentViaApi(fetch, { repo: session.repo, sessionId: session.id, project });
+        markSaved();
         notifyStudioSuccess(`Saved ${result.path}`);
         return;
       }
       const result = await saveProjectViaApi(fetch, project);
+      markSaved();
       notifyStudioSuccess(`Saved ${result.path}`);
       setProjects(await listProjectsViaApi());
     } catch (error) {
@@ -168,20 +215,20 @@ export function SessionShell() {
         position="bottom-right"
         toastOptions={{
           classNames: {
-            toast: "graphforge-toast",
-            title: "graphforge-toast-title",
-            description: "graphforge-toast-description",
-            actionButton: "graphforge-toast-action",
-            cancelButton: "graphforge-toast-cancel",
-            closeButton: "graphforge-toast-close"
+            toast: "opengraph-creator-toast",
+            title: "opengraph-creator-toast-title",
+            description: "opengraph-creator-toast-description",
+            actionButton: "opengraph-creator-toast-action",
+            cancelButton: "opengraph-creator-toast-cancel",
+            closeButton: "opengraph-creator-toast-close"
           }
         }}
       />
       <header className="studio-commandbar" data-enter>
         <div className="brand-block">
-          <span className="brand-mark">OL</span>
+          <span className="brand-mark">OG</span>
           <div>
-            <strong>Ogloom</strong>
+            <strong>OpenGraph Creator</strong>
             <span>{project ? project.name : "Project picker"}</span>
           </div>
         </div>
@@ -198,6 +245,30 @@ export function SessionShell() {
         </div>
       </header>
 
+      {pendingAgentBundle ? (
+        <div className="agent-update-banner" data-enter>
+          <div>
+            <strong>Agent update ready</strong>
+            <span>The coding agent revised this .ogdoc while you have local edits.</span>
+          </div>
+          <div className="agent-update-actions">
+            <button type="button" className="secondary-action" onClick={() => loadSessionBundle(pendingAgentBundle, { notify: true })}>
+              Load update
+            </button>
+            <button
+              type="button"
+              className="ghost-action"
+              onClick={() => {
+                setLoadedDocumentRevision(pendingAgentBundle.documentRevision);
+                setPendingAgentBundle(undefined);
+              }}
+            >
+              Keep current
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {!project ? (
         <div className="empty-workspace">
           <ProjectPicker
@@ -209,7 +280,7 @@ export function SessionShell() {
           />
         </div>
       ) : (
-        <PanelGroup direction="horizontal" autoSaveId="graphforge-final-layout" className="studio-workspace" data-enter>
+        <PanelGroup direction="horizontal" autoSaveId="OpenGraphCreator-final-layout" className="studio-workspace" data-enter>
           {sourceRailOpen ? (
             <>
               <Panel minSize={18} defaultSize={23} maxSize={32}>

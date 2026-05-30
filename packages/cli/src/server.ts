@@ -13,8 +13,8 @@ import {
   type OgProject,
   type SourceArtifactKind,
   type SourceArtifactOrigin
-} from "@graphforge/core";
-import { exportProject } from "@graphforge/render";
+} from "@opengraph-creator/core";
+import { exportProject } from "@opengraph-creator/render";
 import { createAiImagePlan, type AgentImageOutputFormat } from "./ai-image.js";
 import { createImportedSourceProject } from "./import-source.js";
 import { readStudioDocumentFile, writeStudioDocumentFile } from "./document-io.js";
@@ -25,20 +25,20 @@ import {
   listLibraryProjects,
   readLibraryProject,
   saveLibraryProject,
-  type GraphForgeLibrary
+  type OpenGraphCreatorLibrary
 } from "./library.js";
 import {
   appendSessionEvent,
-  createGraphForgeSession,
+  createOpenGraphCreatorSession,
   createAgentRequest,
   createPublishRequest,
-  readGraphForgeSession,
+  readOpenGraphCreatorSession,
   recordSessionExport,
-  restartGraphForgeSession
+  restartOpenGraphCreatorSession
 } from "./session.js";
 
 export interface CreateStudioServerOptions {
-  library?: GraphForgeLibrary;
+  library?: OpenGraphCreatorLibrary;
   staticDir?: string;
   port?: number;
   host?: string;
@@ -173,7 +173,7 @@ export function getDefaultStudioStaticDir(): string {
 async function handleRequest(input: {
   request: IncomingMessage;
   response: ServerResponse;
-  library: GraphForgeLibrary;
+  library: OpenGraphCreatorLibrary;
   staticDir: string;
   sessionRepo?: string;
 }): Promise<void> {
@@ -193,24 +193,29 @@ async function handleRequest(input: {
     const repo = url.searchParams.get("repo") ?? input.sessionRepo ?? input.library.root;
     let project: OgProject | undefined;
     let documentPath: string | undefined;
+    let documentRevision: string | undefined;
     try {
       const { getSessionPaths } = await import("./session.js");
       const paths = getSessionPaths(repo, id);
       documentPath = paths.documentFile;
       const document = await readStudioDocumentFile(paths.documentFile);
       project = hydrateProjectAssetSources(document.project, document.assets);
+      documentRevision = await readFileRevision(paths.documentFile);
     } catch {
       try {
         const { getSessionPaths } = await import("./session.js");
-        project = JSON.parse(await readFile(getSessionPaths(repo, id).projectJson, "utf8")) as OgProject;
+        const projectJson = getSessionPaths(repo, id).projectJson;
+        project = JSON.parse(await readFile(projectJson, "utf8")) as OgProject;
+        documentRevision = await readFileRevision(projectJson);
       } catch {
         project = undefined;
       }
     }
     sendJson(input.response, 200, {
-      session: await readGraphForgeSession(repo, id),
+      session: await readOpenGraphCreatorSession(repo, id),
       project,
-      documentPath
+      documentPath,
+      documentRevision
     });
     return;
   }
@@ -269,7 +274,7 @@ async function handleRequest(input: {
 
   if (url.pathname === "/api/session" && input.request.method === "POST") {
     const body = (await readJson(input.request)) as SessionBody;
-    const session = await createGraphForgeSession({
+    const session = await createOpenGraphCreatorSession({
       repo: body.repo ?? input.sessionRepo ?? input.library.root,
       id: body.id,
       agent: body.agent,
@@ -340,7 +345,7 @@ async function handleRequest(input: {
   if (url.pathname === "/api/session/restart" && input.request.method === "POST") {
     const body = (await readJson(input.request)) as SessionRestartBody;
     const repo = body.repo ?? input.sessionRepo ?? input.library.root;
-    const session = await restartGraphForgeSession(repo, body.sessionId, body.reason);
+    const session = await restartOpenGraphCreatorSession(repo, body.sessionId, body.reason);
     const request = session.agentRequests?.at(-1);
     sendJson(input.response, 200, { session, request });
     return;
@@ -419,7 +424,7 @@ async function handleRequest(input: {
       return;
     }
     const kind = normalizeImportKind(body.kind, body.source);
-    if (kind === "graphforge-json") {
+    if (kind === "project-json") {
       const project = JSON.parse(await readFile(body.source, "utf8")) as OgProject;
       await saveLibraryProject(input.library, project);
       sendJson(input.response, 200, { project });
@@ -448,17 +453,17 @@ async function handleRequest(input: {
 function createConnectRecipe(repo: string): { repo: string; command: string; prompt: string; sessionRoot: string } {
   return {
     repo,
-    command: `graphforge session create --repo "${repo}" --agent codex --strategy hybrid --mode template`,
+    command: `opengraph-creator session create --repo "${repo}" --agent codex --strategy hybrid --mode template`,
     prompt:
-      "Use the GraphForge skill to inspect this repo, ask only relevant OG design questions, create an editable .ogdoc at .graphforge/sessions/<id>/document.ogdoc, launch Studio, then wait with graphforge session wait --until next-action.",
-    sessionRoot: join(repo, ".graphforge", "sessions")
+      "Use the OpenGraph Creator skill to inspect this repo, ask only relevant OG design questions, create an editable .ogdoc at .opengraph-creator/sessions/<id>/document.ogdoc, launch Studio, then wait with opengraph-creator session wait --until next-action.",
+    sessionRoot: join(repo, ".opengraph-creator", "sessions")
   };
 }
 
 function normalizeImportKind(kind: SourceArtifactKind | undefined, source: string): SourceArtifactKind {
-  if (kind === "graphforge-json" || kind === "svg" || kind === "html" || kind === "image") return kind;
+  if (kind === "project-json" || kind === "svg" || kind === "html" || kind === "image") return kind;
   const normalized = source.toLowerCase();
-  if (normalized.endsWith(".json")) return "graphforge-json";
+  if (normalized.endsWith(".json")) return "project-json";
   if (normalized.endsWith(".svg")) return "svg";
   if (normalized.endsWith(".html") || normalized.endsWith(".htm")) return "html";
   return "image";
@@ -510,6 +515,11 @@ function readJson(request: IncomingMessage): Promise<unknown> {
 function sendJson(response: ServerResponse, status: number, value: unknown): void {
   response.writeHead(status, { "content-type": "application/json; charset=utf-8" });
   response.end(JSON.stringify(value));
+}
+
+async function readFileRevision(path: string): Promise<string> {
+  const info = await stat(path);
+  return `${Math.round(info.mtimeMs)}:${info.size}`;
 }
 
 function normalizePath(path: string): string {

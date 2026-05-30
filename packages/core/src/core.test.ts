@@ -6,11 +6,15 @@ import {
   createPageVariantProjects,
   detectFramework,
   getActivePage,
+  getCanvasEffectCachePadding,
+  getCanvasShadowVisual,
   getExportPath,
   getLayerEffectCapabilities,
   getNoiseDisplayOpacity,
   getRenderableProject,
   getPlatformWarnings,
+  getSvgShadowVisual,
+  hasComposedLayerEffect,
   isGlowEffectEnabled,
   normalizeGlowEffect,
   setActivePage,
@@ -18,7 +22,26 @@ import {
   validateProject
 } from "./index";
 
-describe("GraphForge core", () => {
+describe("OpenGraphCreator core", () => {
+  it("keeps canvas and SVG shadow visuals on one shared effect contract", () => {
+    const effects = { shadow: true, glow: false, blur: 0 };
+
+    expect(hasComposedLayerEffect(effects)).toBe(true);
+    expect(getCanvasShadowVisual(effects, "#d9a441")).toMatchObject({
+      color: "#020617",
+      blur: 18,
+      opacity: 0.34,
+      offsetY: 18
+    });
+    expect(getSvgShadowVisual(effects, "#d9a441")).toMatchObject({
+      color: "#020617",
+      stdDeviation: 18,
+      floodOpacity: 0.34,
+      dy: 18
+    });
+    expect(getCanvasEffectCachePadding({ shadow: true, glow: false, blur: 8 })).toBeGreaterThanOrEqual(60);
+  });
+
   it("creates an editable hybrid project with a 1200x630 canvas and required layers", () => {
     const project = createDefaultProject({
       name: "Launch site",
@@ -52,7 +75,7 @@ describe("GraphForge core", () => {
         {
           kind: "svg",
           origin: "codex",
-          path: ".graphforge/generated/og.svg",
+          path: ".opengraph-creator/generated/og.svg",
           createdAt: "2026-05-26T00:00:00.000Z"
         }
       ]
@@ -62,7 +85,7 @@ describe("GraphForge core", () => {
       {
         kind: "svg",
         origin: "codex",
-        path: ".graphforge/generated/og.svg",
+        path: ".opengraph-creator/generated/og.svg",
         createdAt: "2026-05-26T00:00:00.000Z"
       }
     ]);

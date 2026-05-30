@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createDefaultProject } from "@graphforge/core";
+import { createDefaultProject } from "@opengraph-creator/core";
 import {
   buildAgentImagePrompt,
   buildAiImagePrompt,
@@ -38,13 +38,13 @@ describe("agent image handoff", () => {
     expect(plan.output).toBe("public/og.png");
     expect(plan.expectedArtifact).toMatchObject({ width: 1200, height: 630, format: "png" });
     expect(plan.instructions.join("\n")).toContain("Generate or author");
-    expect(plan.instructions.join("\n")).toContain("GraphForge Studio");
+    expect(plan.instructions.join("\n")).toContain("OpenGraph Creator Studio");
     expect(plan.acceptanceCriteria).toContain("Final image is exactly 1200x630.");
     expect(JSON.stringify(plan)).not.toContain("OPENAI_API_KEY");
     expect(JSON.stringify(plan)).not.toContain("openai");
   });
 
-  it("keeps ai-image as a compatibility alias for the agent handoff path", () => {
+  it("keeps ai-image as an alias for the agent handoff path", () => {
     const project = createDefaultProject({ name: "Alias", strategy: "common" });
 
     const prompt = buildAiImagePrompt({ project });

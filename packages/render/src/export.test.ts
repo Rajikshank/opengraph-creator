@@ -3,12 +3,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
-import { createDefaultProject } from "@graphforge/core";
+import { createDefaultProject } from "@opengraph-creator/core";
 import { exportProject, renderProjectToSvg } from "./index";
 
-describe("GraphForge export pipeline", () => {
+describe("OpenGraph Creator export pipeline", () => {
   it("exports SVG and reports file metadata", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "graphforge-"));
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-"));
     const target = join(dir, "og.svg");
     const project = createDefaultProject({ name: "Export", strategy: "common" });
 
@@ -19,10 +19,17 @@ describe("GraphForge export pipeline", () => {
     expect(file).toContain("<svg");
     expect(result).toMatchObject({ format: "svg", width: 1200, height: 630, target });
     expect(result.fileSizeBytes).toBe(info.size);
+    expect(result.qualityReport).toMatchObject({
+      mimeType: "image/svg+xml",
+      width: 1200,
+      height: 630,
+      nonblank: true,
+      socialReady: true
+    });
   });
 
   it("exports an optimized PNG with correct OG dimensions", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "graphforge-"));
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-"));
     const target = join(dir, "og.png");
     const project = createDefaultProject({ name: "PNG Export", strategy: "common" });
 
@@ -32,10 +39,17 @@ describe("GraphForge export pipeline", () => {
     expect(result).toMatchObject({ format: "png", width: 1200, height: 630, target });
     expect(metadata).toMatchObject({ width: 1200, height: 630, format: "png" });
     expect(result.fileSizeBytes).toBeGreaterThan(1000);
+    expect(result.qualityReport).toMatchObject({
+      mimeType: "image/png",
+      width: 1200,
+      height: 630,
+      nonblank: true,
+      socialReady: true
+    });
   });
 
   it("exports WebP with a caller-provided quality setting", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "graphforge-"));
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-"));
     const target = join(dir, "og.webp");
     const project = createDefaultProject({ name: "WebP Export", strategy: "common" });
 
@@ -44,10 +58,11 @@ describe("GraphForge export pipeline", () => {
 
     expect(result).toMatchObject({ format: "webp", width: 1200, height: 630, target });
     expect(metadata).toMatchObject({ width: 1200, height: 630, format: "webp" });
+    expect(result.qualityReport).toMatchObject({ mimeType: "image/webp", nonblank: true, socialReady: true });
   });
 
   it("exports JPEG with the default OG compression settings", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "graphforge-"));
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-"));
     const target = join(dir, "og.jpg");
     const project = createDefaultProject({ name: "JPEG Export", strategy: "common" });
 
@@ -56,6 +71,7 @@ describe("GraphForge export pipeline", () => {
 
     expect(result).toMatchObject({ format: "jpg", width: 1200, height: 630, target });
     expect(metadata).toMatchObject({ width: 1200, height: 630, format: "jpeg" });
+    expect(result.qualityReport).toMatchObject({ mimeType: "image/jpeg", nonblank: true, socialReady: true });
   });
 
   it("renders image crop and focal point data into the SVG export source", () => {

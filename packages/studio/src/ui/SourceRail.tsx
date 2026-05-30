@@ -1,10 +1,13 @@
 import { useState, type ChangeEvent } from "react";
-import { FileCode2, Layers3, PanelLeftClose, Send, Upload } from "lucide-react";
-import { unpackStudioDocument, type GraphForgeSourceArtifact, type OgLayer, type OgProject, type SourceArtifactKind } from "@graphforge/core";
+import { FileCode2, PanelLeftClose, Send, Upload } from "lucide-react";
+import { unpackStudioDocument, type OpenGraphCreatorSourceArtifact, type OgLayer, type OgProject, type SourceArtifactKind } from "@opengraph-creator/core";
 import { createSessionAgentRequestViaApi, importSourceViaApi, saveSessionDocumentViaApi, uploadSessionAssetViaApi } from "../api";
 import { StudioSelect } from "../design-system/StudioSelect";
+import { StudioScrollArea } from "../design-system/StudioScrollArea";
 import { normalizeStudioError } from "../lib/studio-errors";
 import { notifyStudioError, notifyStudioSuccess, notifyStudioWarning } from "../lib/studio-toast";
+import { ConnectAgentPanel } from "./ConnectAgentPanel";
+import { PageVariantNavigator } from "./PageVariantNavigator";
 import { createManualProject, createProjectWithImportedAsset, useStudio } from "./studio-store";
 
 export function SourceRail({ onClose }: { onClose?: () => void }) {
@@ -13,11 +16,11 @@ export function SourceRail({ onClose }: { onClose?: () => void }) {
   const replaceProject = useStudio((state) => state.replaceProject);
   const attachSourceArtifact = useStudio((state) => state.attachSourceArtifact);
   const selectPageVariant = useStudio((state) => state.selectPageVariant);
-  const [source, setSource] = useState(".graphforge/sessions/<id>/document.ogdoc");
+  const [source, setSource] = useState(".opengraph-creator/sessions/<id>/document.ogdoc");
   const [kind, setKind] = useState<SourceArtifactKind>("svg");
   const [prompt, setPrompt] = useState("Revise the current OG document. Keep text and layout objects editable; use generated images, SVG, or HTML only as document asset layers.");
 
-  const attachArtifact = (artifact: GraphForgeSourceArtifact) => {
+  const attachArtifact = (artifact: OpenGraphCreatorSourceArtifact) => {
     if (artifact.inline && (artifact.kind === "svg" || artifact.kind === "image")) {
       replaceProject(createManualProject(artifact.path ?? "Imported OG Source", artifact));
       return;
@@ -77,13 +80,13 @@ export function SourceRail({ onClose }: { onClose?: () => void }) {
       }
       const loaded = String(result ?? "");
       const fileKind: SourceArtifactKind = file.name.endsWith(".json")
-        ? "graphforge-json"
+        ? "project-json"
         : file.type.includes("svg")
           ? "svg"
           : file.type.includes("html")
             ? "html"
             : "image";
-      if (fileKind === "graphforge-json") {
+      if (fileKind === "project-json") {
         try {
           replaceProject(JSON.parse(loaded));
           notifyStudioSuccess("Opened editable project JSON");
@@ -165,8 +168,9 @@ export function SourceRail({ onClose }: { onClose?: () => void }) {
   };
 
   return (
-    <aside className="studio-panel studio-panel-scroll source-rail">
-      <section className="studio-section">
+    <aside className="studio-panel source-rail">
+      <StudioScrollArea className="source-rail-body">
+        <section className="studio-section">
         <div className="source-rail-header">
           <h2 className="section-heading">
             <FileCode2 size={15} />
@@ -193,7 +197,7 @@ export function SourceRail({ onClose }: { onClose?: () => void }) {
           label="Source kind"
           value={kind}
           options={[
-            { value: "graphforge-json", label: "Project JSON" },
+            { value: "project-json", label: "Project JSON" },
             { value: "svg", label: "SVG" },
             { value: "html", label: "HTML" },
             { value: "image", label: "Image" }
@@ -204,34 +208,14 @@ export function SourceRail({ onClose }: { onClose?: () => void }) {
           <Upload size={15} /> Import into document
         </button>
         {project?.pages?.length ? (
-          <section className="og-pages-panel" aria-label="OG Pages">
-            <h3 className="section-heading">
-              <Layers3 size={14} />
-              <span>OG Pages</span>
-            </h3>
-            <div className="og-page-list">
-              {project.pages.map((page) => (
-                <button
-                  key={page.id}
-                  type="button"
-                  className={`og-page-row ${page.id === project.activePageId ? "active" : ""}`}
-                  onClick={() => selectPageVariant(page.id)}
-                >
-                  <span>
-                    <strong>{page.route}</strong>
-                    <small>{page.title}</small>
-                  </span>
-                  <em>{page.status}</em>
-                </button>
-              ))}
-            </div>
-            <button type="button" className="secondary-action" onClick={() => applyStyleToAllPages(project, replaceProject)}>
-              Apply style to all
-            </button>
-          </section>
+          <PageVariantNavigator
+            project={project}
+            onSelectPage={selectPageVariant}
+            onApplyStyleToAll={() => applyStyleToAllPages(project, replaceProject)}
+          />
         ) : null}
         {session ? (
-          <>
+          <div className="agent-revision-card">
             <label>
               Agent revision
               <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} />
@@ -239,13 +223,12 @@ export function SourceRail({ onClose }: { onClose?: () => void }) {
             <button type="button" className="secondary-action" onClick={requestAgentRevision}>
               <Send size={15} /> Request agent revision
             </button>
-          </>
+          </div>
         ) : (
-          <button type="button" className="secondary-action" disabled title="Open through an agent session to request revisions">
-            <Send size={15} /> Agent revision unavailable
-          </button>
+          <ConnectAgentPanel compact />
         )}
-      </section>
+        </section>
+      </StudioScrollArea>
     </aside>
   );
 }

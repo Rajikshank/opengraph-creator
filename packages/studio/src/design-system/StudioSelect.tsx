@@ -1,10 +1,12 @@
 import * as SelectPrimitive from "@radix-ui/react-select";
 import { Check, ChevronDown } from "lucide-react";
+import type { CSSProperties } from "react";
 
 export interface StudioSelectOption<T extends string> {
   value: T;
   label: string;
   disabled?: boolean;
+  previewStyle?: CSSProperties;
 }
 
 interface StudioSelectProps<T extends string> {
@@ -31,7 +33,9 @@ export function StudioSelect<T extends string>({ label, value, options, onValueC
             <SelectPrimitive.Viewport>
               {options.map((option) => (
                 <SelectPrimitive.Item key={option.value} value={option.value} disabled={option.disabled} className="studio-select-item">
-                  <SelectPrimitive.ItemText>{option.label}</SelectPrimitive.ItemText>
+                  <SelectPrimitive.ItemText>
+                    <span className="studio-select-option-label" style={option.previewStyle}>{option.label}</span>
+                  </SelectPrimitive.ItemText>
                   <SelectPrimitive.ItemIndicator>
                     <Check size={13} />
                   </SelectPrimitive.ItemIndicator>

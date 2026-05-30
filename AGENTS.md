@@ -1,10 +1,10 @@
-# GraphForge Agent Instructions
+# OpenGraph Creator Agent Instructions
 
 ## Product Truth
 
-GraphForge is an agent-first Open Graph finishing studio. Codex, Claude, or OpenCode generates OG source assets for the user's app. Studio imports those assets, edits them visually, previews platform crops, exports optimized OG images, and writes handoff files so the coding agent can wire the final image into the target app.
+OpenGraph Creator is an agent-first Open Graph finishing studio. Codex, Claude, or OpenCode generates OG source assets for the user's app. Studio imports those assets, edits them visually, previews platform crops, exports optimized OG images, and writes handoff files so the coding agent can wire the final image into the target app.
 
-GraphForge does not call AI image providers and must not require OpenAI, Anthropic, or other provider API keys.
+OpenGraph Creator does not call AI image providers and must not require OpenAI, Anthropic, or other provider API keys.
 
 The current working architecture is document-first. The primary editable source is the proprietary `.ogdoc` Studio document package, which stores the editable project JSON plus packaged assets and recovery metadata. Flat SVG, HTML, PNG, JPEG, and WebP files may be imported as assets or exported as final output, but they must not replace `.ogdoc` as the session master file unless the user explicitly chooses pure-image fallback.
 
@@ -26,16 +26,25 @@ Future fixes should preserve this path first. UI, canvas, effects, import, expor
 
 ## Required Workflow
 
-When working on GraphForge itself:
+When working on OpenGraph Creator itself:
 
 1. Preserve the `npx` install and launch path.
 2. Keep the v1 bridge file-based and fault tolerant.
 3. Prefer editable `.ogdoc` documents with separate layers over flat images when an agent can produce layers.
 4. Never replace target app metadata without preview and explicit user confirmation.
 5. Keep the Studio usable without an active agent session.
-6. Treat `.graphforge/sessions/<id>/` files as recovery state.
+6. Treat `.opengraph-creator/sessions/<id>/` files as recovery state.
 
-When the GraphForge Skill is invoked inside a user app:
+## Publishing And Distribution
+
+- Public skill distribution is through the skills ecosystem: `npx skills add -g <owner>/opengraph-creator --skill opengraph-creator -y`.
+- Runtime distribution is through the npm package `opengraph-creator`, invoked by the skill as `npx -y opengraph-creator@latest`.
+- Do not make normal users clone or build this repository to run Studio.
+- The fallback `opengraph-creator install-skill --agent codex|claude-code|opencode --scope global` command is for local development or recovery only; it is not the primary public setup path.
+- Skill updates use the skills CLI: `npx skills check` then `npx skills update`. Runtime updates use `npx -y opengraph-creator@latest`; verify both with `opengraph-creator doctor --json`.
+- The Export UI must not ask users to choose a framework. The coding agent detects framework during repo inspection and again before metadata wiring.
+
+When the OpenGraph Creator Skill is invoked inside a user app:
 
 1. Inspect the repo for framework, routes, brand assets, screenshots, copy, and existing OG metadata.
 2. Ask only relevant setup questions:
@@ -44,11 +53,11 @@ When the GraphForge Skill is invoked inside a user app:
    - desired visual tone
    - target pages
    - inspiration/reference images if useful
-3. Create a durable session with `graphforge session create`.
-4. Generate the editable master document at `.graphforge/sessions/<id>/document.ogdoc`; put supporting assets in `.graphforge/sessions/<id>/incoming/` or inside the document package.
-5. Validate the document with `graphforge document validate --source ".graphforge/sessions/<id>/document.ogdoc"`.
-6. Open Studio with `graphforge session launch --repo "<repo>" --id "<id>" --open true --waitReady true --json`.
-7. Wait for the next Studio decision with `graphforge session wait --repo "<repo>" --id "<id>" --until next-action --timeout 0`.
+3. Create a durable session with `opengraph-creator session create`.
+4. Generate the editable master document at `.opengraph-creator/sessions/<id>/document.ogdoc`; put supporting assets in `.opengraph-creator/sessions/<id>/incoming/` or inside the document package.
+5. Validate the document with `opengraph-creator document validate --source ".opengraph-creator/sessions/<id>/document.ogdoc"`.
+6. Open Studio with `opengraph-creator session launch --repo "<repo>" --id "<id>" --open true --waitReady true --json`.
+7. Wait for the next Studio decision with `opengraph-creator session wait --repo "<repo>" --id "<id>" --until next-action --timeout 0`.
 8. If the wait returns `agent-requested`, read `agent-request.json`, revise `document.ogdoc`, validate, relaunch Studio, and wait again. If it returns `published`, read confirmed `publish-request.json` and wire metadata. If it returns `cancelled` or `terminal`, stop without metadata mutation.
 9. Resume from `session.json`, `events.jsonl`, `document.ogdoc`, `export.json`, `publish-request.json`, and `agent-request.json` if interrupted.
 10. Publish only after preview and user confirmation.
@@ -93,13 +102,13 @@ Studio must support:
 - glow, shadow, blur, gradient, noise/grain, lighting, vignette, and blend mode
 - align, distribute, snap, duplicate, lock, hide, reorder, and delete
 
-Konva handles editing interactions. The GraphForge renderer remains the export source of truth, so every supported Studio edit must serialize and export correctly.
+Konva handles editing interactions. The OpenGraph Creator renderer remains the export source of truth, so every supported Studio edit must serialize and export correctly.
 
 ## Canvas, Preview, And Export Parity
 
-GraphForge has three visual surfaces: Studio canvas, platform preview, and export. Do not change one surface without proving the other two still reflect the same `.ogdoc` state.
+OpenGraph Creator has three visual surfaces: Studio canvas, platform preview, and export. Do not change one surface without proving the other two still reflect the same `.ogdoc` state.
 
-- Preview and export use the GraphForge SVG renderer as the source of truth.
+- Preview and export use the OpenGraph Creator SVG renderer as the source of truth.
 - Canvas uses Konva for interaction and must stay visually honest with the renderer.
 - Blur must use a real canvas filter with cache invalidation. Do not approximate blur with shadow props.
 - Glow, shadow, noise, lighting, and vignette must remain clipped to the intended layer or rendered asset bounds.
@@ -133,7 +142,7 @@ Before claiming completion, run and inspect:
 - `npm run smoke:agent-next-action`
 - `npm run smoke:package`
 - `npm run smoke:studio`
-- `npm pack -w @graphforge/cli --dry-run`
+- `npm pack -w opengraph-creator --dry-run`
 
 Also verify:
 

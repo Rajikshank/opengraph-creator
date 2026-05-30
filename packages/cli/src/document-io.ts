@@ -7,7 +7,7 @@ import {
   validateStudioDocument,
   type OgProject,
   type StudioDocumentPackage
-} from "@graphforge/core";
+} from "@opengraph-creator/core";
 
 export async function readStudioDocumentFile(path: string): Promise<StudioDocumentPackage> {
   return unpackStudioDocument(await readFile(path));

@@ -1,0 +1,3 @@
+display_name: OpenGraph Creator
+short_description: Generate editable .ogdoc Open Graph images with local agent-first Studio handoff.
+default_prompt: Create editable Open Graph images for this app with OpenGraph Creator.

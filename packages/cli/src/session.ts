@@ -5,14 +5,14 @@ import {
   type AgentKind,
   type ExportFormat,
   type Framework,
-  type GraphForgeAgentRequest,
+  type OpenGraphCreatorAgentRequest,
   type GenerationMode,
   type GenerationStrategy,
-  type GraphForgePublishRequest,
-  type GraphForgeSession,
-  type GraphForgeSessionEvent,
+  type OpenGraphCreatorPublishRequest,
+  type OpenGraphCreatorSession,
+  type OpenGraphCreatorSessionEvent,
   type OgProject
-} from "@graphforge/core";
+} from "@opengraph-creator/core";
 
 export interface SessionPaths {
   root: string;
@@ -67,7 +67,7 @@ export interface CreateAgentRequestInput {
 }
 
 export function getSessionPaths(repo: string, sessionId: string): SessionPaths {
-  const root = join(repo, ".graphforge", "sessions");
+  const root = join(repo, ".opengraph-creator", "sessions");
   const sessionDir = join(root, sessionId);
   return {
     root,
@@ -85,12 +85,12 @@ export function getSessionPaths(repo: string, sessionId: string): SessionPaths {
   };
 }
 
-export async function createGraphForgeSession(input: CreateSessionInput): Promise<GraphForgeSession> {
+export async function createOpenGraphCreatorSession(input: CreateSessionInput): Promise<OpenGraphCreatorSession> {
   const id = input.id ?? `gf-${Date.now().toString(36)}`;
   const paths = getSessionPaths(input.repo, id);
   const now = new Date().toISOString();
   const project = input.project;
-  const session: GraphForgeSession = {
+  const session: OpenGraphCreatorSession = {
     id,
     repo: input.repo,
     agent: input.agent ?? "unknown",
@@ -122,16 +122,16 @@ export async function createGraphForgeSession(input: CreateSessionInput): Promis
   return session;
 }
 
-export async function readGraphForgeSession(repo: string, sessionId: string): Promise<GraphForgeSession> {
+export async function readOpenGraphCreatorSession(repo: string, sessionId: string): Promise<OpenGraphCreatorSession> {
   const paths = getSessionPaths(repo, sessionId);
-  const session = JSON.parse(await readFile(paths.sessionJson, "utf8")) as GraphForgeSession;
+  const session = JSON.parse(await readFile(paths.sessionJson, "utf8")) as OpenGraphCreatorSession;
   if (isStale(session)) {
     return { ...session, status: "stale" };
   }
   return session;
 }
 
-export async function writeGraphForgeSession(session: GraphForgeSession): Promise<GraphForgeSession> {
+export async function writeOpenGraphCreatorSession(session: OpenGraphCreatorSession): Promise<OpenGraphCreatorSession> {
   const paths = getSessionPaths(session.repo, session.id);
   await mkdir(paths.sessionDir, { recursive: true });
   await atomicWriteJson(paths.sessionJson, session);
@@ -141,8 +141,8 @@ export async function writeGraphForgeSession(session: GraphForgeSession): Promis
 export async function appendSessionEvent(
   repo: string,
   sessionId: string,
-  event: Pick<GraphForgeSessionEvent, "type" | "message" | "data">
-): Promise<GraphForgeSessionEvent> {
+  event: Pick<OpenGraphCreatorSessionEvent, "type" | "message" | "data">
+): Promise<OpenGraphCreatorSessionEvent> {
   const paths = getSessionPaths(repo, sessionId);
   const next = createSessionEvent(sessionId, event.type, event.message, event.data);
   await mkdir(paths.sessionDir, { recursive: true });
@@ -154,10 +154,10 @@ export async function recordSessionExport(
   repo: string,
   sessionId: string,
   exportRecord: SessionExportRecord
-): Promise<GraphForgeSession> {
+): Promise<OpenGraphCreatorSession> {
   const paths = getSessionPaths(repo, sessionId);
-  const session = await readGraphForgeSession(repo, sessionId);
-  const next: GraphForgeSession = {
+  const session = await readOpenGraphCreatorSession(repo, sessionId);
+  const next: OpenGraphCreatorSession = {
     ...session,
     status: "exported",
     exports: [...session.exports, exportRecord],
@@ -168,7 +168,7 @@ export async function recordSessionExport(
     exports: [...session.exports, exportRecord],
     latest: exportRecord
   });
-  await writeGraphForgeSession(next);
+  await writeOpenGraphCreatorSession(next);
   await appendSessionEvent(repo, sessionId, {
     type: "session.exported",
     message: `Exported ${exportRecord.path}`,
@@ -177,10 +177,10 @@ export async function recordSessionExport(
   return next;
 }
 
-export async function createPublishRequest(input: CreatePublishRequestInput): Promise<GraphForgePublishRequest> {
+export async function createPublishRequest(input: CreatePublishRequestInput): Promise<OpenGraphCreatorPublishRequest> {
   const paths = getSessionPaths(input.repo, input.sessionId);
-  const session = await readGraphForgeSession(input.repo, input.sessionId);
-  const request: GraphForgePublishRequest = {
+  const session = await readOpenGraphCreatorSession(input.repo, input.sessionId);
+  const request: OpenGraphCreatorPublishRequest = {
     path: paths.publishRequestJson,
     imagePath: input.imagePath,
     pageImages: input.pageImages,
@@ -189,7 +189,7 @@ export async function createPublishRequest(input: CreatePublishRequestInput): Pr
     status: input.confirmed ? "confirmed" : "preview",
     createdAt: new Date().toISOString()
   };
-  const next: GraphForgeSession = {
+  const next: OpenGraphCreatorSession = {
     ...session,
     status: input.confirmed ? "published" : "publish-requested",
     publishRequests: [...session.publishRequests, request],
@@ -197,7 +197,7 @@ export async function createPublishRequest(input: CreatePublishRequestInput): Pr
     pendingAction: input.confirmed ? undefined : "agent-preview-metadata"
   };
   await atomicWriteJson(paths.publishRequestJson, request);
-  await writeGraphForgeSession(next);
+  await writeOpenGraphCreatorSession(next);
   await appendSessionEvent(input.repo, input.sessionId, {
     type: input.confirmed ? "session.publish.confirmed" : "session.publish.preview",
     message: input.confirmed ? "Publish confirmed" : "Publish preview requested",
@@ -206,10 +206,10 @@ export async function createPublishRequest(input: CreatePublishRequestInput): Pr
   return request;
 }
 
-export async function createAgentRequest(input: CreateAgentRequestInput): Promise<GraphForgeAgentRequest> {
+export async function createAgentRequest(input: CreateAgentRequestInput): Promise<OpenGraphCreatorAgentRequest> {
   const paths = getSessionPaths(input.repo, input.sessionId);
-  const session = await readGraphForgeSession(input.repo, input.sessionId);
-  const request: GraphForgeAgentRequest = {
+  const session = await readOpenGraphCreatorSession(input.repo, input.sessionId);
+  const request: OpenGraphCreatorAgentRequest = {
     path: paths.agentRequestJson,
     prompt: input.prompt,
     documentPath: input.documentPath,
@@ -217,7 +217,7 @@ export async function createAgentRequest(input: CreateAgentRequestInput): Promis
     status: "requested",
     createdAt: new Date().toISOString()
   };
-  const next: GraphForgeSession = {
+  const next: OpenGraphCreatorSession = {
     ...session,
     status: "agent-requested",
     agentRequests: [...(session.agentRequests ?? []), request],
@@ -225,7 +225,7 @@ export async function createAgentRequest(input: CreateAgentRequestInput): Promis
     pendingAction: "agent-revise-document"
   };
   await atomicWriteJson(paths.agentRequestJson, request);
-  await writeGraphForgeSession(next);
+  await writeOpenGraphCreatorSession(next);
   await appendSessionEvent(input.repo, input.sessionId, {
     type: "agent.requested",
     message: "Agent revision requested",
@@ -234,15 +234,15 @@ export async function createAgentRequest(input: CreateAgentRequestInput): Promis
   return request;
 }
 
-export async function cancelGraphForgeSession(repo: string, sessionId: string, reason: string): Promise<GraphForgeSession> {
-  const session = await readGraphForgeSession(repo, sessionId);
-  const next: GraphForgeSession = {
+export async function cancelOpenGraphCreatorSession(repo: string, sessionId: string, reason: string): Promise<OpenGraphCreatorSession> {
+  const session = await readOpenGraphCreatorSession(repo, sessionId);
+  const next: OpenGraphCreatorSession = {
     ...session,
     status: "cancelled",
     lastHeartbeatAt: new Date().toISOString(),
     pendingAction: undefined
   };
-  await writeGraphForgeSession(next);
+  await writeOpenGraphCreatorSession(next);
   await appendSessionEvent(repo, sessionId, {
     type: "session.cancelled",
     message: reason
@@ -250,13 +250,13 @@ export async function cancelGraphForgeSession(repo: string, sessionId: string, r
   return next;
 }
 
-export async function restartGraphForgeSession(
+export async function restartOpenGraphCreatorSession(
   repo: string,
   sessionId: string,
   reason = "User requested a fresh OG generation"
-): Promise<GraphForgeSession> {
+): Promise<OpenGraphCreatorSession> {
   const paths = getSessionPaths(repo, sessionId);
-  const session = await readGraphForgeSession(repo, sessionId);
+  const session = await readOpenGraphCreatorSession(repo, sessionId);
   const archiveDir = join(paths.restartsDir, new Date().toISOString().replace(/[:.]/g, "-"));
   await mkdir(archiveDir, { recursive: true });
   await archiveSessionFile(paths.documentFile, join(archiveDir, "document.ogdoc"), { removeOriginal: true });
@@ -265,16 +265,16 @@ export async function restartGraphForgeSession(
   await archiveSessionFile(paths.agentRequestJson, join(archiveDir, "agent-request.json"), { removeOriginal: false });
   await archiveSessionFile(paths.generationBriefJson, join(archiveDir, "generation-brief.json"), { removeOriginal: true });
 
-  const request: GraphForgeAgentRequest = {
+  const request: OpenGraphCreatorAgentRequest = {
     path: paths.agentRequestJson,
     prompt:
-      "Restart OG generation from the Question Gate while keeping this session alive. Ask fresh coverage, visual build style, asset permission, visual direction, reference, route, and export questions before creating a new document. Generate a fresh editable .ogdoc master; use generated image/SVG/HTML only as editable document assets, and keep headline/subtitle/badge/route text editable. Validate, relaunch Studio, then wait again with graphforge session wait --until next-action --timeout 0. Do not reuse the previous visual brief unless the user explicitly chooses to keep it.",
+      "Restart OG generation from the Question Gate while keeping this session alive. Ask fresh coverage, visual build style, asset permission, visual direction, reference, route, and export questions before creating a new document. Generate a fresh editable .ogdoc master; use generated image/SVG/HTML only as editable document assets, and keep headline/subtitle/badge/route text editable. Validate, relaunch Studio, then wait again with opengraph-creator session wait --until next-action --timeout 0. Do not reuse the previous visual brief unless the user explicitly chooses to keep it.",
     documentPath: paths.documentFile,
     expectedOutput: paths.documentFile,
     status: "requested",
     createdAt: new Date().toISOString()
   };
-  const next: GraphForgeSession = {
+  const next: OpenGraphCreatorSession = {
     ...session,
     status: "agent-requested",
     activeProjectId: undefined,
@@ -287,13 +287,13 @@ export async function restartGraphForgeSession(
     recoverInstructions: [
       `Read ${paths.sessionJson}.`,
       `Review restart archive ${archiveDir} only if the user asks to recover old work.`,
-      "Ask the GraphForge Question Gate setup questions again; restart is not terminal.",
+      "Ask the OpenGraph Creator Question Gate setup questions again; restart is not terminal.",
       `Generate a fresh editable .ogdoc master at ${paths.documentFile}; keep text and key layout layers editable.`,
-      "Validate, launch Studio, and run graphforge session wait --until next-action --timeout 0 again."
+      "Validate, launch Studio, and run opengraph-creator session wait --until next-action --timeout 0 again."
     ]
   };
   await atomicWriteJson(paths.agentRequestJson, request);
-  await writeGraphForgeSession(next);
+  await writeOpenGraphCreatorSession(next);
   await appendSessionEvent(repo, sessionId, {
     type: "session.restart.requested",
     message: reason,
@@ -314,7 +314,7 @@ function createSessionEvent(
   type: string,
   message?: string,
   data?: Record<string, unknown>
-): GraphForgeSessionEvent {
+): OpenGraphCreatorSessionEvent {
   return {
     id: `evt-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
     sessionId,
@@ -325,7 +325,7 @@ function createSessionEvent(
   };
 }
 
-function isStale(session: GraphForgeSession): boolean {
+function isStale(session: OpenGraphCreatorSession): boolean {
   const last = Date.parse(session.lastHeartbeatAt);
   if (!Number.isFinite(last)) return true;
   return Date.now() - last > 30 * 60 * 1000;

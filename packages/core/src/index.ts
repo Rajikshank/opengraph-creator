@@ -3,7 +3,7 @@ export type GenerationMode = "template" | "pure-image";
 export type ExportFormat = "png" | "webp" | "jpg" | "svg";
 export type Framework = "next" | "astro" | "nuxt" | "remix" | "vite" | "html" | "unknown";
 export type LayerKind = "background" | "text" | "image" | "logo" | "screenshot" | "shape" | "badge" | "group";
-export type SourceArtifactKind = "graphforge-json" | "svg" | "html" | "image";
+export type SourceArtifactKind = "project-json" | "svg" | "html" | "image";
 export type SourceArtifactOrigin = "codex" | "claude" | "manual" | "library";
 export type AgentKind = "codex" | "claude" | "opencode" | "manual" | "unknown";
 export type SessionStatus =
@@ -22,7 +22,7 @@ export type EffectName = "gradient" | "noise" | "lighting" | "vignette" | "blur"
 
 export * from "./document-package.js";
 
-export interface GraphForgeSourceArtifact {
+export interface OpenGraphCreatorSourceArtifact {
   kind: SourceArtifactKind;
   origin: SourceArtifactOrigin;
   path?: string;
@@ -87,6 +87,73 @@ export interface LayerEffects {
 
 export function getNoiseDisplayOpacity(amount: number): number {
   return Math.min(0.56, Math.max(0.05, amount * 3.2));
+}
+
+export interface CanvasShadowVisual {
+  color: string;
+  blur: number;
+  opacity: number;
+  offsetX: number;
+  offsetY: number;
+}
+
+export interface SvgShadowVisual {
+  color: string;
+  stdDeviation: number;
+  floodOpacity: number;
+  dx: number;
+  dy: number;
+}
+
+const shadowVisual = {
+  color: "#020617",
+  blur: 18,
+  opacity: 0.34,
+  offsetX: 0,
+  offsetY: 18
+} as const;
+
+export function hasComposedLayerEffect(effects: LayerEffects): boolean {
+  return Boolean(effects.shadow || isGlowEffectEnabled(effects.glow) || Math.max(0, effects.blur ?? 0) > 0);
+}
+
+export function getCanvasShadowVisual(effects: LayerEffects, fallbackColor: string): CanvasShadowVisual {
+  const glow = normalizeGlowEffect(effects.glow, fallbackColor);
+  if (isGlowEffectEnabled(effects.glow)) {
+    return {
+      color: glow.color ?? fallbackColor,
+      blur: glow.radius,
+      opacity: glow.intensity,
+      offsetX: 0,
+      offsetY: effects.shadow ? shadowVisual.offsetY : 0
+    };
+  }
+  return {
+    color: shadowVisual.color,
+    blur: effects.shadow ? shadowVisual.blur : 0,
+    opacity: effects.shadow ? shadowVisual.opacity : 0,
+    offsetX: shadowVisual.offsetX,
+    offsetY: effects.shadow ? shadowVisual.offsetY : 0
+  };
+}
+
+export function getSvgShadowVisual(effects: LayerEffects, fallbackColor: string): SvgShadowVisual {
+  const canvas = getCanvasShadowVisual(effects, fallbackColor);
+  return {
+    color: canvas.color,
+    stdDeviation: canvas.blur,
+    floodOpacity: canvas.opacity,
+    dx: canvas.offsetX,
+    dy: canvas.offsetY
+  };
+}
+
+export function getCanvasEffectCachePadding(effects: LayerEffects, fallbackColor = "#d9a441"): number {
+  const blur = Math.max(0, effects.blur ?? 0);
+  const shadow = getCanvasShadowVisual(effects, fallbackColor);
+  const glow = normalizeGlowEffect(effects.glow, fallbackColor);
+  const glowSpread = isGlowEffectEnabled(effects.glow) ? glow.radius + (glow.spread ?? 0) : 0;
+  return Math.ceil(Math.max(blur * 3, shadow.blur * 2 + Math.abs(shadow.offsetY), glowSpread * 2, 0) + 8);
 }
 
 export function getLayerEffectCapabilities(kind: LayerKind): Record<EffectName, EffectCapability> {
@@ -217,7 +284,7 @@ export interface OgProject {
     surface: string;
     text: string;
   };
-  sourceArtifacts: GraphForgeSourceArtifact[];
+  sourceArtifacts: OpenGraphCreatorSourceArtifact[];
   layers: OgLayer[];
   activePageId?: string;
   pages?: OgPageVariant[];
@@ -241,7 +308,7 @@ export interface OgPageVariant {
   sourceContext: OgPageSourceContext;
 }
 
-export interface GraphForgeSessionExport {
+export interface OpenGraphCreatorSessionExport {
   path: string;
   format: ExportFormat;
   width: number;
@@ -251,7 +318,7 @@ export interface GraphForgeSessionExport {
   createdAt: string;
 }
 
-export interface GraphForgePublishRequest {
+export interface OpenGraphCreatorPublishRequest {
   path: string;
   imagePath: string;
   pageImages?: Array<{ page: string; imagePath: string }>;
@@ -261,7 +328,7 @@ export interface GraphForgePublishRequest {
   createdAt: string;
 }
 
-export interface GraphForgeAgentRequest {
+export interface OpenGraphCreatorAgentRequest {
   path: string;
   prompt: string;
   documentPath: string;
@@ -270,7 +337,7 @@ export interface GraphForgeAgentRequest {
   createdAt: string;
 }
 
-export interface GraphForgeSession {
+export interface OpenGraphCreatorSession {
   id: string;
   repo: string;
   agent: AgentKind;
@@ -279,16 +346,16 @@ export interface GraphForgeSession {
   status: SessionStatus;
   activeProjectId?: string;
   activeDocumentPath?: string;
-  incomingArtifacts: GraphForgeSourceArtifact[];
-  exports: GraphForgeSessionExport[];
-  publishRequests: GraphForgePublishRequest[];
-  agentRequests?: GraphForgeAgentRequest[];
+  incomingArtifacts: OpenGraphCreatorSourceArtifact[];
+  exports: OpenGraphCreatorSessionExport[];
+  publishRequests: OpenGraphCreatorPublishRequest[];
+  agentRequests?: OpenGraphCreatorAgentRequest[];
   lastHeartbeatAt: string;
   pendingAction?: string;
   recoverInstructions: string[];
 }
 
-export interface GraphForgeSessionEvent {
+export interface OpenGraphCreatorSessionEvent {
   id: string;
   sessionId: string;
   type: string;
@@ -305,7 +372,7 @@ export interface CreateProjectInput {
   pages?: string[];
   title?: string;
   subtitle?: string;
-  sourceArtifacts?: GraphForgeSourceArtifact[];
+  sourceArtifacts?: OpenGraphCreatorSourceArtifact[];
 }
 
 export type ProjectPreset =
@@ -387,7 +454,7 @@ export function createDefaultProject(input: CreateProjectInput): OgProject {
         opacity: 1,
         locked: false,
         hidden: false,
-        src: "graphforge://logo-placeholder",
+        src: "ogcreator://logo-placeholder",
         fit: "contain",
         borderRadius: 10,
         effects: { shadow: false, glow: false, blur: 0 }
@@ -540,7 +607,7 @@ export function createProjectFromPreset(input: CreatePresetProjectInput): OgProj
           opacity: 1,
           locked: false,
           hidden: false,
-          src: "graphforge://image-placeholder",
+          src: "ogcreator://image-placeholder",
           fit: "cover",
           borderRadius: 6,
           effects: { shadow: false, glow: false, blur: 0 }
@@ -580,7 +647,7 @@ export function createProjectFromPreset(input: CreatePresetProjectInput): OgProj
           opacity: 1,
           locked: false,
           hidden: false,
-          src: "graphforge://image-placeholder",
+          src: "ogcreator://image-placeholder",
           fit: "cover",
           borderRadius: 8,
           effects: { shadow: true, glow: false, blur: 0 }

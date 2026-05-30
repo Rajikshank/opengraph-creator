@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createDefaultProject } from "@graphforge/core";
+import { createDefaultProject } from "@opengraph-creator/core";
 import { getPlatformPreviewCards, getPlatformPreviewSpecs } from "./platforms";
 
 describe("platform previews", () => {

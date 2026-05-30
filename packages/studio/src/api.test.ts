@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createDefaultProject } from "@graphforge/core";
+import { createDefaultProject } from "@opengraph-creator/core";
 import {
   appendSessionEventViaApi,
   createAgentHandoffViaApi,
@@ -89,7 +89,7 @@ describe("studio API client", () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
-          path: ".graphforge/agent.json",
+          path: ".opengraph-creator/agent.json",
           plan: { mode: "agent-handoff", output: "public/og-agent.png", prompt: "Codex, Claude, or OpenCode" }
         })
       )
@@ -124,7 +124,7 @@ describe("studio API client", () => {
     );
 
     const result = await importSourceViaApi(fetchMock, {
-      source: ".graphforge/generated/og.svg",
+      source: ".opengraph-creator/generated/og.svg",
       kind: "svg",
       name: "Imported API",
       origin: "codex"
@@ -135,7 +135,7 @@ describe("studio API client", () => {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        source: ".graphforge/generated/og.svg",
+        source: ".opengraph-creator/generated/og.svg",
         kind: "svg",
         name: "Imported API",
         origin: "codex"
@@ -232,16 +232,16 @@ describe("studio API client", () => {
       new Response(
         JSON.stringify({
           repo: "D:/app",
-          command: "graphforge session create --repo \"D:/app\" --agent codex --strategy hybrid --mode template",
-          prompt: "Use the GraphForge skill and wait with next-action.",
-          sessionRoot: "D:/app/.graphforge/sessions"
+          command: "opengraph-creator session create --repo \"D:/app\" --agent codex --strategy hybrid --mode template",
+          prompt: "Use the OpenGraph Creator skill and wait with next-action.",
+          sessionRoot: "D:/app/.opengraph-creator/sessions"
         })
       )
     );
 
     await expect(readConnectRecipeViaApi(fetchMock, "D:/app")).resolves.toMatchObject({
       repo: "D:/app",
-      sessionRoot: "D:/app/.graphforge/sessions"
+      sessionRoot: "D:/app/.opengraph-creator/sessions"
     });
     expect(fetchMock).toHaveBeenCalledWith("/api/connect-recipe?repo=D%3A%2Fapp", undefined);
   });
@@ -275,7 +275,7 @@ describe("studio API client", () => {
     );
 
     await expect(listProjectsViaApi(htmlFallbackFetch)).rejects.toThrow(
-      "Could not list projects: Local Studio API returned HTML instead of JSON. Launch Studio through graphforge studio, not the frontend-only dev server."
+      "Could not list projects: Local Studio API returned HTML instead of JSON. Launch Studio through opengraph-creator studio, not the frontend-only dev server."
     );
   });
 });

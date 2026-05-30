@@ -18,7 +18,7 @@ const wideSvgPath = join(artifactsDir, "wide-image.svg");
 await mkdir(artifactsDir, { recursive: true });
 await writeFile(transparentPngPath, createTransparentPng());
 await writeFile(wideSvgPath, '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200"><rect width="400" height="200" fill="#f8f0d8"/><circle cx="300" cy="100" r="54" fill="#b87927"/><rect x="36" y="54" width="180" height="90" rx="14" fill="#171918"/></svg>');
-const homeDir = await mkdtemp(join(tmpdir(), "graphforge-studio-home-"));
+const homeDir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-studio-home-"));
 
 const port = await getFreePort();
 const server = spawn(process.execPath, ["packages/cli/dist/index.js", "studio", "--port", String(port), "--home", homeDir], {
@@ -70,7 +70,7 @@ try {
 async function verifyStudioViewport(page, url, viewport, screenshotPath, options) {
   await page.setViewportSize(viewport);
   await page.goto(url, { waitUntil: "networkidle" });
-  await page.getByText("Ogloom").first().waitFor({ timeout: 10_000 });
+  await page.getByText("OpenGraph Creator").first().waitFor({ timeout: 10_000 });
   await page.getByText("No active agent session").waitFor({ timeout: 5_000 });
   await page.getByRole("button", { name: /Open .ogdoc/i }).waitFor({ timeout: 5_000 });
   await page.getByRole("button", { name: /Start manual draft/i }).click();
@@ -104,7 +104,7 @@ async function verifyStudioViewport(page, url, viewport, screenshotPath, options
     }, "source rail hide/open");
     await page.getByRole("button", { name: /^Save$/ }).click();
     await page.getByText(/Saved /).waitFor({ timeout: 5_000 });
-    await assertGraphForgeToast(page);
+    await assertOpenGraphCreatorToast(page);
     await assertManualStudioHasNoSessionAgentRequest(page);
 
     await page.getByRole("tab", { name: /Layers/i }).click();
@@ -149,10 +149,10 @@ async function verifyStudioViewport(page, url, viewport, screenshotPath, options
     await setRangeValue(page, "Glow intensity", "0.75");
     await setRangeValue(page, "Glow radius", "36");
     await page.getByRole("tab", { name: /Export/i }).click();
-    await page.getByRole("button", { name: /Export OG image/i }).click();
+    await page.getByRole("button", { name: /Export images/i }).click();
     await page.getByText(/Exported /).waitFor({ timeout: 10_000 });
-    await page.getByRole("button", { name: /Ask agent to wire exports/i }).click();
-    await page.getByText(/Ask agent to wire exports:/).waitFor({ timeout: 10_000 });
+    await page.getByRole("button", { name: /Publish with agent/i }).click();
+    await page.getByText(/Agent publish handoff saved:/).waitFor({ timeout: 10_000 });
   }
 
   await page.waitForTimeout(3_500);
@@ -224,6 +224,15 @@ async function exerciseLiveEffectsOnBackground(page) {
   }
   await assertPlatformPreviewHasLayerBlur(page, "background");
   await setRangeValue(page, "Blur", "0");
+  await page.waitForTimeout(160);
+  const shadowBefore = await readCanvasFingerprint(page);
+  await page.getByRole("switch", { name: "Shadow" }).click();
+  await page.waitForTimeout(220);
+  const shadowAfter = await readCanvasFingerprint(page);
+  if (shadowBefore === shadowAfter) {
+    throw new Error("Shadow effect did not update the editing canvas fingerprint in real time.");
+  }
+  await assertPlatformPreviewHasLayerShadow(page, "background");
 }
 
 async function assertSingleCanvasAddToolbar(page) {
@@ -275,6 +284,26 @@ async function assertPlatformPreviewHasLayerBlur(page, layerId) {
   }, layerId);
   if (!previewState.hasBlur || !previewState.hasFilter) {
     throw new Error(`Platform preview is missing current blur filter: ${JSON.stringify(previewState)}`);
+  }
+  await page.getByRole("radio", { name: /^Canvas$/i }).click();
+  await page.locator("canvas").waitFor({ timeout: 5_000 });
+}
+
+async function assertPlatformPreviewHasLayerShadow(page, layerId) {
+  await page.getByRole("radio", { name: /Platform Preview/i }).click();
+  await page.locator(".preview-image-large svg").waitFor({ timeout: 5_000 });
+  const previewState = await page.evaluate((id) => {
+    const svg = document.querySelector(".preview-image-large svg");
+    if (!svg) throw new Error("Platform preview SVG missing.");
+    const markup = svg.outerHTML;
+    return {
+      hasShadow: markup.includes(`gf-shadow-${id}`),
+      hasFilter: markup.includes(`gf-filter-${id}`),
+      hasSharedOpacity: markup.includes('flood-opacity="0.34"')
+    };
+  }, layerId);
+  if (!previewState.hasShadow || !previewState.hasFilter || !previewState.hasSharedOpacity) {
+    throw new Error(`Platform preview is missing current shadow filter: ${JSON.stringify(previewState)}`);
   }
   await page.getByRole("radio", { name: /^Canvas$/i }).click();
   await page.locator("canvas").waitFor({ timeout: 5_000 });
@@ -451,10 +480,10 @@ async function assertSourceToggleInToolbar(page) {
   }
 }
 
-async function assertGraphForgeToast(page) {
+async function assertOpenGraphCreatorToast(page) {
   const styles = await page.evaluate(() => {
-    const toast = document.querySelector(".graphforge-toast");
-    if (!toast) throw new Error("GraphForge toast was not rendered with the owned toast class.");
+    const toast = document.querySelector(".opengraph-creator-toast");
+    if (!toast) throw new Error("OpenGraph Creator toast was not rendered with the owned toast class.");
     const computed = getComputedStyle(toast);
     return {
       borderRadius: computed.borderRadius,
@@ -464,15 +493,17 @@ async function assertGraphForgeToast(page) {
     };
   });
   if (styles.borderRadius === "0px" || styles.boxShadow === "none") {
-    throw new Error(`GraphForge toast still looks like an unstyled default toast: ${JSON.stringify(styles)}`);
+    throw new Error(`OpenGraph Creator toast still looks like an unstyled default toast: ${JSON.stringify(styles)}`);
   }
 }
 
 async function assertManualStudioHasNoSessionAgentRequest(page) {
-  const button = page.getByRole("button", { name: /Agent revision unavailable/i });
-  await button.waitFor({ timeout: 5_000 });
-  if (await button.isEnabled()) {
-    throw new Error("Manual Studio mode should not expose a live session-scoped agent request.");
+  await page.getByText("Agent connection").waitFor({ timeout: 5_000 });
+  const recipeButton = page.getByRole("button", { name: /Get connection recipe/i });
+  await recipeButton.waitFor({ timeout: 5_000 });
+  const revisionButtons = await page.getByRole("button", { name: /Request agent revision/i }).count();
+  if (revisionButtons > 0) {
+    throw new Error("Manual Studio mode should not expose a live session-scoped agent revision request.");
   }
 }
 

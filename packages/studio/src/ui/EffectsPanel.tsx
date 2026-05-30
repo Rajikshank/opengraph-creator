@@ -1,5 +1,5 @@
 import { Lightbulb } from "lucide-react";
-import { getLayerEffectCapabilities, normalizeGlowEffect, type GlowEffect, type GradientEffect, type GradientStop, type NoiseEffect } from "@graphforge/core";
+import { getLayerEffectCapabilities, normalizeGlowEffect, type GlowEffect, type GradientEffect, type GradientStop, type NoiseEffect } from "@opengraph-creator/core";
 import { StudioField } from "../design-system/StudioField";
 import { StudioSelect } from "../design-system/StudioSelect";
 import { StudioSlider } from "../design-system/StudioSlider";

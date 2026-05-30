@@ -4,16 +4,16 @@ import {
   createAssetPath,
   createDefaultProject,
   type StudioDocumentPackage,
-  type GraphForgeSourceArtifact,
+  type OpenGraphCreatorSourceArtifact,
   type OgProject,
   type SourceArtifactKind,
   type SourceArtifactOrigin
-} from "@graphforge/core";
+} from "@opengraph-creator/core";
 
 export interface CreateImportedSourceProjectInput {
   name: string;
   source: string;
-  kind: Exclude<SourceArtifactKind, "graphforge-json">;
+  kind: Exclude<SourceArtifactKind, "project-json">;
   origin: SourceArtifactOrigin;
   createdAt: string;
 }
@@ -23,7 +23,7 @@ export interface CreateImportedSourceDocumentInput extends CreateImportedSourceP
 }
 
 export async function createImportedSourceProject(input: CreateImportedSourceProjectInput): Promise<OgProject> {
-  const sourceArtifact: GraphForgeSourceArtifact = {
+  const sourceArtifact: OpenGraphCreatorSourceArtifact = {
     kind: input.kind,
     origin: input.origin,
     path: input.source,
@@ -53,7 +53,7 @@ export async function createImportedSourceProject(input: CreateImportedSourcePro
           opacity: 1,
           locked: false,
           hidden: false,
-          src: "graphforge://html-source",
+          src: "ogcreator://html-source",
           fit: "contain" as const,
           borderRadius: 8,
           effects: { shadow: true, glow: false, blur: 0 }
@@ -105,7 +105,7 @@ export async function createImportedSourceProject(input: CreateImportedSourcePro
 export async function createImportedSourceDocument(input: CreateImportedSourceDocumentInput): Promise<StudioDocumentPackage> {
   const assetBytes = await readFile(input.source);
   const assetPath = input.assetPath ?? createAssetPath(input.source);
-  const sourceArtifact: GraphForgeSourceArtifact = {
+  const sourceArtifact: OpenGraphCreatorSourceArtifact = {
     kind: input.kind,
     origin: input.origin,
     path: assetPath,

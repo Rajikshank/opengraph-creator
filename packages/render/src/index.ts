@@ -1,4 +1,4 @@
-import { getRenderableProject, type ExportFormat, type OgProject } from "@graphforge/core";
+import { getRenderableProject, type ExportFormat, type OgProject } from "@opengraph-creator/core";
 import { renderProjectToSvg } from "./browser.js";
 
 export { renderProjectToSvg } from "./browser.js";
@@ -15,7 +15,24 @@ export interface ExportResult {
   height: number;
   target: string;
   fileSizeBytes: number;
+  qualityReport: ExportQualityReport;
 }
+
+export interface ExportQualityReport {
+  format: ExportFormat;
+  mimeType: "image/png" | "image/jpeg" | "image/webp" | "image/svg+xml";
+  width: number;
+  height: number;
+  fileSizeBytes: number;
+  nonblank: boolean;
+  socialReady: boolean;
+  warnings: string[];
+}
+
+type SharpQualityReader = (input: string | Buffer) => {
+  metadata(): Promise<{ width?: number; height?: number }>;
+  stats(): Promise<{ channels: Array<{ stdev: number }> }>;
+};
 
 export async function exportProject(project: OgProject, options: ExportOptions): Promise<ExportResult> {
   const [{ mkdir, stat, writeFile }, { dirname }, sharpModule] = await Promise.all([
@@ -39,12 +56,69 @@ export async function exportProject(project: OgProject, options: ExportOptions):
   }
 
   const info = await stat(options.target);
+  const qualityReport = await createExportQualityReport({
+    sharp,
+    target: options.target,
+    format: options.format,
+    width: renderableProject.canvas.width,
+    height: renderableProject.canvas.height,
+    fileSizeBytes: info.size,
+    svg
+  });
 
   return {
     format: options.format,
     width: renderableProject.canvas.width,
     height: renderableProject.canvas.height,
     target: options.target,
-    fileSizeBytes: info.size
+    fileSizeBytes: info.size,
+    qualityReport
   };
+}
+
+async function createExportQualityReport(input: {
+  sharp: SharpQualityReader;
+  target: string;
+  format: ExportFormat;
+  width: number;
+  height: number;
+  fileSizeBytes: number;
+  svg: string;
+}): Promise<ExportQualityReport> {
+  const mimeType = getMimeType(input.format);
+  const warnings: string[] = [];
+  let width = input.width;
+  let height = input.height;
+  let nonblank = input.svg.includes("<svg") && input.svg.length > 100;
+
+  if (input.format !== "svg") {
+    const metadata = await input.sharp(input.target).metadata();
+    const stats = await input.sharp(input.target).stats();
+    width = metadata.width ?? width;
+    height = metadata.height ?? height;
+    nonblank = stats.channels.some((channel) => channel.stdev > 0.5);
+  }
+
+  if (width !== 1200 || height !== 630) warnings.push(`Expected 1200x630 OG output, got ${width}x${height}.`);
+  if (!nonblank) warnings.push("Export appears blank.");
+  if (input.fileSizeBytes > 5_000_000) warnings.push("Export is larger than 5 MB.");
+  if (input.fileSizeBytes > 1_000_000) warnings.push("Export is above the recommended 1 MB social preview budget.");
+
+  return {
+    format: input.format,
+    mimeType,
+    width,
+    height,
+    fileSizeBytes: input.fileSizeBytes,
+    nonblank,
+    socialReady: width === 1200 && height === 630 && nonblank && input.fileSizeBytes <= 5_000_000,
+    warnings
+  };
+}
+
+function getMimeType(format: ExportFormat): ExportQualityReport["mimeType"] {
+  if (format === "jpg") return "image/jpeg";
+  if (format === "webp") return "image/webp";
+  if (format === "svg") return "image/svg+xml";
+  return "image/png";
 }

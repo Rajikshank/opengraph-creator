@@ -2,7 +2,7 @@ import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { createDefaultProject } from "@graphforge/core";
+import { createDefaultProject } from "@opengraph-creator/core";
 import {
   createLibrary,
   exportLibraryProject,
@@ -11,9 +11,9 @@ import {
   saveLibraryProject
 } from "./library";
 
-describe("GraphForge global library", () => {
+describe("OpenGraphCreator global library", () => {
   it("saves, lists, and reads editable projects from a local library", async () => {
-    const root = await mkdtemp(join(tmpdir(), "graphforge-library-"));
+    const root = await mkdtemp(join(tmpdir(), "OpenGraphCreator-library-"));
     const library = createLibrary({ root });
     const project = createDefaultProject({ name: "Library Project", strategy: "hybrid" });
 
@@ -33,7 +33,7 @@ describe("GraphForge global library", () => {
   });
 
   it("exports a library project to the requested target", async () => {
-    const root = await mkdtemp(join(tmpdir(), "graphforge-library-"));
+    const root = await mkdtemp(join(tmpdir(), "OpenGraphCreator-library-"));
     const library = createLibrary({ root });
     const project = createDefaultProject({ name: "Export Library", strategy: "common" });
     await saveLibraryProject(library, project);
@@ -50,7 +50,7 @@ describe("GraphForge global library", () => {
   });
 
   it("resolves relative export targets inside a session repo", async () => {
-    const root = await mkdtemp(join(tmpdir(), "graphforge-library-repo-export-"));
+    const root = await mkdtemp(join(tmpdir(), "OpenGraphCreator-library-repo-export-"));
     const library = createLibrary({ root: join(root, "library") });
     const repo = join(root, "user-app");
     const project = createDefaultProject({ name: "Repo Export", strategy: "common" });

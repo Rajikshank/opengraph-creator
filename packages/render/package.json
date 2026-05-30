@@ -1,5 +1,5 @@
 {
-  "name": "@graphforge/render",
+  "name": "@opengraph-creator/render",
   "version": "0.0.0",
   "type": "module",
   "main": "dist/index.js",
@@ -21,7 +21,7 @@
     "build": "tsc -p tsconfig.json --outDir dist --declaration --emitDeclarationOnly false"
   },
   "dependencies": {
-    "@graphforge/core": "0.0.0",
+    "@opengraph-creator/core": "0.0.0",
     "sharp": "^0.33.5"
   }
 }

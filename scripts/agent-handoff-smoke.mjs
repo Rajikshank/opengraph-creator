@@ -5,13 +5,13 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
-const workspace = await mkdtemp(join(tmpdir(), "graphforge-agent-handoff-"));
+const workspace = await mkdtemp(join(tmpdir(), "OpenGraphCreator-agent-handoff-"));
 const projectPath = join(workspace, "agent.og.json");
 const planPath = join(workspace, "agent-handoff.json");
 const cli = ["packages/cli/dist/index.js"];
 
 await mkdir(workspace, { recursive: true });
-await runGraphForge([
+await runOpenGraphCreator([
   "new",
   "--name",
   "Agent Handoff Smoke",
@@ -26,7 +26,7 @@ await runGraphForge([
   "--out",
   projectPath
 ]);
-await runGraphForge([
+await runOpenGraphCreator([
   "agent-handoff",
   "--project",
   projectPath,
@@ -54,7 +54,7 @@ assert(!serialized.toLowerCase().includes("https://api.openai.com"), "plan shoul
 
 console.log(JSON.stringify({ ok: true, workspace, project: projectPath, plan: planPath }, null, 2));
 
-async function runGraphForge(args) {
+async function runOpenGraphCreator(args) {
   return run(process.execPath, [...cli, ...args], { cwd: root });
 }
 

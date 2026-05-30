@@ -2,7 +2,7 @@ import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { createDefaultProject, createMultiPageProject, unpackStudioDocument } from "@graphforge/core";
+import { createDefaultProject, createMultiPageProject, unpackStudioDocument } from "@opengraph-creator/core";
 import { createLibrary } from "./library";
 import { createStudioServer, getDefaultStudioStaticDir, type StudioServerHandle } from "./server";
 
@@ -13,13 +13,13 @@ afterEach(async () => {
   handle = undefined;
 });
 
-describe("GraphForge studio local API", () => {
+describe("OpenGraph Creator Studio local API", () => {
   it("serves bundled studio assets from the CLI package by default", () => {
     expect(getDefaultStudioStaticDir().replaceAll("\\", "/")).toContain("packages/cli/studio-dist");
   });
 
   it("saves, lists, reads, and exports projects over HTTP", async () => {
-    const root = await mkdtemp(join(tmpdir(), "graphforge-api-"));
+    const root = await mkdtemp(join(tmpdir(), "OpenGraphCreator-api-"));
     const library = createLibrary({ root });
     handle = await createStudioServer({ library, port: 0 });
     const project = createDefaultProject({ name: "API Project", strategy: "hybrid" });
@@ -48,7 +48,7 @@ describe("GraphForge studio local API", () => {
   });
 
   it("does not serve the Studio HTML shell for unknown API routes", async () => {
-    const root = await mkdtemp(join(tmpdir(), "graphforge-api-fallback-"));
+    const root = await mkdtemp(join(tmpdir(), "OpenGraphCreator-api-fallback-"));
     const library = createLibrary({ root });
     handle = await createStudioServer({ library, port: 0 });
 
@@ -61,7 +61,7 @@ describe("GraphForge studio local API", () => {
   });
 
   it("exports relative session targets inside the user repo", async () => {
-    const root = await mkdtemp(join(tmpdir(), "graphforge-api-export-repo-"));
+    const root = await mkdtemp(join(tmpdir(), "OpenGraphCreator-api-export-repo-"));
     const library = createLibrary({ root: join(root, "library") });
     const repo = join(root, "user-app");
     handle = await createStudioServer({ library, port: 0, sessionRepo: repo });
@@ -86,7 +86,7 @@ describe("GraphForge studio local API", () => {
   });
 
   it("exports every page variant through the repo-scoped export-pages endpoint", async () => {
-    const root = await mkdtemp(join(tmpdir(), "graphforge-api-page-export-"));
+    const root = await mkdtemp(join(tmpdir(), "OpenGraphCreator-api-page-export-"));
     const library = createLibrary({ root: join(root, "library") });
     const repo = join(root, "user-app");
     handle = await createStudioServer({ library, port: 0, sessionRepo: repo });
@@ -117,7 +117,7 @@ describe("GraphForge studio local API", () => {
 
 
   it("imports generated assets and creates agent handoff plans over HTTP", async () => {
-    const root = await mkdtemp(join(tmpdir(), "graphforge-api-import-"));
+    const root = await mkdtemp(join(tmpdir(), "OpenGraphCreator-api-import-"));
     const library = createLibrary({ root });
     handle = await createStudioServer({ library, port: 0 });
     const source = join(root, "generated.svg");
@@ -146,7 +146,7 @@ describe("GraphForge studio local API", () => {
   });
 
   it("creates session, event, export, and publish-request files over HTTP", async () => {
-    const root = await mkdtemp(join(tmpdir(), "graphforge-api-session-"));
+    const root = await mkdtemp(join(tmpdir(), "OpenGraphCreator-api-session-"));
     const library = createLibrary({ root });
     handle = await createStudioServer({ library, port: 0 });
 
@@ -208,7 +208,7 @@ describe("GraphForge studio local API", () => {
   });
 
   it("restarts a session through the local API and wakes the waiting agent", async () => {
-    const root = await mkdtemp(join(tmpdir(), "graphforge-api-session-restart-"));
+    const root = await mkdtemp(join(tmpdir(), "OpenGraphCreator-api-session-restart-"));
     const library = createLibrary({ root });
     handle = await createStudioServer({ library, port: 0 });
 
@@ -223,7 +223,7 @@ describe("GraphForge studio local API", () => {
       body: JSON.stringify({ repo: root, sessionId: "api-restart", reason: "Need a fresh designer brief" })
     });
     const body = await restartResponse.json();
-    const request = JSON.parse(await readFile(join(root, ".graphforge", "sessions", "api-restart", "agent-request.json"), "utf8"));
+    const request = JSON.parse(await readFile(join(root, ".opengraph-creator", "sessions", "api-restart", "agent-request.json"), "utf8"));
 
     expect(restartResponse.status).toBe(200);
     expect(body.session).toMatchObject({ id: "api-restart", status: "agent-requested", pendingAction: "agent-restart-from-question-gate" });
@@ -232,7 +232,7 @@ describe("GraphForge studio local API", () => {
   });
 
   it("opens a session from the repo bound to session open without a repo query parameter", async () => {
-    const root = await mkdtemp(join(tmpdir(), "graphforge-api-session-bound-repo-"));
+    const root = await mkdtemp(join(tmpdir(), "OpenGraphCreator-api-session-bound-repo-"));
     const library = createLibrary({ root: join(root, "library") });
     handle = await createStudioServer({ library, port: 0, sessionRepo: root });
 
@@ -248,7 +248,7 @@ describe("GraphForge studio local API", () => {
   });
 
   it("returns a provider-neutral agent connection recipe for repo-scoped studio launches", async () => {
-    const root = await mkdtemp(join(tmpdir(), "graphforge-api-connect-recipe-"));
+    const root = await mkdtemp(join(tmpdir(), "OpenGraphCreator-api-connect-recipe-"));
     const library = createLibrary({ root: join(root, "library") });
     const repo = join(root, "user-app");
     handle = await createStudioServer({ library, port: 0, sessionRepo: repo });
@@ -259,9 +259,9 @@ describe("GraphForge studio local API", () => {
     expect(response.status).toBe(200);
     expect(recipe).toMatchObject({
       repo,
-      sessionRoot: join(repo, ".graphforge", "sessions")
+      sessionRoot: join(repo, ".opengraph-creator", "sessions")
     });
-    expect(recipe.command).toContain("graphforge session create");
+    expect(recipe.command).toContain("opengraph-creator session create");
     expect(recipe.command).toContain(`--repo "${repo}"`);
     expect(recipe.prompt).toContain("editable .ogdoc");
     expect(recipe.prompt).toContain("next-action");
@@ -269,7 +269,7 @@ describe("GraphForge studio local API", () => {
   });
 
   it("saves session edits and imported assets into the Studio document package", async () => {
-    const root = await mkdtemp(join(tmpdir(), "graphforge-api-document-"));
+    const root = await mkdtemp(join(tmpdir(), "OpenGraphCreator-api-document-"));
     const library = createLibrary({ root: join(root, "library") });
     handle = await createStudioServer({ library, port: 0, sessionRepo: root });
     const project = createDefaultProject({ name: "Session Doc", strategy: "common" });
