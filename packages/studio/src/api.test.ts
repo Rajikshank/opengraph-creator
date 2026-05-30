@@ -1,17 +1,19 @@
 import { describe, expect, it, vi } from "vitest";
-import { createDefaultProject } from "@graphforge/core";
+import { createDefaultProject } from "@opengraph-creator/core";
 import {
   appendSessionEventViaApi,
   createAgentHandoffViaApi,
   createPublishRequestViaApi,
   createSessionAgentRequestViaApi,
   createSessionViaApi,
+  exportProjectPagesViaApi,
   exportProjectViaApi,
   importSourceViaApi,
   listProjectsViaApi,
   readConnectRecipeViaApi,
   readSessionViaApi,
   recordSessionExportViaApi,
+  restartSessionViaApi,
   saveProjectViaApi
 } from "./api";
 
@@ -50,12 +52,44 @@ describe("studio API client", () => {
     expect(result).toEqual({ format: "png", target: "public/og.png" });
   });
 
+  it("exports every page variant through the local API", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          exports: [
+            { page: "/", format: "png", target: "public/og/home.png", width: 1200, height: 630 },
+            { page: "/pricing", format: "png", target: "public/og/pricing.png", width: 1200, height: 630 }
+          ]
+        })
+      )
+    );
+
+    const result = await exportProjectPagesViaApi(fetchMock, {
+      projectId: "project-1",
+      format: "png",
+      outDir: "public/og",
+      quality: 82
+    });
+
+    expect(result.exports).toHaveLength(2);
+    expect(fetchMock).toHaveBeenCalledWith("/api/export-pages", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        projectId: "project-1",
+        format: "png",
+        outDir: "public/og",
+        quality: 82
+      })
+    });
+  });
+
   it("creates an agent handoff through the local API without provider credentials", async () => {
     const project = createDefaultProject({ name: "Agent API", strategy: "hybrid" });
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
-          path: ".graphforge/agent.json",
+          path: ".opengraph-creator/agent.json",
           plan: { mode: "agent-handoff", output: "public/og-agent.png", prompt: "Codex, Claude, or OpenCode" }
         })
       )
@@ -90,7 +124,7 @@ describe("studio API client", () => {
     );
 
     const result = await importSourceViaApi(fetchMock, {
-      source: ".graphforge/generated/og.svg",
+      source: ".opengraph-creator/generated/og.svg",
       kind: "svg",
       name: "Imported API",
       origin: "codex"
@@ -101,7 +135,7 @@ describe("studio API client", () => {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        source: ".graphforge/generated/og.svg",
+        source: ".opengraph-creator/generated/og.svg",
         kind: "svg",
         name: "Imported API",
         origin: "codex"
@@ -116,8 +150,12 @@ describe("studio API client", () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({ session: { id: "s1", status: "editing" } })))
       .mockResolvedValueOnce(new Response(JSON.stringify({ event: { id: "e1", sessionId: "s1", type: "agent.waiting" } })))
       .mockResolvedValueOnce(new Response(JSON.stringify({ session: { id: "s1", status: "exported" } })))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ request: { imagePath: "public/og.png", status: "preview" } })))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ request: { imagePath: "public/og.png", status: "confirmed" } })))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ request: { imagePath: "public/og.png", status: "preview", pageImages: [{ page: "/", imagePath: "public/og/home.png" }] } }))
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ request: { imagePath: "public/og.png", status: "confirmed", pageImages: [{ page: "/", imagePath: "public/og/home.png" }] } }))
+      )
       .mockResolvedValueOnce(new Response(JSON.stringify({ request: { prompt: "Revise lighting", status: "requested" } })));
 
     await expect(createSessionViaApi(fetchMock, { id: "s1", agent: "codex", strategy: "common" })).resolves.toMatchObject({
@@ -137,7 +175,12 @@ describe("studio API client", () => {
       })
     ).resolves.toMatchObject({ status: "exported" });
     await expect(
-      createPublishRequestViaApi(fetchMock, { sessionId: "s1", imagePath: "public/og.png", framework: "next" })
+      createPublishRequestViaApi(fetchMock, {
+        sessionId: "s1",
+        imagePath: "public/og.png",
+        framework: "next",
+        pageImages: [{ page: "/", imagePath: "public/og/home.png" }]
+      })
     ).resolves.toMatchObject({ status: "preview" });
     await expect(
       createPublishRequestViaApi(fetchMock, { sessionId: "s1", imagePath: "public/og.png", framework: "next", confirmed: true })
@@ -145,6 +188,33 @@ describe("studio API client", () => {
     await expect(
       createSessionAgentRequestViaApi(fetchMock, { sessionId: "s1", prompt: "Revise lighting" })
     ).resolves.toMatchObject({ status: "requested" });
+  });
+
+  it("requests a question-gate restart through the local API", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          session: { id: "s1", status: "agent-requested", pendingAction: "agent-restart-from-question-gate" },
+          request: { prompt: "Restart OG generation from the question gate.", status: "requested" }
+        })
+      )
+    );
+
+    await expect(
+      restartSessionViaApi(fetchMock, {
+        repo: "D:/app",
+        sessionId: "s1",
+        reason: "Fresh OG direction"
+      })
+    ).resolves.toMatchObject({
+      session: { status: "agent-requested", pendingAction: "agent-restart-from-question-gate" },
+      request: { status: "requested" }
+    });
+    expect(fetchMock).toHaveBeenCalledWith("/api/session/restart", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ repo: "D:/app", sessionId: "s1", reason: "Fresh OG direction" })
+    });
   });
 
   it("retries transient local API failures before returning data", async () => {
@@ -162,16 +232,16 @@ describe("studio API client", () => {
       new Response(
         JSON.stringify({
           repo: "D:/app",
-          command: "graphforge session create --repo \"D:/app\" --agent codex --strategy hybrid --mode template",
-          prompt: "Use the GraphForge skill and wait with next-action.",
-          sessionRoot: "D:/app/.graphforge/sessions"
+          command: "opengraph-creator session create --repo \"D:/app\" --agent codex --strategy hybrid --mode template",
+          prompt: "Use the OpenGraph Creator skill and wait with next-action.",
+          sessionRoot: "D:/app/.opengraph-creator/sessions"
         })
       )
     );
 
     await expect(readConnectRecipeViaApi(fetchMock, "D:/app")).resolves.toMatchObject({
       repo: "D:/app",
-      sessionRoot: "D:/app/.graphforge/sessions"
+      sessionRoot: "D:/app/.opengraph-creator/sessions"
     });
     expect(fetchMock).toHaveBeenCalledWith("/api/connect-recipe?repo=D%3A%2Fapp", undefined);
   });
@@ -205,7 +275,7 @@ describe("studio API client", () => {
     );
 
     await expect(listProjectsViaApi(htmlFallbackFetch)).rejects.toThrow(
-      "Could not list projects: Local Studio API returned HTML instead of JSON. Launch Studio through graphforge studio, not the frontend-only dev server."
+      "Could not list projects: Local Studio API returned HTML instead of JSON. Launch Studio through opengraph-creator studio, not the frontend-only dev server."
     );
   });
 });

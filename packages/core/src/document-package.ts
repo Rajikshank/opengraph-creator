@@ -157,6 +157,12 @@ function validateProjectBasics(project: OgProject): string[] {
   }
   if (!project.layers.length) errors.push("Project must include at least one editable layer.");
   if (!project.targetPages.length) errors.push("Project must target at least one page.");
+  if (project.pages?.length) {
+    for (const page of project.pages) {
+      if (!page.route) errors.push(`Page variant ${page.id} must include a route.`);
+      if (!page.layers.length) errors.push(`Page variant ${page.route} must include at least one editable layer.`);
+    }
+  }
   return errors;
 }
 

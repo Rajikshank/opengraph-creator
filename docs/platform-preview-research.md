@@ -1,6 +1,6 @@
 # Platform Preview Research
 
-GraphForge platform previews are platform-faithful simulators, not live platform screenshots. The exported OG image remains the source of truth; each preview frame shows how that image is likely to sit inside a social, chat, or metadata surface.
+OpenGraph Creator platform previews are platform-faithful simulators, not live platform screenshots. The exported OG image remains the source of truth; each preview frame shows how that image is likely to sit inside a social, chat, or metadata surface.
 
 ## Sources
 

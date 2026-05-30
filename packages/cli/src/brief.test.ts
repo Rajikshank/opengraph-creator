@@ -21,11 +21,29 @@ describe("generation brief", () => {
     expect(brief.strategy).toBe("pages");
     expect(brief.framework).toBe("next");
     expect(brief.routes).toEqual(["/", "/pricing"]);
+    expect(brief.routeContexts).toEqual([
+      expect.objectContaining({ route: "/", routeFile: "app/page.tsx", detectedTitle: "BillingKit Home" }),
+      expect.objectContaining({ route: "/pricing", routeFile: "app/pricing/page.tsx", detectedTitle: "Pricing Plans" })
+    ]);
     expect(brief.brandAssets).toEqual(["public/logo.svg"]);
     expect(brief.referenceImage).toBe("references/inspiration.png");
+    expect(brief.referenceResearch).toContain("Inspect local brand assets, screenshots, existing metadata, and route copy before selecting a visual direction.");
+    expect(brief.styleThesis).toContain("BillingKit");
+    expect(brief.visualTasteProfile.join("\n")).toContain("premium but specific");
+    expect(brief.compositionPlan.join("\n")).toContain("shared 1200x630 composition");
+    expect(brief.assetPlan.join("\n")).toContain("Keep generated imagery as editable asset layers");
+    expect(brief.negativeDirection.join("\n")).toContain("Do not bake important text");
+    expect(brief.designQualityChecklist.join("\n")).toContain("Each route variant has route-specific reason");
     expect(brief.outputContract).toContain("editable .ogdoc Studio document package");
     expect(brief.codexPrompt).toContain("Create page-specific Open Graph images");
     expect(brief.codexPrompt).toContain("Generate a .ogdoc document");
+    expect(brief.codexPrompt).toContain("Reference research phase:");
+    expect(brief.codexPrompt).toContain("Style thesis:");
+    expect(brief.codexPrompt).toContain("Negative direction:");
+    expect(brief.codexPrompt).toContain("Do not copy protected internet references");
+    expect(brief.codexPrompt).toContain("Route context:");
+    expect(brief.codexPrompt).toContain("Pricing Plans");
+    expect(brief.codexPrompt).toContain("one .ogdoc with internal page variants");
     expect(brief.codexPrompt).toContain("/pricing");
   });
 
@@ -51,7 +69,7 @@ describe("generation brief", () => {
 
   it("writes the brief through the CLI entrypoint", async () => {
     const repo = await createNextRepo();
-    const target = join(repo, ".graphforge", "brief.json");
+    const target = join(repo, ".opengraph-creator", "brief.json");
 
     await runCli(["brief", "--repo", repo, "--name", "BillingKit", "--strategy", "hybrid", "--mode", "pure-image", "--out", target]);
 
@@ -64,12 +82,18 @@ describe("generation brief", () => {
 });
 
 async function createNextRepo(): Promise<string> {
-  const repo = await mkdtemp(join(tmpdir(), "graphforge-brief-"));
+  const repo = await mkdtemp(join(tmpdir(), "OpenGraphCreator-brief-"));
   await mkdir(join(repo, "app", "pricing"), { recursive: true });
   await mkdir(join(repo, "public"), { recursive: true });
   await writeFile(join(repo, "next.config.js"), "module.exports = {}");
-  await writeFile(join(repo, "app", "page.tsx"), "export default function Page() { return null }");
-  await writeFile(join(repo, "app", "pricing", "page.tsx"), "export default function Pricing() { return null }");
+  await writeFile(
+    join(repo, "app", "page.tsx"),
+    'export const metadata = { title: "BillingKit Home", description: "Automated billing for focused SaaS teams." }; export default function Page() { return <h1>BillingKit Home</h1> }'
+  );
+  await writeFile(
+    join(repo, "app", "pricing", "page.tsx"),
+    'export const metadata = { title: "Pricing Plans", description: "Simple tiers for teams from launch to scale." }; export default function Pricing() { return <h1>Pricing Plans</h1> }'
+  );
   await writeFile(join(repo, "app", "layout.tsx"), "export const metadata = {}");
   await writeFile(join(repo, "public", "logo.svg"), "<svg></svg>");
   return repo;

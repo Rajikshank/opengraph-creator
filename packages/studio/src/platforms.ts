@@ -1,4 +1,4 @@
-import type { OgProject } from "@graphforge/core";
+import type { OgProject } from "@opengraph-creator/core";
 
 export interface PlatformPreviewCard {
   id: PlatformPreviewId;
@@ -51,7 +51,7 @@ const platformPreviewSpecs: PlatformPreviewSpec[] = [
       layoutBasis: "official",
       surface: "social-feed",
       frame: { maxWidth: 660, minHeight: 430, imageMaxWidth: 500 },
-      sourceNote: "X large summary cards document a 2:1 image surface; GraphForge shows the 1200x630 OG image inside that crop."
+      sourceNote: "X large summary cards document a 2:1 image surface; OpenGraph Creator shows the 1200x630 OG image inside that crop."
     },
     {
       id: "linkedin",
@@ -136,7 +136,7 @@ const platformPreviewSpecs: PlatformPreviewSpec[] = [
       layoutBasis: "client-observed",
       surface: "mobile-chat",
       frame: { maxWidth: 660, minHeight: 430, imageMaxWidth: 330 },
-      sourceNote: "WhatsApp does not publish a complete visual preview spec; GraphForge models common mobile link-card behavior."
+      sourceNote: "WhatsApp does not publish a complete visual preview spec; OpenGraph Creator models common mobile link-card behavior."
     },
     {
       id: "imessage",
@@ -153,7 +153,7 @@ const platformPreviewSpecs: PlatformPreviewSpec[] = [
       layoutBasis: "client-observed",
       surface: "mobile-chat",
       frame: { maxWidth: 660, minHeight: 430, imageMaxWidth: 330 },
-      sourceNote: "iMessage visual layout is client-controlled; GraphForge models the rich-link bubble shape and crop pressure."
+      sourceNote: "iMessage visual layout is client-controlled; OpenGraph Creator models the rich-link bubble shape and crop pressure."
     },
     {
       id: "browser",

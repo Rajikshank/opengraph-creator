@@ -1,5 +1,6 @@
-import type { Framework, GenerationStrategy } from "@graphforge/core";
+import type { Framework, GenerationStrategy } from "@opengraph-creator/core";
 import { scanRepo, type RepoScanResult } from "./scan.js";
+import type { RouteContext } from "./scan.js";
 
 export type GenerationMode = "template" | "pure-image";
 
@@ -18,9 +19,17 @@ export interface GenerationBrief {
   generationMode: GenerationMode;
   framework: Framework;
   routes: string[];
+  routeContexts: RouteContext[];
   metadataFiles: string[];
   brandAssets: string[];
   referenceImage?: string;
+  referenceResearch: string[];
+  styleThesis: string;
+  visualTasteProfile: string[];
+  compositionPlan: string[];
+  assetPlan: string[];
+  negativeDirection: string[];
+  designQualityChecklist: string[];
   outputContract: string[];
   codexPrompt: string;
 }
@@ -33,14 +42,21 @@ export async function createGenerationBrief(input: GenerationBriefInput): Promis
 function createGenerationBriefFromScan(input: GenerationBriefInput, scan: RepoScanResult): GenerationBrief {
   const routes = scan.routes.length ? scan.routes : ["/"];
   const generationMode = input.generationMode ?? "template";
+  const referenceResearch = buildReferenceResearch(input, scan);
+  const styleThesis = buildStyleThesis(input, routes, scan);
+  const visualTasteProfile = buildVisualTasteProfile(input, scan);
+  const compositionPlan = buildCompositionPlan(input, routes);
+  const assetPlan = buildAssetPlan(input);
+  const negativeDirection = buildNegativeDirection(input);
+  const designQualityChecklist = buildDesignQualityChecklist(input);
   const outputContract =
     generationMode === "pure-image"
       ? [
           "pure 1200x630 Open Graph bitmap generation plan",
-          "Use graphforge agent-image to create a local agent image handoff plan.",
+          "Use opengraph-creator agent-image to create a local agent image handoff plan.",
           "Preserve the app name, route intent, brand colors, and readable social-card hierarchy in the prompt.",
           "Use the reference image as art direction if provided, without copying it blindly.",
-          "Do not require a provider API key inside GraphForge; Codex, Claude, or OpenCode generates the asset and returns it to Studio."
+          "Do not require a provider API key inside OpenGraph Creator; Codex, Claude, or OpenCode generates the asset and returns it to Studio."
         ]
       : [
           "editable .ogdoc Studio document package",
@@ -58,16 +74,32 @@ function createGenerationBriefFromScan(input: GenerationBriefInput, scan: RepoSc
     generationMode,
     framework: scan.framework,
     routes,
+    routeContexts: scan.routeContexts,
     metadataFiles: scan.metadataFiles,
     brandAssets: scan.brandAssets,
     referenceImage: input.referenceImage,
+    referenceResearch,
+    styleThesis,
+    visualTasteProfile,
+    compositionPlan,
+    assetPlan,
+    negativeDirection,
+    designQualityChecklist,
     outputContract,
     codexPrompt: buildCodexPrompt({
       ...input,
       framework: scan.framework,
       routes,
+      routeContexts: scan.routeContexts,
       metadataFiles: scan.metadataFiles,
-      brandAssets: scan.brandAssets
+      brandAssets: scan.brandAssets,
+      referenceResearch,
+      styleThesis,
+      visualTasteProfile,
+      compositionPlan,
+      assetPlan,
+      negativeDirection,
+      designQualityChecklist
     })
   };
 }
@@ -75,8 +107,16 @@ function createGenerationBriefFromScan(input: GenerationBriefInput, scan: RepoSc
 function buildCodexPrompt(input: GenerationBriefInput & {
   framework: Framework;
   routes: string[];
+  routeContexts: RouteContext[];
   metadataFiles: string[];
   brandAssets: string[];
+  referenceResearch: string[];
+  styleThesis: string;
+  visualTasteProfile: string[];
+  compositionPlan: string[];
+  assetPlan: string[];
+  negativeDirection: string[];
+  designQualityChecklist: string[];
 }): string {
   const intent =
     input.strategy === "common"
@@ -87,9 +127,20 @@ function buildCodexPrompt(input: GenerationBriefInput & {
 
   const reference = input.referenceImage ? `\nReference image to respect without copying blindly: ${input.referenceImage}` : "";
   const generationMode = input.generationMode ?? "template";
+  const routeContext =
+    input.routeContexts.length > 0
+      ? input.routeContexts
+          .map((page) => {
+            const title = page.detectedTitle ? `title "${page.detectedTitle}"` : "no title detected";
+            const description = page.detectedDescription ? `description "${page.detectedDescription}"` : "no description detected";
+            const file = page.routeFile ? `from ${page.routeFile}` : "without route file";
+            return `${page.route}: ${title}, ${description}, ${file}, confidence ${page.confidence}`;
+          })
+          .join("; ")
+      : "none detected";
   const modeInstruction =
     generationMode === "pure-image"
-      ? "The user chose pure image generation. Create an agent image handoff for Codex, Claude, or OpenCode; GraphForge should not call an image provider directly or require a provider API key."
+      ? "The user chose pure image generation. Create an agent image handoff for Codex, Claude, or OpenCode; OpenGraph Creator should not call an image provider directly or require a provider API key."
       : "The user chose editable template generation. Return an editable .ogdoc Studio document package using separate layers; if you draft JSON first, pack it into .ogdoc and validate it.";
 
   return [
@@ -98,16 +149,94 @@ function buildCodexPrompt(input: GenerationBriefInput & {
     `App name: ${input.name}`,
     `Framework: ${input.framework}`,
     `Routes: ${input.routes.join(", ")}`,
+    `Route context: ${routeContext}`,
     `Brand assets: ${input.brandAssets.length ? input.brandAssets.join(", ") : "none detected"}`,
     `Metadata files: ${input.metadataFiles.length ? input.metadataFiles.join(", ") : "none detected"}`,
     reference.trim(),
+    `Reference research phase: ${input.referenceResearch.join(" ")}`,
+    `Style thesis: ${input.styleThesis}`,
+    `Visual taste profile: ${input.visualTasteProfile.join(" ")}`,
+    `Composition plan: ${input.compositionPlan.join(" ")}`,
+    `Asset plan: ${input.assetPlan.join(" ")}`,
+    `Negative direction: ${input.negativeDirection.join(" ")}`,
+    `Design quality checklist: ${input.designQualityChecklist.join(" ")}`,
     "Design requirements: premium, minimal, readable at social-card size, not generic AI dashboard styling.",
     generationMode === "pure-image"
-      ? "Use graphforge agent-image with the app context, route intent, brand assets, and optional reference image, then open GraphForge Studio for review/edit/export."
+      ? "Use opengraph-creator agent-image with the app context, route intent, brand assets, and optional reference image, then open OpenGraph Creator Studio for review/edit/export."
       : "Generate a .ogdoc document with layers for headline, subtitle, badge, logo, screenshots, images, shapes, and background. Never bake important text into one SVG/image.",
+    input.strategy === "pages" || input.strategy === "hybrid"
+      ? "Generate one .ogdoc with internal page variants. Each page variant must preserve the shared visual system while changing route-specific text, badges, imagery, and exportPath."
+      : "Generate a common .ogdoc document with no internal page variants unless the user changes strategy.",
     "If image generation tools are available, use them only for background/art/texture/product-scene asset layers unless pure-image mode was selected.",
-    "Use strategy common/pages/hybrid exactly as requested and preserve the route list."
+    "Use strategy common/pages/hybrid exactly as requested and preserve the route list.",
+    "Do not copy protected internet references or use third-party images unless the user supplied them or license/permission is clear."
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+function buildReferenceResearch(input: GenerationBriefInput, scan: RepoScanResult): string[] {
+  return [
+    "Inspect local brand assets, screenshots, existing metadata, and route copy before selecting a visual direction.",
+    scan.brandAssets.length
+      ? `Use detected brand assets as primary reference material: ${scan.brandAssets.join(", ")}.`
+      : "If no brand assets exist, derive tone from route copy, product vocabulary, and framework context.",
+    input.referenceImage
+      ? `Use the provided reference image as art direction only: ${input.referenceImage}.`
+      : "If internet/reference research is available, use it for mood and composition notes only; do not copy protected assets."
+  ];
+}
+
+function buildStyleThesis(input: GenerationBriefInput, routes: string[], scan: RepoScanResult): string {
+  const routeScope = input.strategy === "common" ? "one reusable app-level OG" : `${routes.length} route-aware OG variant${routes.length === 1 ? "" : "s"}`;
+  const framework = scan.framework === "unknown" ? "the detected app" : `${scan.framework} app`;
+  return `${input.name} should feel like a deliberate ${framework} social card system: ${routeScope}, high readability, a clear visual point of view, and editable layers rather than a random generated collage.`;
+}
+
+function buildVisualTasteProfile(input: GenerationBriefInput, scan: RepoScanResult): string[] {
+  return [
+    "Choose a premium but specific visual language from the repo evidence before drawing layers.",
+    "Prefer strong hierarchy, useful negative space, restrained texture, and one memorable visual device over generic dashboard decoration.",
+    scan.brandAssets.length ? "Let logo/brand assets influence palette and geometry without overwhelming the 1200x630 card." : "Create a simple brandable palette from app copy and product category.",
+    input.generationMode === "pure-image" ? "If pure-image fallback is explicitly selected, make the image rich, cinematic, and still previewable through Studio." : "For editable documents, let generated art support the layout instead of replacing it."
+  ];
+}
+
+function buildCompositionPlan(input: GenerationBriefInput, routes: string[]): string[] {
+  return [
+    "Use a shared 1200x630 composition with headline, subtitle, badge, logo/screenshot/art, background, and safe-zone aware spacing.",
+    input.strategy === "pages" || input.strategy === "hybrid"
+      ? `Create route-specific compositions for ${routes.join(", ")} while preserving the same visual system.`
+      : "Create a common app-level composition unless the user later asks for page variants.",
+    "Keep all text, badges, shapes, and key layout objects separately editable in the Studio document."
+  ];
+}
+
+function buildAssetPlan(input: GenerationBriefInput): string[] {
+  return [
+    "Keep generated imagery as editable asset layers beneath editable text and layout controls.",
+    input.generationMode === "pure-image"
+      ? "Pure-image output is a fallback path; still record what text would need to remain editable if converted back to .ogdoc."
+      : "Pack screenshots, generated backgrounds, SVG/HTML captures, logos, textures, and references into the .ogdoc package or incoming assets.",
+    "Use generated image tools only for non-text art, texture, environment, product-scene, lighting, or background assets unless the user explicitly chose pure-image fallback."
+  ];
+}
+
+function buildNegativeDirection(input: GenerationBriefInput): string[] {
+  return [
+    "Do not bake important text, route labels, badges, or logos into one flat SVG/image.",
+    "Do not copy protected internet references or third-party artwork.",
+    "Do not produce a generic AI dashboard card, vague glow collage, unreadable small text, or disconnected page variants.",
+    input.generationMode === "pure-image" ? "Do not pretend a pure bitmap is fully editable in Studio." : "Do not use pure bitmap output when an editable .ogdoc can represent the design."
+  ];
+}
+
+function buildDesignQualityChecklist(input: GenerationBriefInput): string[] {
+  return [
+    "Readable at social-card size and inside the 64px safe zone.",
+    "Each route variant has route-specific reason, text, imagery, and exportPath while sharing the system.",
+    "Layer names are meaningful and all main objects remain editable.",
+    "Canvas, platform preview, and export should render the same visual state.",
+    input.referenceImage ? "Reference image influence is visible as mood/composition, not copied pixels." : "Visual direction is justified by app evidence or documented assumptions."
+  ];
 }

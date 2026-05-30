@@ -1,10 +1,13 @@
 import { useState, type ChangeEvent } from "react";
 import { FileCode2, PanelLeftClose, Send, Upload } from "lucide-react";
-import { unpackStudioDocument, type GraphForgeSourceArtifact, type SourceArtifactKind } from "@graphforge/core";
+import { unpackStudioDocument, type OpenGraphCreatorSourceArtifact, type OgLayer, type OgProject, type SourceArtifactKind } from "@opengraph-creator/core";
 import { createSessionAgentRequestViaApi, importSourceViaApi, saveSessionDocumentViaApi, uploadSessionAssetViaApi } from "../api";
 import { StudioSelect } from "../design-system/StudioSelect";
+import { StudioScrollArea } from "../design-system/StudioScrollArea";
 import { normalizeStudioError } from "../lib/studio-errors";
 import { notifyStudioError, notifyStudioSuccess, notifyStudioWarning } from "../lib/studio-toast";
+import { ConnectAgentPanel } from "./ConnectAgentPanel";
+import { PageVariantNavigator } from "./PageVariantNavigator";
 import { createManualProject, createProjectWithImportedAsset, useStudio } from "./studio-store";
 
 export function SourceRail({ onClose }: { onClose?: () => void }) {
@@ -12,11 +15,12 @@ export function SourceRail({ onClose }: { onClose?: () => void }) {
   const session = useStudio((state) => state.session);
   const replaceProject = useStudio((state) => state.replaceProject);
   const attachSourceArtifact = useStudio((state) => state.attachSourceArtifact);
-  const [source, setSource] = useState(".graphforge/sessions/<id>/document.ogdoc");
+  const selectPageVariant = useStudio((state) => state.selectPageVariant);
+  const [source, setSource] = useState(".opengraph-creator/sessions/<id>/document.ogdoc");
   const [kind, setKind] = useState<SourceArtifactKind>("svg");
-  const [prompt, setPrompt] = useState("Revise the current OG document. Keep text and layout objects editable; use generated images only as asset layers unless pure-image mode was selected.");
+  const [prompt, setPrompt] = useState("Revise the current OG document. Keep text and layout objects editable; use generated images, SVG, or HTML only as document asset layers.");
 
-  const attachArtifact = (artifact: GraphForgeSourceArtifact) => {
+  const attachArtifact = (artifact: OpenGraphCreatorSourceArtifact) => {
     if (artifact.inline && (artifact.kind === "svg" || artifact.kind === "image")) {
       replaceProject(createManualProject(artifact.path ?? "Imported OG Source", artifact));
       return;
@@ -76,13 +80,13 @@ export function SourceRail({ onClose }: { onClose?: () => void }) {
       }
       const loaded = String(result ?? "");
       const fileKind: SourceArtifactKind = file.name.endsWith(".json")
-        ? "graphforge-json"
+        ? "project-json"
         : file.type.includes("svg")
           ? "svg"
           : file.type.includes("html")
             ? "html"
             : "image";
-      if (fileKind === "graphforge-json") {
+      if (fileKind === "project-json") {
         try {
           replaceProject(JSON.parse(loaded));
           notifyStudioSuccess("Opened editable project JSON");
@@ -164,8 +168,9 @@ export function SourceRail({ onClose }: { onClose?: () => void }) {
   };
 
   return (
-    <aside className="studio-panel studio-panel-scroll source-rail">
-      <section className="studio-section">
+    <aside className="studio-panel source-rail">
+      <StudioScrollArea className="source-rail-body">
+        <section className="studio-section">
         <div className="source-rail-header">
           <h2 className="section-heading">
             <FileCode2 size={15} />
@@ -192,7 +197,7 @@ export function SourceRail({ onClose }: { onClose?: () => void }) {
           label="Source kind"
           value={kind}
           options={[
-            { value: "graphforge-json", label: "Project JSON" },
+            { value: "project-json", label: "Project JSON" },
             { value: "svg", label: "SVG" },
             { value: "html", label: "HTML" },
             { value: "image", label: "Image" }
@@ -202,8 +207,15 @@ export function SourceRail({ onClose }: { onClose?: () => void }) {
         <button type="button" className="primary-action" onClick={importGeneratedAsset}>
           <Upload size={15} /> Import into document
         </button>
+        {project?.pages?.length ? (
+          <PageVariantNavigator
+            project={project}
+            onSelectPage={selectPageVariant}
+            onApplyStyleToAll={() => applyStyleToAllPages(project, replaceProject)}
+          />
+        ) : null}
         {session ? (
-          <>
+          <div className="agent-revision-card">
             <label>
               Agent revision
               <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} />
@@ -211,13 +223,37 @@ export function SourceRail({ onClose }: { onClose?: () => void }) {
             <button type="button" className="secondary-action" onClick={requestAgentRevision}>
               <Send size={15} /> Request agent revision
             </button>
-          </>
+          </div>
         ) : (
-          <button type="button" className="secondary-action" disabled title="Open through an agent session to request revisions">
-            <Send size={15} /> Agent revision unavailable
-          </button>
+          <ConnectAgentPanel compact />
         )}
-      </section>
+        </section>
+      </StudioScrollArea>
     </aside>
   );
+}
+
+function applyStyleToAllPages(project: OgProject, replaceProject: (project: OgProject) => void) {
+  if (!project.pages?.length) return;
+  const currentLayers = project.layers;
+  const pages = project.pages.map((page) => ({
+    ...page,
+    layers: currentLayers.map((layer) => preservePageCopy(layer, page.layers.find((item) => item.id === layer.id)))
+  }));
+  replaceProject({
+    ...project,
+    pages,
+    updatedAt: new Date().toISOString()
+  });
+  notifyStudioSuccess("Applied current style to all page variants");
+}
+
+function preservePageCopy(templateLayer: OgLayer, existingLayer: OgLayer | undefined): OgLayer {
+  if ((templateLayer.kind === "text" || templateLayer.kind === "badge") && existingLayer && (existingLayer.kind === "text" || existingLayer.kind === "badge")) {
+    return {
+      ...templateLayer,
+      text: existingLayer.text
+    };
+  }
+  return JSON.parse(JSON.stringify(templateLayer)) as OgLayer;
 }

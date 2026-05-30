@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { createDefaultProject, type ImageLayer } from "@graphforge/core";
+import { createDefaultProject, createMultiPageProject, getNoiseDisplayOpacity, type ImageLayer } from "@opengraph-creator/core";
 import { renderProjectToSvg } from "./index";
 
-describe("GraphForge renderer", () => {
+describe("OpenGraphCreator renderer", () => {
   it("renders layer JSON into a nonblank 1200x630 SVG with editable text content", () => {
     const project = createDefaultProject({
       name: "Renderer",
@@ -50,7 +50,24 @@ describe("GraphForge renderer", () => {
     expect(fillSvg).toContain('preserveAspectRatio="none"');
   });
 
-  it("renders internal image placeholders as real SVG artwork instead of leaking graphforge URLs", () => {
+  it("renders the active page variant instead of the legacy root layers in multi-page documents", () => {
+    const project = createMultiPageProject(
+      createDefaultProject({ name: "Renderer Pages", strategy: "pages", pages: ["/", "/pricing"] }),
+      [
+        { route: "/", detectedTitle: "Home", confidence: "high" },
+        { route: "/pricing", detectedTitle: "Pricing", detectedDescription: "Simple plans", confidence: "high" }
+      ]
+    );
+    project.activePageId = "page-pricing";
+
+    const svg = renderProjectToSvg(project);
+
+    expect(svg).toContain("Pricing");
+    expect(svg).toContain("Simple plans");
+    expect(svg).not.toContain(">Home<");
+  });
+
+  it("renders internal image placeholders as real SVG artwork instead of leaking OpenGraphCreator URLs", () => {
     const project = createDefaultProject({ name: "Placeholder Render", strategy: "common" });
     const imageLayer: ImageLayer = {
       id: "image-slot",
@@ -64,7 +81,7 @@ describe("GraphForge renderer", () => {
       opacity: 1,
       locked: false,
       hidden: false,
-      src: "graphforge://image-placeholder",
+      src: "ogcreator://image-placeholder",
       fit: "cover",
       borderRadius: 18,
       effects: { shadow: false, glow: false, blur: 0 }
@@ -77,7 +94,7 @@ describe("GraphForge renderer", () => {
     expect(svg).toContain("Replace with source art");
     expect(svg).toContain('id="gf-image-clip-image-slot"');
     expect(svg).toContain('id="gf-image-mask-image-slot"');
-    expect(svg).not.toContain("href=\"graphforge://image-placeholder\"");
+    expect(svg).not.toContain("href=\"ogcreator://image-placeholder\"");
   });
 
   it("renders rich layer effects as SVG defs and overlays", () => {
@@ -111,6 +128,28 @@ describe("GraphForge renderer", () => {
     expect(svg).toContain("gf-lighting-background");
     expect(svg).toContain("gf-vignette-background");
     expect(svg).toContain("mix-blend-mode:soft-light");
+    expect(svg).toContain(`opacity="${getNoiseDisplayOpacity(0.05)}"`);
+  });
+
+  it("uses the same visible noise opacity as the Studio canvas for platform preview parity", () => {
+    const project = createDefaultProject({ name: "Noise Parity", strategy: "common" });
+    project.layers = project.layers.map((layer) =>
+      layer.id === "background" && "effects" in layer
+        ? {
+            ...layer,
+            effects: {
+              ...layer.effects,
+              noise: { amount: 0.06, blendMode: "overlay" }
+            }
+          }
+        : layer
+    );
+
+    const svg = renderProjectToSvg(project);
+
+    expect(svg).toContain('id="gf-noise-background"');
+    expect(svg).toContain(`opacity="${getNoiseDisplayOpacity(0.06)}"`);
+    expect(svg).not.toContain('opacity="0.06"');
   });
 
   it("exports per-layer glow settings instead of a single global glow filter", () => {

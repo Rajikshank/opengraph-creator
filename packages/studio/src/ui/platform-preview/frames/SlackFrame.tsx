@@ -8,14 +8,14 @@ export function SlackFrame({ projectName, svg }: PlatformFrameProps) {
         <span className="chat-avatar slack-avatar">GF</span>
         <div className="chat-message-body">
           <div className="chat-author-line">
-            <strong>graphforge</strong>
+            <strong>opengraph-creator</strong>
             <span>10:24 AM</span>
           </div>
-          <p>Previewing https://ogloom.local</p>
+          <p>Previewing https://opengraph.local</p>
           <div className="slack-unfurl">
             <div className="embed-rule" />
             <div className="embed-body">
-              <span>ogloom.local</span>
+              <span>opengraph.local</span>
               <strong>{projectName}</strong>
               <PlatformPreviewImage svg={svg} className="platform-image-compact" />
             </div>

@@ -1,11 +1,11 @@
 {
-  "name": "@graphforge/cli",
+  "name": "opengraph-creator",
   "version": "0.0.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "graphforge": "dist/index.js"
+    "opengraph-creator": "dist/index.js"
   },
   "files": [
     "dist",
@@ -16,17 +16,17 @@
     "build": "tsc -p tsconfig.json --outDir dist --declaration --emitDeclarationOnly false && node scripts/copy-studio-dist.mjs && node scripts/copy-bundled-workspace-deps.mjs"
   },
   "dependencies": {
-    "@graphforge/core": "0.0.0",
-    "@graphforge/render": "0.0.0",
+    "@opengraph-creator/core": "0.0.0",
+    "@opengraph-creator/render": "0.0.0",
     "fflate": "^0.8.3",
     "sharp": "^0.33.5"
   },
   "bundledDependencies": [
-    "@graphforge/core",
-    "@graphforge/render"
+    "@opengraph-creator/core",
+    "@opengraph-creator/render"
   ],
   "bundleDependencies": [
-    "@graphforge/core",
-    "@graphforge/render"
+    "@opengraph-creator/core",
+    "@opengraph-creator/render"
   ]
 }

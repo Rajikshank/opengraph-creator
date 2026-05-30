@@ -1,4 +1,12 @@
-import { createDefaultProject, type GraphForgeSession, type GraphForgeSourceArtifact, type LayerEffects, type OgLayer, type OgProject } from "@graphforge/core";
+import {
+  createDefaultProject,
+  updateActivePageLayers,
+  type OpenGraphCreatorSession,
+  type OpenGraphCreatorSourceArtifact,
+  type LayerEffects,
+  type OgLayer,
+  type OgProject
+} from "@opengraph-creator/core";
 import { create } from "zustand";
 import {
   addLayer as addSessionLayer,
@@ -20,6 +28,7 @@ import {
   setImageFocalPoint as setSessionImageFocalPoint,
   setImagePerspective as setSessionImagePerspective,
   setLayerEffects as setSessionLayerEffects,
+  selectPageVariant as selectSessionPageVariant,
   snapLayer as snapSessionLayer,
   toggleLayerHidden as toggleSessionLayerHidden,
   toggleLayerLocked as toggleSessionLayerLocked,
@@ -35,13 +44,16 @@ interface StudioStore {
   selectedLayerId: string;
   past: OgProject[];
   future: OgProject[];
-  session: GraphForgeSession | null;
+  dirty: boolean;
+  session: OpenGraphCreatorSession | null;
   projects: ProjectSummary[];
   sourceRailOpen: boolean;
   lastExportSizeBytes?: number;
   replaceProject: (project: OgProject | null) => void;
-  setSession: (session: GraphForgeSession | null) => void;
+  setSession: (session: OpenGraphCreatorSession | null) => void;
+  markSaved: () => void;
   setProjects: (projects: ProjectSummary[]) => void;
+  selectPageVariant: (pageIdOrRoute: string) => void;
   setSelectedLayerId: (id: string) => void;
   updateLayer: (id: string, patch: Partial<OgLayer>) => void;
   setLayerEffects: (id: string, patch: Partial<LayerEffects>) => void;
@@ -51,7 +63,7 @@ interface StudioStore {
   setImageCrop: (id: string, crop: NonNullable<Extract<OgLayer, { kind: "image" | "logo" | "screenshot" }>["crop"]>) => void;
   setImageFocalPoint: (id: string, focalPoint: NonNullable<Extract<OgLayer, { kind: "image" | "logo" | "screenshot" }>["focalPoint"]>) => void;
   setImagePerspective: (id: string, perspective: NonNullable<Extract<OgLayer, { kind: "image" | "logo" | "screenshot" }>["perspective"]>) => void;
-  attachSourceArtifact: (artifact: GraphForgeSourceArtifact) => void;
+  attachSourceArtifact: (artifact: OpenGraphCreatorSourceArtifact) => void;
   moveLayerTo: (id: string, position: { x: number; y: number }) => void;
   resizeSelected: (size: { width: number; height: number }) => void;
   addLayer: (kind: AddableLayerKind) => void;
@@ -67,7 +79,7 @@ interface StudioStore {
 }
 
 const emptySession: EditorSession = {
-  project: createDefaultProject({ name: "GraphForge internal empty state", strategy: "common" }),
+  project: createDefaultProject({ name: "OpenGraphCreator internal empty state", strategy: "common" }),
   selectedLayerId: "",
   past: [],
   future: []
@@ -77,49 +89,52 @@ export const useStudio = create<StudioStore>((set) => ({
   ...emptySession,
   project: null,
   session: null,
+  dirty: false,
   projects: [],
   sourceRailOpen: true,
   replaceProject: (project) =>
     set(() => {
-      if (!project) return { project: null, selectedLayerId: "", past: [], future: [] };
-      return createEditorSession(project);
+      if (!project) return { project: null, selectedLayerId: "", past: [], future: [], dirty: false };
+      return { ...createEditorSession(project), dirty: false };
     }),
   setSession: (session) => set({ session }),
+  markSaved: () => set({ dirty: false }),
   setProjects: (projects) => set({ projects }),
+  selectPageVariant: (pageIdOrRoute) => set((state) => (state.project ? selectSessionPageVariant(state as EditorSession, pageIdOrRoute) : state)),
   setSelectedLayerId: (id) => set((state) => (state.project ? selectLayer(state as EditorSession, id) : state)),
-  updateLayer: (id, patch) => set((state) => (state.project ? updateSessionLayer(state as EditorSession, id, patch) : state)),
+  updateLayer: (id, patch) => set((state) => (state.project ? { ...updateSessionLayer(state as EditorSession, id, patch), dirty: true } : state)),
   setLayerEffects: (id, patch) =>
-    set((state) => (state.project ? setSessionLayerEffects(state as EditorSession, id, patch) : state)),
-  alignLayers: (ids, mode) => set((state) => (state.project ? alignSessionLayers(state as EditorSession, ids, mode) : state)),
+    set((state) => (state.project ? { ...setSessionLayerEffects(state as EditorSession, id, patch), dirty: true } : state)),
+  alignLayers: (ids, mode) => set((state) => (state.project ? { ...alignSessionLayers(state as EditorSession, ids, mode), dirty: true } : state)),
   distributeLayers: (ids, mode) =>
-    set((state) => (state.project ? distributeSessionLayers(state as EditorSession, ids, mode) : state)),
-  snapLayer: (id, target) => set((state) => (state.project ? snapSessionLayer(state as EditorSession, id, target) : state)),
-  setImageCrop: (id, crop) => set((state) => (state.project ? setSessionImageCrop(state as EditorSession, id, crop) : state)),
+    set((state) => (state.project ? { ...distributeSessionLayers(state as EditorSession, ids, mode), dirty: true } : state)),
+  snapLayer: (id, target) => set((state) => (state.project ? { ...snapSessionLayer(state as EditorSession, id, target), dirty: true } : state)),
+  setImageCrop: (id, crop) => set((state) => (state.project ? { ...setSessionImageCrop(state as EditorSession, id, crop), dirty: true } : state)),
   setImageFocalPoint: (id, focalPoint) =>
-    set((state) => (state.project ? setSessionImageFocalPoint(state as EditorSession, id, focalPoint) : state)),
+    set((state) => (state.project ? { ...setSessionImageFocalPoint(state as EditorSession, id, focalPoint), dirty: true } : state)),
   setImagePerspective: (id, perspective) =>
-    set((state) => (state.project ? setSessionImagePerspective(state as EditorSession, id, perspective) : state)),
+    set((state) => (state.project ? { ...setSessionImagePerspective(state as EditorSession, id, perspective), dirty: true } : state)),
   attachSourceArtifact: (artifact) =>
-    set((state) => (state.project ? attachSessionSourceArtifact(state as EditorSession, artifact) : state)),
+    set((state) => (state.project ? { ...attachSessionSourceArtifact(state as EditorSession, artifact), dirty: true } : state)),
   moveLayerTo: (id, position) =>
-    set((state) => (state.project ? moveSessionLayerTo(state as EditorSession, id, position) : state)),
-  resizeSelected: (size) => set((state) => (state.project ? resizeSelectedLayer(state as EditorSession, size) : state)),
-  addLayer: (kind) => set((state) => (state.project ? addSessionLayer(state as EditorSession, kind) : state)),
-  duplicateLayer: (id) => set((state) => (state.project ? duplicateSessionLayer(state as EditorSession, id) : state)),
-  deleteLayer: (id) => set((state) => (state.project ? deleteSessionLayer(state as EditorSession, id) : state)),
-  undo: () => set((state) => (state.project ? undoSession(state as EditorSession) : state)),
-  redo: () => set((state) => (state.project ? redoSession(state as EditorSession) : state)),
+    set((state) => (state.project ? { ...moveSessionLayerTo(state as EditorSession, id, position), dirty: true } : state)),
+  resizeSelected: (size) => set((state) => (state.project ? { ...resizeSelectedLayer(state as EditorSession, size), dirty: true } : state)),
+  addLayer: (kind) => set((state) => (state.project ? { ...addSessionLayer(state as EditorSession, kind), dirty: true } : state)),
+  duplicateLayer: (id) => set((state) => (state.project ? { ...duplicateSessionLayer(state as EditorSession, id), dirty: true } : state)),
+  deleteLayer: (id) => set((state) => (state.project ? { ...deleteSessionLayer(state as EditorSession, id), dirty: true } : state)),
+  undo: () => set((state) => (state.project ? { ...undoSession(state as EditorSession), dirty: true } : state)),
+  redo: () => set((state) => (state.project ? { ...redoSession(state as EditorSession), dirty: true } : state)),
   reorderLayers: (activeId, overId) =>
-    set((state) => (state.project ? reorderSessionLayers(state as EditorSession, activeId, overId) : state)),
+    set((state) => (state.project ? { ...reorderSessionLayers(state as EditorSession, activeId, overId), dirty: true } : state)),
   toggleLayerHidden: (id) =>
-    set((state) => (state.project ? toggleSessionLayerHidden(state as EditorSession, id) : state)),
+    set((state) => (state.project ? { ...toggleSessionLayerHidden(state as EditorSession, id), dirty: true } : state)),
   toggleLayerLocked: (id) =>
-    set((state) => (state.project ? toggleSessionLayerLocked(state as EditorSession, id) : state)),
+    set((state) => (state.project ? { ...toggleSessionLayerLocked(state as EditorSession, id), dirty: true } : state)),
   setSourceRailOpen: (open) => set({ sourceRailOpen: open }),
   setLastExportSizeBytes: (lastExportSizeBytes) => set({ lastExportSizeBytes })
 }));
 
-export function createManualProject(name: string, artifact?: GraphForgeSourceArtifact): OgProject {
+export function createManualProject(name: string, artifact?: OpenGraphCreatorSourceArtifact): OgProject {
   if (artifact && (artifact.inline || artifact.path?.startsWith("assets/")) && (artifact.kind === "svg" || artifact.kind === "image")) {
     const createdAt = artifact.createdAt ?? new Date().toISOString();
     const project = createDefaultProject({
@@ -163,7 +178,7 @@ export function createManualProject(name: string, artifact?: GraphForgeSourceArt
           opacity: 1,
           locked: false,
           hidden: false,
-          src: artifact.inline ?? artifact.path ?? "graphforge://image-placeholder",
+          src: artifact.inline ?? artifact.path ?? "ogcreator://image-placeholder",
           assetPath: artifact.path?.startsWith("assets/") ? artifact.path : undefined,
           fit: "contain",
           borderRadius: 0,
@@ -183,7 +198,7 @@ export function createManualProject(name: string, artifact?: GraphForgeSourceArt
   });
 }
 
-export function createProjectWithImportedAsset(project: OgProject, artifact: GraphForgeSourceArtifact): OgProject {
+export function createProjectWithImportedAsset(project: OgProject, artifact: OpenGraphCreatorSourceArtifact): OgProject {
   if (!(artifact.kind === "svg" || artifact.kind === "image")) {
     return {
       ...project,
@@ -205,7 +220,7 @@ export function createProjectWithImportedAsset(project: OgProject, artifact: Gra
     opacity: 1,
     locked: false,
     hidden: false,
-    src: artifact.inline ?? artifact.path ?? "graphforge://image-placeholder",
+    src: artifact.inline ?? artifact.path ?? "ogcreator://image-placeholder",
     assetPath: artifact.path?.startsWith("assets/") ? artifact.path : undefined,
     fit: "contain",
     borderRadius: 8,
@@ -213,9 +228,8 @@ export function createProjectWithImportedAsset(project: OgProject, artifact: Gra
   };
 
   return {
-    ...project,
+    ...updateActivePageLayers(project, [...project.layers, layer]),
     sourceArtifacts: [...project.sourceArtifacts, artifact],
-    layers: [...project.layers, layer],
     updatedAt: now
   };
 }

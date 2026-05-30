@@ -1,12 +1,19 @@
 import type {
   GenerationMode,
   GenerationStrategy,
-  GraphForgeSourceArtifact,
+  OpenGraphCreatorSourceArtifact,
   ImageLayer,
   LayerEffects,
   OgLayer,
   OgProject
-} from "@graphforge/core";
+} from "@opengraph-creator/core";
+import {
+  createMultiPageProject,
+  getRenderableProject,
+  normalizeTargetPages,
+  setActivePage,
+  updateActivePageLayers
+} from "@opengraph-creator/core";
 
 export type AddableLayerKind = "text" | "image" | "badge" | "background" | "shape" | "rectangle" | "rounded-rectangle" | "ellipse" | "line" | "frame";
 export type LayerAlignMode = "left" | "center" | "right" | "top" | "middle" | "bottom";
@@ -23,20 +30,34 @@ export interface EditorSession {
 const maxHistoryEntries = 60;
 
 export function createEditorSession(project: OgProject): EditorSession {
+  const renderableProject = getRenderableProject(project);
   return {
     project,
-    selectedLayerId: project.layers[0]?.id ?? "",
+    selectedLayerId: renderableProject.layers[0]?.id ?? "",
     past: [],
     future: []
   };
 }
 
 export function selectLayer(session: EditorSession, layerId: string): EditorSession {
+  const renderableProject = getRenderableProject(session.project);
   return {
     ...session,
-    selectedLayerId: session.project.layers.some((layer) => layer.id === layerId)
+    selectedLayerId: renderableProject.layers.some((layer) => layer.id === layerId)
       ? layerId
       : session.selectedLayerId
+  };
+}
+
+export function selectPageVariant(session: EditorSession, pageIdOrRoute: string): EditorSession {
+  const nextProject = setActivePage(session.project, pageIdOrRoute);
+  if (nextProject === session.project) return session;
+  return {
+    ...session,
+    project: nextProject,
+    selectedLayerId: nextProject.layers[0]?.id ?? "",
+    past: keepRecentHistory([...session.past, session.project]),
+    future: []
   };
 }
 
@@ -44,7 +65,7 @@ export function updateSelectedLayer(session: EditorSession, patch: Partial<OgLay
   return updateLayer(session, session.selectedLayerId, patch);
 }
 
-export function attachSourceArtifact(session: EditorSession, artifact: GraphForgeSourceArtifact): EditorSession {
+export function attachSourceArtifact(session: EditorSession, artifact: OpenGraphCreatorSourceArtifact): EditorSession {
   return pushHistory(session, {
     ...session.project,
     sourceArtifacts: [...(session.project.sourceArtifacts ?? []), artifact],
@@ -53,7 +74,7 @@ export function attachSourceArtifact(session: EditorSession, artifact: GraphForg
 }
 
 export function setLayerEffects(session: EditorSession, layerId: string, effectsPatch: Partial<LayerEffects>): EditorSession {
-  const layer = session.project.layers.find((item) => item.id === layerId);
+  const layer = getRenderableProject(session.project).layers.find((item) => item.id === layerId);
   if (!layer || !("effects" in layer)) return session;
   return updateLayer(session, layerId, {
     effects: {
@@ -68,7 +89,8 @@ export function alignLayers(session: EditorSession, layerIds: string[], mode: La
   if (editableLayers.length < 2) return session;
 
   const bounds = getLayerBounds(editableLayers);
-  const layers = session.project.layers.map((layer) => {
+  const renderableProject = getRenderableProject(session.project);
+  const layers = renderableProject.layers.map((layer) => {
     if (!editableLayers.some((item) => item.id === layer.id)) return layer;
     const patch =
       mode === "left"
@@ -83,10 +105,10 @@ export function alignLayers(session: EditorSession, layerIds: string[], mode: La
                 ? { y: bounds.top + (bounds.height - layer.height) / 2 }
                 : { y: bounds.bottom - layer.height };
 
-    return clampLayerPosition(session.project, { ...layer, ...roundPosition(patch) } as OgLayer);
+    return clampLayerPosition(renderableProject, { ...layer, ...roundPosition(patch) } as OgLayer);
   });
 
-  return pushHistory(session, { ...session.project, layers, updatedAt: new Date().toISOString() });
+  return pushHistory(session, updateActivePageLayers(session.project, layers));
 }
 
 export function distributeLayers(session: EditorSession, layerIds: string[], mode: LayerDistributeMode): EditorSession {
@@ -103,23 +125,25 @@ export function distributeLayers(session: EditorSession, layerIds: string[], mod
   const step = (end - start) / (sorted.length - 1);
   const positions = new Map(sorted.map((layer, index) => [layer.id, Math.round(start + step * index)]));
 
-  const layers = session.project.layers.map((layer) => {
+  const renderableProject = getRenderableProject(session.project);
+  const layers = renderableProject.layers.map((layer) => {
     const position = positions.get(layer.id);
     if (position === undefined) return layer;
     return clampLayerPosition(
-      session.project,
+      renderableProject,
       mode === "horizontal" ? ({ ...layer, x: position } as OgLayer) : ({ ...layer, y: position } as OgLayer)
     );
   });
 
-  return pushHistory(session, { ...session.project, layers, updatedAt: new Date().toISOString() });
+  return pushHistory(session, updateActivePageLayers(session.project, layers));
 }
 
 export function snapLayer(session: EditorSession, layerId: string, target: LayerSnapTarget): EditorSession {
-  const layer = session.project.layers.find((item) => item.id === layerId);
+  const renderableProject = getRenderableProject(session.project);
+  const layer = renderableProject.layers.find((item) => item.id === layerId);
   if (!layer || layer.locked) return session;
 
-  const canvas = session.project.canvas;
+  const canvas = renderableProject.canvas;
   const position =
     target === "safe-zone"
       ? { x: canvas.safeInset, y: canvas.safeInset }
@@ -133,7 +157,7 @@ export function snapLayer(session: EditorSession, layerId: string, target: Layer
 }
 
 export function setImageCrop(session: EditorSession, layerId: string, crop: ImageLayer["crop"]): EditorSession {
-  const layer = session.project.layers.find((item) => item.id === layerId);
+  const layer = getRenderableProject(session.project).layers.find((item) => item.id === layerId);
   if (!isImageLayer(layer) || !crop) return session;
   const width = clamp(Number.isFinite(crop.width) ? crop.width : 1, 0.01, 1);
   const height = clamp(Number.isFinite(crop.height) ? crop.height : 1, 0.01, 1);
@@ -148,7 +172,7 @@ export function setImageCrop(session: EditorSession, layerId: string, crop: Imag
 }
 
 export function setImageFocalPoint(session: EditorSession, layerId: string, focalPoint: ImageLayer["focalPoint"]): EditorSession {
-  const layer = session.project.layers.find((item) => item.id === layerId);
+  const layer = getRenderableProject(session.project).layers.find((item) => item.id === layerId);
   if (!isImageLayer(layer) || !focalPoint) return session;
   return updateLayer(session, layerId, {
     focalPoint: {
@@ -159,7 +183,7 @@ export function setImageFocalPoint(session: EditorSession, layerId: string, foca
 }
 
 export function setImagePerspective(session: EditorSession, layerId: string, perspective: ImageLayer["perspective"]): EditorSession {
-  const layer = session.project.layers.find((item) => item.id === layerId);
+  const layer = getRenderableProject(session.project).layers.find((item) => item.id === layerId);
   if (!isImageLayer(layer) || !perspective || perspective.length !== 4) return session;
   return updateLayer(session, layerId, {
     perspective: perspective.map((point) => ({
@@ -174,7 +198,7 @@ export function updateProjectSettings(
   patch: Partial<{ strategy: GenerationStrategy; generationMode: GenerationMode; targetPages: string[] }>
 ): EditorSession {
   const strategy = patch.strategy ?? session.project.strategy;
-  const nextProject = {
+  const baseProject = {
     ...session.project,
     ...patch,
     strategy,
@@ -187,31 +211,14 @@ export function updateProjectSettings(
     ),
     updatedAt: new Date().toISOString()
   } as OgProject;
+  const nextProject = strategy === "pages" || strategy === "hybrid" ? createMultiPageProject(baseProject) : { ...baseProject, activePageId: undefined, pages: undefined };
   return pushHistory(session, nextProject);
 }
 
-function normalizeTargetPages(pages: string[]): string[] {
-  const seen = new Set<string>();
-  const normalized = pages
-    .map((page) => page.trim())
-    .filter(Boolean)
-    .map((page) => (page.startsWith("/") ? page : `/${page}`))
-    .map((page) => page.replace(/\/{2,}/g, "/").replace(/\/+$/, "") || "/")
-    .filter((page) => {
-      if (seen.has(page)) return false;
-      seen.add(page);
-      return true;
-    });
-
-  return normalized.length ? normalized : ["/"];
-}
-
 export function updateLayer(session: EditorSession, layerId: string, patch: Partial<OgLayer>): EditorSession {
-  const nextProject = {
-    ...session.project,
-    layers: session.project.layers.map((layer) => (layer.id === layerId ? ({ ...layer, ...patch } as OgLayer) : layer)),
-    updatedAt: new Date().toISOString()
-  };
+  const renderableProject = getRenderableProject(session.project);
+  const layers = renderableProject.layers.map((layer) => (layer.id === layerId ? ({ ...layer, ...patch } as OgLayer) : layer));
+  const nextProject = updateActivePageLayers(session.project, layers);
   return pushHistory(session, nextProject);
 }
 
@@ -235,63 +242,59 @@ export function resizeSelectedLayer(
 }
 
 export function moveLayerTo(session: EditorSession, layerId: string, position: { x: number; y: number }): EditorSession {
-  const layer = session.project.layers.find((item) => item.id === layerId);
+  const renderableProject = getRenderableProject(session.project);
+  const layer = renderableProject.layers.find((item) => item.id === layerId);
   if (!layer || layer.locked) return session;
   return updateLayer(session, layerId, {
-    x: clamp(Math.round(position.x), 0, session.project.canvas.width - layer.width),
-    y: clamp(Math.round(position.y), 0, session.project.canvas.height - layer.height)
+    x: clamp(Math.round(position.x), 0, renderableProject.canvas.width - layer.width),
+    y: clamp(Math.round(position.y), 0, renderableProject.canvas.height - layer.height)
   });
 }
 
 export function addLayer(session: EditorSession, kind: AddableLayerKind): EditorSession {
-  const layer = createLayer(session.project, kind);
-  const layers = layer.kind === "background" ? [layer, ...session.project.layers] : [...session.project.layers, layer];
+  const renderableProject = getRenderableProject(session.project);
+  const layer = createLayer(renderableProject, kind);
+  const layers = layer.kind === "background" ? [layer, ...renderableProject.layers] : [...renderableProject.layers, layer];
   return pushHistory(
     session,
-    {
-      ...session.project,
-      layers,
-      updatedAt: new Date().toISOString()
-    },
+    updateActivePageLayers(session.project, layers),
     layer.id
   );
 }
 
 export function duplicateLayer(session: EditorSession, layerId: string): EditorSession {
-  const index = session.project.layers.findIndex((layer) => layer.id === layerId);
-  const layer = session.project.layers[index];
+  const renderableProject = getRenderableProject(session.project);
+  const index = renderableProject.layers.findIndex((layer) => layer.id === layerId);
+  const layer = renderableProject.layers[index];
   if (!layer) return session;
 
   const copy = cloneLayer(layer);
   const nextLayer: OgLayer = {
     ...copy,
-    id: nextCopyId(session.project.layers, layer.id),
+    id: nextCopyId(renderableProject.layers, layer.id),
     name: `${layer.name} copy`,
-    x: clamp(layer.x + 24, 0, session.project.canvas.width - layer.width),
-    y: clamp(layer.y + 24, 0, session.project.canvas.height - layer.height),
+    x: clamp(layer.x + 24, 0, renderableProject.canvas.width - layer.width),
+    y: clamp(layer.y + 24, 0, renderableProject.canvas.height - layer.height),
     locked: false,
     hidden: false
   } as OgLayer;
-  const layers = [...session.project.layers];
+  const layers = [...renderableProject.layers];
   layers.splice(index + 1, 0, nextLayer);
 
   return pushHistory(
     session,
-    {
-      ...session.project,
-      layers,
-      updatedAt: new Date().toISOString()
-    },
+    updateActivePageLayers(session.project, layers),
     nextLayer.id
   );
 }
 
 export function deleteLayer(session: EditorSession, layerId: string): EditorSession {
-  const index = session.project.layers.findIndex((layer) => layer.id === layerId);
-  const layer = session.project.layers[index];
-  if (!layer || layer.locked || session.project.layers.length <= 1) return session;
+  const renderableProject = getRenderableProject(session.project);
+  const index = renderableProject.layers.findIndex((layer) => layer.id === layerId);
+  const layer = renderableProject.layers[index];
+  if (!layer || layer.locked || renderableProject.layers.length <= 1) return session;
 
-  const layers = session.project.layers.filter((item) => item.id !== layerId);
+  const layers = renderableProject.layers.filter((item) => item.id !== layerId);
   const selectedLayerId =
     session.selectedLayerId === layerId
       ? layers[Math.max(0, index - 1)]?.id ?? layers[0]?.id ?? ""
@@ -299,11 +302,7 @@ export function deleteLayer(session: EditorSession, layerId: string): EditorSess
 
   return pushHistory(
     session,
-    {
-      ...session.project,
-      layers,
-      updatedAt: new Date().toISOString()
-    },
+    updateActivePageLayers(session.project, layers),
     selectedLayerId
   );
 }
@@ -321,21 +320,23 @@ export function toggleLayerLocked(session: EditorSession, layerId: string): Edit
 }
 
 export function reorderLayers(session: EditorSession, activeId: string, overId: string): EditorSession {
-  const oldIndex = session.project.layers.findIndex((layer) => layer.id === activeId);
-  const newIndex = session.project.layers.findIndex((layer) => layer.id === overId);
+  const renderableProject = getRenderableProject(session.project);
+  const oldIndex = renderableProject.layers.findIndex((layer) => layer.id === activeId);
+  const newIndex = renderableProject.layers.findIndex((layer) => layer.id === overId);
   if (oldIndex < 0 || newIndex < 0 || oldIndex === newIndex) return session;
-  const layers = [...session.project.layers];
+  const layers = [...renderableProject.layers];
   const [active] = layers.splice(oldIndex, 1);
   layers.splice(newIndex, 0, active);
-  return pushHistory(session, { ...session.project, layers, updatedAt: new Date().toISOString() });
+  return pushHistory(session, updateActivePageLayers(session.project, layers));
 }
 
 export function undo(session: EditorSession): EditorSession {
   const previous = session.past.at(-1);
   if (!previous) return session;
+  const previousRenderable = getRenderableProject(previous);
   return {
     project: previous,
-    selectedLayerId: previous.layers.find((layer) => layer.id === session.selectedLayerId)?.id ?? previous.layers[0]?.id ?? "",
+    selectedLayerId: previousRenderable.layers.find((layer) => layer.id === session.selectedLayerId)?.id ?? previousRenderable.layers[0]?.id ?? "",
     past: session.past.slice(0, -1),
     future: [session.project, ...session.future]
   };
@@ -344,9 +345,10 @@ export function undo(session: EditorSession): EditorSession {
 export function redo(session: EditorSession): EditorSession {
   const next = session.future[0];
   if (!next) return session;
+  const nextRenderable = getRenderableProject(next);
   return {
     project: next,
-    selectedLayerId: next.layers.find((layer) => layer.id === session.selectedLayerId)?.id ?? next.layers[0]?.id ?? "",
+    selectedLayerId: nextRenderable.layers.find((layer) => layer.id === session.selectedLayerId)?.id ?? nextRenderable.layers[0]?.id ?? "",
     past: keepRecentHistory([...session.past, session.project]),
     future: session.future.slice(1)
   };
@@ -367,12 +369,12 @@ function keepRecentHistory(history: OgProject[]): OgProject[] {
 }
 
 function getSelectedLayer(session: EditorSession): OgLayer | undefined {
-  return session.project.layers.find((layer) => layer.id === session.selectedLayerId);
+  return getRenderableProject(session.project).layers.find((layer) => layer.id === session.selectedLayerId);
 }
 
 function getEditableLayers(session: EditorSession, layerIds: string[]): OgLayer[] {
   const ids = new Set(layerIds);
-  return session.project.layers.filter((layer) => ids.has(layer.id) && !layer.locked);
+  return getRenderableProject(session.project).layers.filter((layer) => ids.has(layer.id) && !layer.locked);
 }
 
 function getLayerBounds(layers: OgLayer[]): { left: number; top: number; right: number; bottom: number; width: number; height: number } {
@@ -462,7 +464,7 @@ function createLayer(project: OgProject, kind: AddableLayerKind): OgLayer {
       name: "Image Layer",
       width: 280,
       height: 180,
-      src: "graphforge://image-placeholder",
+      src: "ogcreator://image-placeholder",
       fit: "contain",
       borderRadius: 8,
       effects: { shadow: true, glow: false, blur: 0 }

@@ -1,18 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, stat, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createDefaultProject, unpackStudioDocument } from "@graphforge/core";
+import { createDefaultProject, unpackStudioDocument } from "@opengraph-creator/core";
 import {
   applyMetadataPlanToRepo,
   createDoctorReport,
   createProjectFromArgs,
   createMetadataPlan,
+  exportProjectPages,
   exportProjectFile,
+  readReusableStudioLaunch,
   runCli
 } from "./index";
 
-describe("GraphForge CLI helpers", () => {
+describe("OpenGraphCreator CLI helpers", () => {
   it("creates a project from CLI-like args without touching app files", () => {
     const project = createProjectFromArgs({
       name: "Acme",
@@ -27,11 +30,15 @@ describe("GraphForge CLI helpers", () => {
     expect(project.sourceRepo).toBe("D:/apps/acme");
     expect(project.generationMode).toBe("pure-image");
     expect(project.targetPages).toEqual(["/", "/pricing"]);
-    expect(project.layers.find((layer) => layer.id === "badge")).toMatchObject({ text: "Technical Article" });
+    expect(project.pages?.map((page) => [page.route, page.layers.find((layer) => layer.id === "badge")?.kind])).toEqual([
+      ["/", "badge"],
+      ["/pricing", "badge"]
+    ]);
+    expect(project.sharedDesign?.description).toContain("Shared visual system");
   });
 
   it("writes generation mode through the new CLI command", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "graphforge-new-mode-"));
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-new-mode-"));
     const projectPath = join(dir, "project.og.json");
 
     await runCli(["new", "--name", "Mode App", "--strategy", "hybrid", "--mode", "pure-image", "--out", projectPath]);
@@ -39,6 +46,34 @@ describe("GraphForge CLI helpers", () => {
     const project = JSON.parse(await readFile(projectPath, "utf8")) as ReturnType<typeof createDefaultProject>;
     expect(project.generationMode).toBe("pure-image");
     expect(project.strategy).toBe("hybrid");
+  });
+
+  it("creates one multi-page document when the CLI receives page targets", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-new-pages-"));
+    const documentPath = join(dir, "pages.ogdoc");
+
+    await runCli([
+      "document",
+      "new",
+      "--name",
+      "Pages App",
+      "--strategy",
+      "pages",
+      "--mode",
+      "template",
+      "--pages",
+      "/,/pricing,/features",
+      "--out",
+      documentPath
+    ]);
+
+    const document = await unpackStudioDocument(await readFile(documentPath));
+    expect(document.project.pages?.map((page) => [page.route, page.exportPath])).toEqual([
+      ["/", "public/og.png"],
+      ["/pricing", "public/og/pricing.png"],
+      ["/features", "public/og/features.png"]
+    ]);
+    expect(document.project.layers).toEqual(document.project.pages?.[0].layers);
   });
 
   it("builds a preview-first metadata plan for Next.js", () => {
@@ -55,7 +90,7 @@ describe("GraphForge CLI helpers", () => {
   });
 
   it("exports a project file to PNG through the CLI service layer", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "graphforge-cli-"));
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-cli-"));
     const projectPath = join(dir, "project.og.json");
     const target = join(dir, "og.png");
     await writeFile(projectPath, JSON.stringify(createDefaultProject({ name: "CLI Export", strategy: "common" })));
@@ -63,10 +98,11 @@ describe("GraphForge CLI helpers", () => {
     const result = await exportProjectFile({ projectPath, format: "png", target });
 
     expect(result).toMatchObject({ format: "png", width: 1200, height: 630, target });
+    expect(result.qualityReport).toMatchObject({ mimeType: "image/png", nonblank: true, socialReady: true });
   });
 
   it("exports a project file to JPEG through the CLI service layer", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "graphforge-cli-jpeg-"));
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-cli-jpeg-"));
     const projectPath = join(dir, "project.og.json");
     const target = join(dir, "og.jpg");
     await writeFile(projectPath, JSON.stringify(createDefaultProject({ name: "CLI JPEG Export", strategy: "common" })));
@@ -74,10 +110,36 @@ describe("GraphForge CLI helpers", () => {
     const result = await exportProjectFile({ projectPath, format: "jpg", target });
 
     expect(result).toMatchObject({ format: "jpg", width: 1200, height: 630, target });
+    expect(result.qualityReport).toMatchObject({ mimeType: "image/jpeg", nonblank: true, socialReady: true });
+  });
+
+  it("exports every page variant with deterministic page-to-image mapping", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-page-export-"));
+    const project = createProjectFromArgs({
+      name: "Page Export",
+      strategy: "pages",
+      generationMode: "template",
+      pages: ["/", "/pricing"]
+    });
+    const projectPath = join(dir, "pages.og.json");
+    await writeFile(projectPath, JSON.stringify(project));
+
+    const result = await exportProjectPages({
+      projectPath,
+      format: "png",
+      outDir: join(dir, "public", "og")
+    });
+
+    expect(result.exports.map((item) => [item.page, item.path, item.width, item.height])).toEqual([
+      ["/", join(dir, "public", "og", "home.png"), 1200, 630],
+      ["/pricing", join(dir, "public", "og", "pricing.png"), 1200, 630]
+    ]);
+    await expect(stat(result.exports[0].path)).resolves.toMatchObject({ size: expect.any(Number) });
+    await expect(stat(result.exports[1].path)).resolves.toMatchObject({ size: expect.any(Number) });
   });
 
   it("renders SVG from an existing editable project file through the CLI entrypoint", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "graphforge-render-project-"));
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-render-project-"));
     const projectPath = join(dir, "project.og.json");
     const target = join(dir, "public", "og.svg");
     const project = createDefaultProject({
@@ -97,7 +159,7 @@ describe("GraphForge CLI helpers", () => {
   });
 
   it("applies confirmed Next.js metadata by creating the smallest metadata file", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "graphforge-next-"));
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-next-"));
 
     const result = await applyMetadataPlanToRepo({
       repo: dir,
@@ -114,7 +176,7 @@ describe("GraphForge CLI helpers", () => {
   });
 
   it("preserves an existing Next.js layout while replacing a simple metadata export", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "graphforge-next-preserve-"));
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-next-preserve-"));
     const layoutPath = join(dir, "app", "layout.tsx");
     await mkdir(join(dir, "app"), { recursive: true });
     await writeFile(
@@ -145,11 +207,11 @@ describe("GraphForge CLI helpers", () => {
     expect(layout).toContain('url: "/og/next.png"');
     expect(layout).toContain('images: ["/og/next.png"]');
     expect(layout).toContain("<main>{children}</main>");
-    expect(await readFile(`${layoutPath}.graphforge.bak`, "utf8")).toContain("Keep title");
+    expect(await readFile(`${layoutPath}.opengraph-creator.bak`, "utf8")).toContain("Keep title");
   });
 
   it("inserts a Next.js metadata export when a layout has none", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "graphforge-next-insert-"));
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-next-insert-"));
     const layoutPath = join(dir, "app", "layout.tsx");
     await mkdir(join(dir, "app"), { recursive: true });
     await writeFile(
@@ -183,7 +245,7 @@ describe("GraphForge CLI helpers", () => {
     ["vite", "index.html", "og:image"],
     ["html", "index.html", "og:image"]
   ] as const)("applies confirmed %s metadata", async (framework, filePath, expected) => {
-    const dir = await mkdtemp(join(tmpdir(), `graphforge-${framework}-`));
+    const dir = await mkdtemp(join(tmpdir(), `OpenGraphCreator-${framework}-`));
 
     await applyMetadataPlanToRepo({
       repo: dir,
@@ -199,7 +261,7 @@ describe("GraphForge CLI helpers", () => {
   });
 
   it("preserves an existing Astro layout while upserting social image tags", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "graphforge-astro-preserve-"));
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-astro-preserve-"));
     const layoutPath = join(dir, "src", "layouts", "Layout.astro");
     await mkdir(join(dir, "src", "layouts"), { recursive: true });
     await writeFile(
@@ -235,11 +297,11 @@ describe("GraphForge CLI helpers", () => {
     expect(layout).toContain('<meta property="og:image" content="/og/astro.png">');
     expect(layout).toContain('<meta name="twitter:image" content="/og/astro.png">');
     expect(layout).not.toContain("/old-astro.png");
-    expect(await readFile(`${layoutPath}.graphforge.bak`, "utf8")).toContain("/old-astro.png");
+    expect(await readFile(`${layoutPath}.opengraph-creator.bak`, "utf8")).toContain("/old-astro.png");
   });
 
   it("preserves an existing Nuxt app while upserting useSeoMeta", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "graphforge-nuxt-preserve-"));
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-nuxt-preserve-"));
     const appPath = join(dir, "app.vue");
     await writeFile(
       appPath,
@@ -274,11 +336,11 @@ describe("GraphForge CLI helpers", () => {
     expect(app).toContain('ogImage: "/og/nuxt.png"');
     expect(app).toContain('twitterImage: "/og/nuxt.png"');
     expect(app).toContain("<NuxtLayout>");
-    expect(await readFile(`${appPath}.graphforge.bak`, "utf8")).toContain("/old-nuxt.png");
+    expect(await readFile(`${appPath}.opengraph-creator.bak`, "utf8")).toContain("/old-nuxt.png");
   });
 
   it("inserts a Nuxt script setup when app.vue has only a template", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "graphforge-nuxt-insert-"));
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-nuxt-insert-"));
     const appPath = join(dir, "app.vue");
     await writeFile(appPath, "<template><NuxtPage /></template>");
 
@@ -297,7 +359,7 @@ describe("GraphForge CLI helpers", () => {
   });
 
   it("preserves an existing Remix root while upserting meta entries", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "graphforge-remix-preserve-"));
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-remix-preserve-"));
     const rootPath = join(dir, "app", "root.tsx");
     await mkdir(join(dir, "app"), { recursive: true });
     await writeFile(
@@ -331,11 +393,11 @@ describe("GraphForge CLI helpers", () => {
     expect(root).toContain('{ name: "twitter:image", content: "/og/remix.png" }');
     expect(root).toContain("<Outlet />");
     expect(root).not.toContain("/old-remix.png");
-    expect(await readFile(`${rootPath}.graphforge.bak`, "utf8")).toContain("/old-remix.png");
+    expect(await readFile(`${rootPath}.opengraph-creator.bak`, "utf8")).toContain("/old-remix.png");
   });
 
   it("inserts a Remix meta export when root has none", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "graphforge-remix-insert-"));
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-remix-insert-"));
     const rootPath = join(dir, "app", "root.tsx");
     await mkdir(join(dir, "app"), { recursive: true });
     await writeFile(rootPath, "export default function App() { return <Outlet />; }");
@@ -356,7 +418,7 @@ describe("GraphForge CLI helpers", () => {
   });
 
   it("backs up existing metadata files before confirmed apply", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "graphforge-backup-"));
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-backup-"));
     const file = join(dir, "index.html");
     await writeFile(file, "<html><head></head><body>Existing</body></html>");
 
@@ -368,11 +430,11 @@ describe("GraphForge CLI helpers", () => {
       confirm: true
     });
 
-    expect(await readFile(`${file}.graphforge.bak`, "utf8")).toContain("Existing");
+    expect(await readFile(`${file}.opengraph-creator.bak`, "utf8")).toContain("Existing");
   });
 
   it("preserves existing HTML while upserting OG metadata", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "graphforge-html-preserve-"));
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-html-preserve-"));
     const file = join(dir, "index.html");
     await writeFile(
       file,
@@ -405,7 +467,7 @@ describe("GraphForge CLI helpers", () => {
   });
 
   it("inserts HTML metadata into an existing head when tags are missing", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "graphforge-vite-preserve-"));
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-vite-preserve-"));
     const file = join(dir, "index.html");
     await writeFile(file, "<html><head><title>Vite App</title></head><body><div id=\"root\"></div></body></html>");
 
@@ -425,7 +487,7 @@ describe("GraphForge CLI helpers", () => {
   });
 
   it("adds a head to minimal HTML without dropping body content", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "graphforge-html-no-head-"));
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-html-no-head-"));
     const file = join(dir, "index.html");
     await writeFile(file, "<html><body><div id=\"root\">Keep body</div></body></html>");
 
@@ -444,7 +506,7 @@ describe("GraphForge CLI helpers", () => {
   });
 
   it("saves projects to a selected library through the CLI entrypoint", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "graphforge-cli-save-"));
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-cli-save-"));
     const projectPath = join(dir, "project.og.json");
     const home = join(dir, "home");
     await writeFile(projectPath, JSON.stringify(createDefaultProject({ name: "Saved CLI", strategy: "common" })));
@@ -456,7 +518,7 @@ describe("GraphForge CLI helpers", () => {
   });
 
   it("writes page-specific variant project files from a base project", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "graphforge-variants-"));
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-variants-"));
     const projectPath = join(dir, "base.og.json");
     await writeFile(
       projectPath,
@@ -473,7 +535,7 @@ describe("GraphForge CLI helpers", () => {
   });
 
   it("creates a durable session and writes a publish preview without mutating metadata", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "graphforge-cli-session-"));
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-cli-session-"));
 
     await runCli(["session", "create", "--repo", dir, "--id", "cli-session", "--agent", "codex", "--strategy", "hybrid"]);
     await runCli([
@@ -489,24 +551,96 @@ describe("GraphForge CLI helpers", () => {
       "public/og.png"
     ]);
 
-    const request = await readFile(join(dir, ".graphforge", "sessions", "cli-session", "publish-request.json"), "utf8");
+    const request = await readFile(join(dir, ".opengraph-creator", "sessions", "cli-session", "publish-request.json"), "utf8");
     expect(request).toContain('"status": "preview"');
     await expect(readFile(join(dir, "app", "layout.tsx"), "utf8")).rejects.toThrow();
   });
 
+  it("reuses an already-live Studio launch for the same repo session", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-cli-reuse-studio-"));
+    await runCli(["session", "create", "--repo", dir, "--id", "reuse-session", "--agent", "codex", "--strategy", "pages"]);
+
+    const server = createServer((request, response) => {
+      if (request.url?.startsWith("/api/session")) {
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end(JSON.stringify({ session: { id: "reuse-session", repo: dir }, project: undefined }));
+        return;
+      }
+      response.writeHead(404, { "content-type": "application/json" });
+      response.end("{}");
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("test server did not bind");
+    const url = `http://127.0.0.1:${address.port}?session=reuse-session&repo=${encodeURIComponent(dir)}`;
+    await writeFile(
+      join(dir, ".opengraph-creator", "sessions", "reuse-session", "studio.json"),
+      JSON.stringify({ sessionId: "reuse-session", repo: dir, url, pid: 12345, openedAt: new Date().toISOString() }, null, 2)
+    );
+
+    try {
+      const reusable = await readReusableStudioLaunch(dir, "reuse-session");
+      expect(reusable).toMatchObject({ sessionId: "reuse-session", repo: dir, url, pid: 12345, reused: true });
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+    }
+  });
+
+  it("ignores a stale Studio launch when the health endpoint is gone", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-cli-stale-studio-"));
+    await runCli(["session", "create", "--repo", dir, "--id", "stale-session", "--agent", "codex", "--strategy", "pages"]);
+    await writeFile(
+      join(dir, ".opengraph-creator", "sessions", "stale-session", "studio.json"),
+      JSON.stringify({
+        sessionId: "stale-session",
+        repo: dir,
+        url: "http://127.0.0.1:9?session=stale-session",
+        pid: 12345,
+        openedAt: new Date().toISOString()
+      }, null, 2)
+    );
+
+    await expect(readReusableStudioLaunch(dir, "stale-session")).resolves.toBeUndefined();
+  });
+
+  it("publishes page-specific exports from the session export map", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-cli-page-publish-"));
+    await mkdir(join(dir, "app", "pricing"), { recursive: true });
+    await writeFile(join(dir, "app", "layout.tsx"), "export default function RootLayout({ children }) { return children }");
+    await writeFile(join(dir, "app", "pricing", "page.tsx"), "export default function Pricing() { return null }");
+
+    await runCli(["session", "create", "--repo", dir, "--id", "page-session", "--agent", "codex", "--strategy", "pages"]);
+    await runCli(["publish", "--preview", "--repo", dir, "--session", "page-session", "--framework", "next", "--pageImages", JSON.stringify([
+      { page: "/", imagePath: "public/og/home.png" },
+      { page: "/pricing", imagePath: "public/og/pricing.png" }
+    ])]);
+    await runCli(["publish", "--confirm", "--repo", dir, "--session", "page-session", "--framework", "next", "--allPages"]);
+
+    const request = JSON.parse(await readFile(join(dir, ".opengraph-creator", "sessions", "page-session", "publish-request.json"), "utf8"));
+    const layout = await readFile(join(dir, "app", "layout.tsx"), "utf8");
+    const pricing = await readFile(join(dir, "app", "pricing", "page.tsx"), "utf8");
+    expect(request.pageImages).toEqual([
+      { page: "/", imagePath: "public/og/home.png" },
+      { page: "/pricing", imagePath: "public/og/pricing.png" }
+    ]);
+    expect(request.status).toBe("confirmed");
+    expect(layout).toContain("/og/home.png");
+    expect(pricing).toContain("/og/pricing.png");
+  });
+
   it("publishes with confirmation by creating metadata backup-safe files", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "graphforge-cli-publish-confirm-"));
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-cli-publish-confirm-"));
 
     await runCli(["publish", "--confirm", "--repo", dir, "--session", "manual", "--framework", "next", "--image", "public/og.png"]);
 
-    const request = await readFile(join(dir, ".graphforge", "sessions", "manual", "publish-request.json"), "utf8");
+    const request = await readFile(join(dir, ".opengraph-creator", "sessions", "manual", "publish-request.json"), "utf8");
     const layout = await readFile(join(dir, "app", "layout.tsx"), "utf8");
     expect(request).toContain('"status": "confirmed"');
     expect(layout).toContain("/og.png");
   });
 
   it("waits for confirmed publish instead of treating preview as terminal", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "graphforge-cli-wait-confirm-"));
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-cli-wait-confirm-"));
 
     await runCli(["session", "create", "--repo", dir, "--id", "wait-session", "--agent", "codex", "--strategy", "common"]);
     await runCli(["publish", "--preview", "--repo", dir, "--session", "wait-session", "--framework", "vite", "--image", "public/og.png"]);
@@ -525,7 +659,7 @@ describe("GraphForge CLI helpers", () => {
     ]);
     const previewElapsed = Date.now() - started;
 
-    const previewSession = await readFile(join(dir, ".graphforge", "sessions", "wait-session", "session.json"), "utf8");
+    const previewSession = await readFile(join(dir, ".opengraph-creator", "sessions", "wait-session", "session.json"), "utf8");
     expect(previewElapsed).toBeGreaterThanOrEqual(75);
     expect(previewSession).toContain('"status": "preview"');
     expect(previewSession).not.toContain('"status": "confirmed"');
@@ -543,13 +677,13 @@ describe("GraphForge CLI helpers", () => {
       "--timeout",
       "1000"
     ]);
-    const confirmedSession = await readFile(join(dir, ".graphforge", "sessions", "wait-session", "session.json"), "utf8");
+    const confirmedSession = await readFile(join(dir, ".opengraph-creator", "sessions", "wait-session", "session.json"), "utf8");
 
     expect(confirmedSession).toContain('"status": "confirmed"');
   });
 
   it("waits for the next Studio decision across agent request and confirmed publish", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "graphforge-cli-next-action-"));
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-cli-next-action-"));
 
     await runCli(["session", "create", "--repo", dir, "--id", "next-action", "--agent", "claude", "--strategy", "hybrid"]);
     await runCli([
@@ -589,14 +723,14 @@ describe("GraphForge CLI helpers", () => {
       "--timeout",
       "1000"
     ]);
-    const confirmedSession = await readFile(join(dir, ".graphforge", "sessions", "next-action", "session.json"), "utf8");
+    const confirmedSession = await readFile(join(dir, ".opengraph-creator", "sessions", "next-action", "session.json"), "utf8");
 
     expect(confirmedSession).toContain('"status": "published"');
     expect(confirmedSession).toContain('"status": "confirmed"');
   });
 
   it("imports generated SVG, HTML, and image assets into editable project wrappers", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "graphforge-import-"));
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-import-"));
     const svgPath = join(dir, "generated.svg");
     const htmlPath = join(dir, "generated.html");
     const imagePath = join(dir, "generated.png");
@@ -622,7 +756,7 @@ describe("GraphForge CLI helpers", () => {
     expect(svgSourceLayer).toMatchObject({ kind: "image", x: 0, y: 0, width: 1200, height: 630, fit: "contain" });
     expect(svgSourceLayer && "src" in svgSourceLayer ? svgSourceLayer.src : "").toMatch(/^data:image\/svg\+xml;base64,/);
     expect(htmlProject.sourceArtifacts[0]).toMatchObject({ kind: "html", origin: "codex", path: htmlPath });
-    expect(htmlProject.layers.some((layer) => layer.kind === "screenshot" && "src" in layer && layer.src === "graphforge://html-source")).toBe(true);
+    expect(htmlProject.layers.some((layer) => layer.kind === "screenshot" && "src" in layer && layer.src === "ogcreator://html-source")).toBe(true);
     expect(imageProject.sourceArtifacts[0]).toMatchObject({ kind: "image", origin: "codex", path: imagePath });
     expect(imageProject.layers.map((layer) => layer.name)).toEqual(["Background", "Imported Image Source"]);
     expect(imageSourceLayer).toMatchObject({ kind: "image", x: 0, y: 0, width: 1200, height: 630, fit: "contain" });
@@ -630,7 +764,7 @@ describe("GraphForge CLI helpers", () => {
   });
 
   it("creates, validates, and imports proprietary Studio document packages", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "graphforge-ogdoc-"));
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-ogdoc-"));
     const documentPath = join(dir, "launch.ogdoc");
     const svgPath = join(dir, "generated.svg");
     const importedDocumentPath = join(dir, "imported.ogdoc");
@@ -654,7 +788,7 @@ describe("GraphForge CLI helpers", () => {
   });
 
   it("writes an agent handoff plan without calling a provider", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "graphforge-ai-plan-"));
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-ai-plan-"));
     const projectPath = join(dir, "project.og.json");
     const planPath = join(dir, "agent-plan.json");
     await writeFile(projectPath, JSON.stringify(createDefaultProject({ name: "AI Plan", strategy: "common" })));
@@ -685,8 +819,8 @@ describe("GraphForge CLI helpers", () => {
     expect(JSON.stringify(plan)).not.toContain("OPENAI_API_KEY");
   });
 
-  it("reports actionable doctor checks for Codex skill, studio build, and agent handoff readiness", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "graphforge-doctor-"));
+  it("reports actionable doctor checks for agent skill, studio build, and handoff readiness", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-doctor-"));
 
     const report = await createDoctorReport({
       repo: dir,
@@ -698,22 +832,36 @@ describe("GraphForge CLI helpers", () => {
       "cli",
       "renderer",
       "studio-build",
-      "codex-skill-source",
-      "codex-skill-installed",
+      "agent-skill-source",
+      "agent-skill-installed",
       "agent-handoff"
     ]);
     expect(report.checks.find((check) => check.id === "studio-build")).toMatchObject({
       status: "warn",
       action: "Run npm run build before launching the packaged studio."
     });
-    expect(report.checks.find((check) => check.id === "codex-skill-installed")).toMatchObject({
+    expect(report.checks.find((check) => check.id === "agent-skill-installed")).toMatchObject({
       status: "warn",
-      action: expect.stringContaining("graphforge install-skill")
+      action: expect.stringContaining("npx skills add")
     });
     expect(report.checks.find((check) => check.id === "agent-handoff")).toMatchObject({
       status: "pass",
       detail: expect.stringContaining("Codex, Claude, or OpenCode")
     });
     expect(report.ready).toBe(false);
+  });
+
+  it("recognizes the OpenCode singular skill directory during doctor checks", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-doctor-opencode-"));
+    const home = join(dir, "home");
+    const staticDir = join(dir, "studio-dist");
+    await mkdir(join(home, ".config", "opencode", "skill", "opengraph-creator"), { recursive: true });
+    await mkdir(staticDir, { recursive: true });
+    await writeFile(join(home, ".config", "opencode", "skill", "opengraph-creator", "SKILL.md"), "---\nname: opengraph-creator\n---\n", "utf8");
+    await writeFile(join(staticDir, "index.html"), "<!doctype html><div id=\"root\"></div>", "utf8");
+
+    const report = await createDoctorReport({ repo: dir, home, staticDir });
+
+    expect(report.checks.find((check) => check.id === "agent-skill-installed")).toMatchObject({ status: "pass" });
   });
 });

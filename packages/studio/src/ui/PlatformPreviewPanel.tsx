@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
-import { getPlatformWarnings } from "@graphforge/core";
-import { renderProjectToSvg } from "@graphforge/render/browser";
+import { getPlatformWarnings } from "@opengraph-creator/core";
+import { renderProjectToSvg } from "@opengraph-creator/render/browser";
 import { getPlatformPreviewCards, getPlatformPreviewSpecs, type PlatformPreviewCard, type PlatformPreviewSpec } from "../platforms";
 import { PlatformIcon, PlatformTabs } from "./platform-preview/PlatformTabs";
 import { PreviewFrame } from "./platform-preview/PreviewFrame";

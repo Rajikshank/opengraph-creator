@@ -1,15 +1,17 @@
 #!/usr/bin/env node
 import { realpathSync } from "node:fs";
 import { copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
-import { dirname, join, normalize } from "node:path";
+import { dirname, isAbsolute, join, normalize, relative } from "node:path";
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   createDefaultProject,
+  createMultiPageProject,
   createPageVariantProjects,
   createProjectFromPreset,
   validateStudioDocument,
+  getRenderableProject,
   type ExportFormat,
   type Framework,
   type GenerationMode,
@@ -18,8 +20,8 @@ import {
   type OgProject,
   type ProjectPreset,
   type SourceArtifactKind
-} from "@graphforge/core";
-import { exportProject, renderProjectToSvg, type ExportResult } from "@graphforge/render";
+} from "@opengraph-creator/core";
+import { exportProject, renderProjectToSvg, type ExportResult } from "@opengraph-creator/render";
 import {
   createAiImagePlan,
   type AgentImageOutputFormat
@@ -31,12 +33,12 @@ import { createLibrary, listLibraryProjects, saveLibraryProject } from "./librar
 import { scanRepo } from "./scan.js";
 import { createStudioServer, getDefaultStudioStaticDir } from "./server.js";
 import {
-  createGraphForgeSession,
+  createOpenGraphCreatorSession,
   appendSessionEvent,
-  cancelGraphForgeSession,
+  cancelOpenGraphCreatorSession,
   createPublishRequest,
   getSessionPaths,
-  readGraphForgeSession,
+  readOpenGraphCreatorSession,
   recordSessionExport
 } from "./session.js";
 import { installCodexSkill } from "./skill-install.js";
@@ -63,6 +65,15 @@ export interface MetadataPlan {
   mutations: Array<{ file: string; description: string }>;
 }
 
+export interface StudioLaunchRecord {
+  sessionId: string;
+  repo: string;
+  url: string;
+  pid?: number;
+  openedAt: string;
+  reused?: boolean;
+}
+
 export interface ExportProjectFileInput {
   projectPath: string;
   format: ExportFormat;
@@ -70,8 +81,24 @@ export interface ExportProjectFileInput {
   quality?: number;
 }
 
+export interface ExportProjectPagesInput {
+  projectPath: string;
+  format: ExportFormat;
+  outDir: string;
+  quality?: number;
+}
+
+export interface ExportProjectPagesResult {
+  exports: Array<ExportResult & { page: string; path: string }>;
+}
+
 export interface ApplyMetadataInput extends MetadataPlanInput {
   repo: string;
+}
+
+interface PageImageMapping {
+  page: string;
+  imagePath: string;
 }
 
 export type DoctorCheckStatus = "pass" | "warn" | "fail";
@@ -105,7 +132,36 @@ export function createProjectFromArgs(args: CreateProjectArgs): OgProject {
     sourceRepo: args.repo,
     pages: args.pages
   };
-  return args.preset ? createProjectFromPreset({ ...input, preset: args.preset }) : createDefaultProject(input);
+  const project = args.preset ? createProjectFromPreset({ ...input, preset: args.preset }) : createDefaultProject(input);
+  return project.strategy === "pages" || project.strategy === "hybrid" ? createMultiPageProject(project) : project;
+}
+
+export async function readReusableStudioLaunch(repo: string, sessionId: string): Promise<StudioLaunchRecord | undefined> {
+  const launchPath = join(getSessionPaths(repo, sessionId).sessionDir, "studio.json");
+  try {
+    const launch = JSON.parse(await readFile(launchPath, "utf8")) as StudioLaunchRecord;
+    if (launch.sessionId !== sessionId || normalize(launch.repo) !== normalize(repo) || !launch.url) return undefined;
+    const alive = await isStudioLaunchAlive(launch, repo, sessionId);
+    return alive ? { ...launch, reused: true } : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function isStudioLaunchAlive(launch: StudioLaunchRecord, repo: string, sessionId: string): Promise<boolean> {
+  try {
+    const healthUrl = new URL(launch.url);
+    healthUrl.pathname = "/api/session";
+    healthUrl.search = "";
+    healthUrl.searchParams.set("id", sessionId);
+    healthUrl.searchParams.set("repo", repo);
+    const response = await fetch(healthUrl, { signal: AbortSignal.timeout(900) });
+    if (!response.ok) return false;
+    const body = await response.json() as { session?: { id?: string; repo?: string } };
+    return body.session?.id === sessionId && (!body.session.repo || normalize(body.session.repo) === normalize(repo));
+  } catch {
+    return false;
+  }
 }
 
 export function createMetadataPlan(input: MetadataPlanInput): MetadataPlan {
@@ -132,6 +188,20 @@ export async function exportProjectFile(input: ExportProjectFileInput): Promise<
   return exportProject(project, { format: input.format, target: input.target, quality: input.quality });
 }
 
+export async function exportProjectPages(input: ExportProjectPagesInput): Promise<ExportProjectPagesResult> {
+  const project = JSON.parse(await readFile(input.projectPath, "utf8")) as OgProject;
+  const pages = project.pages?.length ? project.pages : [{ route: project.targetPages[0] ?? "/", id: project.activePageId ?? "page-home" }];
+  const results: Array<ExportResult & { page: string; path: string }> = [];
+  for (const page of pages) {
+    const pageProject = getRenderableProject(project, page.id);
+    const fileName = `${page.route === "/" ? "home" : page.route.replace(/^\/+/, "").replace(/\/+$/, "").replace(/[^a-zA-Z0-9]+/g, "-").toLowerCase()}.${input.format}`;
+    const target = join(input.outDir, fileName);
+    const result = await exportProject(pageProject, { format: input.format, target, quality: input.quality });
+    results.push({ ...result, path: result.target, page: page.route });
+  }
+  return { exports: results };
+}
+
 export async function applyMetadataPlanToRepo(input: ApplyMetadataInput): Promise<MetadataPlan> {
   const plan = createMetadataPlan(input);
   if (!input.confirm) return plan;
@@ -147,15 +217,19 @@ export async function createDoctorReport(input: DoctorReportInput = {}): Promise
   const home = input.home ?? process.env.USERPROFILE ?? process.env.HOME ?? process.cwd();
   const staticDir = input.staticDir ?? getDefaultStudioStaticDir();
   const skillCandidates = [
-    join(home, ".codex", "skills", "graphforge-og-studio", "SKILL.md"),
-    join(home, ".agents", "skills", "graphforge-og-studio", "SKILL.md")
+    join(home, ".codex", "skills", "opengraph-creator", "SKILL.md"),
+    join(home, ".claude", "skills", "opengraph-creator", "SKILL.md"),
+    join(home, ".config", "opencode", "skill", "opengraph-creator", "SKILL.md"),
+    join(home, ".config", "opencode", "skills", "opengraph-creator", "SKILL.md"),
+    join(home, ".agents", "skills", "opengraph-creator", "SKILL.md"),
+    join(home, ".opencode", "skill", "opengraph-creator", "SKILL.md")
   ];
   const checks: DoctorCheck[] = [
     {
       id: "cli",
       label: "CLI",
       status: "pass",
-      detail: "GraphForge CLI entrypoint is available."
+      detail: "OpenGraph Creator CLI entrypoint is available."
     },
     {
       id: "renderer",
@@ -179,31 +253,32 @@ export async function createDoctorReport(input: DoctorReportInput = {}): Promise
         },
     (await hasBundledSkillSource())
       ? {
-          id: "codex-skill-source",
+          id: "agent-skill-source",
           label: "Bundled agent skill",
           status: "pass",
-          detail: "Bundled GraphForge skill source is available."
+          detail: "Bundled OpenGraph Creator skill source is available."
         }
       : {
-          id: "codex-skill-source",
+          id: "agent-skill-source",
           label: "Bundled agent skill",
           status: "fail",
-          detail: "Bundled GraphForge skill source is missing from the CLI package.",
-          action: "Rebuild and repack @graphforge/cli."
+          detail: "Bundled OpenGraph Creator skill source is missing from the CLI package.",
+          action: "Rebuild and repack opengraph-creator."
         },
     (await anyPathExists(skillCandidates))
       ? {
-          id: "codex-skill-installed",
-          label: "Installed Codex skill",
+          id: "agent-skill-installed",
+          label: "Installed agent skill",
           status: "pass",
-          detail: "GraphForge skill is installed in a known local skills directory."
+          detail: "OpenGraph Creator skill is installed in a known local skills directory."
         }
       : {
-          id: "codex-skill-installed",
-          label: "Installed Codex skill",
+          id: "agent-skill-installed",
+          label: "Installed agent skill",
           status: "warn",
-          detail: "GraphForge skill is not installed in ~/.codex/skills or ~/.agents/skills.",
-          action: "Run graphforge install-skill --target ~/.codex/skills."
+          detail: "OpenGraph Creator skill is not installed in a known Codex, Claude Code, or OpenCode skills directory.",
+          action:
+            "Preferred: npx skills check && npx skills update, then npx skills add -g <owner>/opengraph-creator --skill opengraph-creator -y if missing. Fallback: opengraph-creator install-skill --agent codex --scope global."
         },
     {
       id: "agent-handoff",
@@ -231,7 +306,7 @@ export async function runCli(argv: string[]): Promise<void> {
     const args = parseArgs(sessionRest);
     const repo = args.repo ?? process.cwd();
     if (subcommand === "create") {
-      const session = await createGraphForgeSession({
+      const session = await createOpenGraphCreatorSession({
         repo,
         id: args.id,
         agent: parseAgentKind(args.agent),
@@ -243,12 +318,12 @@ export async function runCli(argv: string[]): Promise<void> {
     }
     if (subcommand === "status") {
       if (!args.id) throw new Error("--id is required");
-      console.log(JSON.stringify(await readGraphForgeSession(repo, args.id), null, 2));
+      console.log(JSON.stringify(await readOpenGraphCreatorSession(repo, args.id), null, 2));
       return;
     }
     if (subcommand === "cancel") {
       if (!args.id) throw new Error("--id is required");
-      console.log(JSON.stringify(await cancelGraphForgeSession(repo, args.id, args.reason ?? "User cancelled the Studio handoff"), null, 2));
+      console.log(JSON.stringify(await cancelOpenGraphCreatorSession(repo, args.id, args.reason ?? "User cancelled the Studio handoff"), null, 2));
       return;
     }
     if (subcommand === "wait") {
@@ -256,31 +331,43 @@ export async function runCli(argv: string[]): Promise<void> {
       const waitTarget = parseSessionWaitTarget(args.until);
       const timeout = parseWaitTimeout(args.timeout);
       const deadline = Number.isFinite(timeout) ? Date.now() + timeout : Number.POSITIVE_INFINITY;
-      let session = await readGraphForgeSession(repo, args.id);
+      let session = await readOpenGraphCreatorSession(repo, args.id);
       while (Date.now() < deadline && !sessionMatchesWaitTarget(session, waitTarget)) {
         await new Promise((resolve) => setTimeout(resolve, 250));
-        session = await readGraphForgeSession(repo, args.id);
+        session = await readOpenGraphCreatorSession(repo, args.id);
       }
       console.log(JSON.stringify(session, null, 2));
       return;
     }
     if (subcommand === "open") {
       if (!args.id) throw new Error("--id is required");
-      await readGraphForgeSession(repo, args.id);
+      await readOpenGraphCreatorSession(repo, args.id);
       const handle = await createStudioServer({
         library: createLibrary({ root: args.home }),
         port: args.port ? Number(args.port) : 0,
         sessionRepo: repo
       });
       const params = new URLSearchParams({ session: args.id, repo });
-      console.log(`GraphForge Studio running at ${handle.url}?${params.toString()}`);
+      console.log(`OpenGraph Creator Studio running at ${handle.url}?${params.toString()}`);
       console.log("Press Ctrl+C to stop.");
       await new Promise<void>(() => undefined);
       return;
     }
     if (subcommand === "launch") {
       if (!args.id) throw new Error("--id is required");
-      await readGraphForgeSession(repo, args.id);
+      await readOpenGraphCreatorSession(repo, args.id);
+      if (args.forceNew !== "true") {
+        const reusable = await readReusableStudioLaunch(repo, args.id);
+        if (reusable) {
+          await appendSessionEvent(repo, args.id, {
+            type: "studio.reused",
+            message: "Reused the already-running Studio session",
+            data: { ...reusable }
+          });
+          console.log(args.json === "true" ? JSON.stringify(reusable, null, 2) : `OpenGraph Creator Studio already running at ${reusable.url}`);
+          return;
+        }
+      }
       const port = args.port ? Number(args.port) : await findFreePort();
       const params = new URLSearchParams({ session: args.id, repo });
       const url = `http://127.0.0.1:${port}?${params.toString()}`;
@@ -315,7 +402,7 @@ export async function runCli(argv: string[]): Promise<void> {
         message: "Studio launched and ready",
         data: launch
       });
-      console.log(args.json === "true" ? JSON.stringify(launch, null, 2) : `GraphForge Studio launched at ${url}`);
+      console.log(args.json === "true" ? JSON.stringify(launch, null, 2) : `OpenGraph Creator Studio launched at ${url}`);
       return;
     }
     throw new Error("Unknown session command. Use create, open, launch, wait, cancel, or status.");
@@ -369,7 +456,7 @@ export async function runCli(argv: string[]): Promise<void> {
   if (command === "new") {
     const args = parseArgs(rest);
     const project = createProjectFromArgs({
-      name: args.name ?? "GraphForge OG Project",
+      name: args.name ?? "OpenGraph OG Project",
       strategy: parseStrategy(args.strategy),
       generationMode: parseGenerationMode(args.mode),
       repo: args.repo,
@@ -417,7 +504,7 @@ export async function runCli(argv: string[]): Promise<void> {
       generationMode: parseGenerationMode(args.mode),
       referenceImage: args.reference
     });
-    const target = args.out ?? join(args.repo ?? process.cwd(), ".graphforge", "brief.json");
+    const target = args.out ?? join(args.repo ?? process.cwd(), ".opengraph-creator", "brief.json");
     await mkdir(dirname(target), { recursive: true });
     await writeFile(target, `${JSON.stringify(brief, null, 2)}\n`, "utf8");
     console.log(`Created ${target}`);
@@ -442,7 +529,7 @@ export async function runCli(argv: string[]): Promise<void> {
     const kind = parseSourceArtifactKind(args.kind, args.source);
     const now = new Date().toISOString();
 
-    if (kind === "graphforge-json") {
+    if (kind === "project-json") {
       const importedProject = JSON.parse(await readFile(args.source, "utf8")) as OgProject;
       const target = args.out ?? `${importedProject.projectId}.og.json`;
       await mkdir(dirname(target), { recursive: true });
@@ -491,9 +578,11 @@ export async function runCli(argv: string[]): Promise<void> {
     const result = await installCodexSkill({
       targetSkillsDir: args.target,
       agent: parseInstallAgent(args.agent),
-      home: args.home
+      home: args.home,
+      project: args.project ?? args.repo,
+      scope: args.scope === "project" ? "project" : "global"
     });
-    console.log(`Installed GraphForge skill at ${result.skillFile}`);
+    console.log(`Installed OpenGraph Creator skill at ${result.skillFile}`);
     if (result.installs.length > 1) {
       console.log(JSON.stringify({ installs: result.installs }, null, 2));
     }
@@ -523,6 +612,30 @@ export async function runCli(argv: string[]): Promise<void> {
   if (command === "export") {
     const args = parseArgs(rest);
     if (!args.project) throw new Error("--project is required");
+    if (args.allPages === "true" || args.allpages === "true") {
+      const outDir = args.outDir ?? args.out ?? "public/og";
+      const result = await exportProjectPages({
+        projectPath: args.project,
+        format: parseFormat(args.format),
+        outDir: args.repo && !isAbsolute(outDir) ? join(args.repo, outDir) : outDir,
+        quality: args.quality ? Number(args.quality) : undefined
+      });
+      if (args.session) {
+        for (const item of result.exports) {
+          await recordSessionExport(args.repo ?? process.cwd(), args.session, {
+            path: args.repo ? toRepoRelativePath(args.repo, item.target) : item.target,
+            format: item.format,
+            width: item.width,
+            height: item.height,
+            page: item.page,
+            fileSizeBytes: item.fileSizeBytes,
+            createdAt: new Date().toISOString()
+          });
+        }
+      }
+      console.log(JSON.stringify(result, null, 2));
+      return;
+    }
     const result = await exportProjectFile({
       projectPath: args.project,
       format: parseFormat(args.format),
@@ -612,7 +725,7 @@ export async function runCli(argv: string[]): Promise<void> {
     const repo = args.repo ?? process.cwd();
     const sessionId = args.session ?? "manual";
     if (!(await sessionExists(repo, sessionId))) {
-      await createGraphForgeSession({
+      await createOpenGraphCreatorSession({
         repo,
         id: sessionId,
         agent: parseAgentKind(args.agent),
@@ -620,9 +733,10 @@ export async function runCli(argv: string[]): Promise<void> {
         mode: parseGenerationMode(args.mode)
       });
     }
-    const imagePath = args.image ?? "public/og.png";
+    const pageImages = await resolvePageImagesForPublish(repo, sessionId, args);
+    const imagePath = pageImages?.[0]?.imagePath ?? args.image ?? "public/og.png";
     const framework = parseFramework(args.framework);
-    const page = args.page ?? "/";
+    const page = args.page ?? pageImages?.[0]?.page ?? "/";
     const confirmed = args.confirm === "true";
     const request = await createPublishRequest({
       repo,
@@ -630,15 +744,18 @@ export async function runCli(argv: string[]): Promise<void> {
       imagePath,
       framework,
       page,
+      pageImages,
       confirmed
     });
-    const plan = await applyMetadataPlanToRepo({
-      repo,
-      framework,
-      page,
-      imagePath,
-      confirm: confirmed
-    });
+    const plan = pageImages?.length
+      ? await applyPageImageMetadataPlans({ repo, framework, pageImages, confirm: confirmed })
+      : await applyMetadataPlanToRepo({
+          repo,
+          framework,
+          page,
+          imagePath,
+          confirm: confirmed
+        });
     console.log(JSON.stringify({ request, plan }, null, 2));
     return;
   }
@@ -666,7 +783,7 @@ export async function runCli(argv: string[]): Promise<void> {
       sessionRepo: repo
     });
     const url = repo ? `${handle.url}?${new URLSearchParams({ repo }).toString()}` : handle.url;
-    console.log(`GraphForge Studio running at ${url}`);
+    console.log(`OpenGraph Creator Studio running at ${url}`);
     console.log("Press Ctrl+C to stop.");
     await new Promise<void>(() => undefined);
     return;
@@ -684,6 +801,46 @@ function parseArgs(args: string[]): Record<string, string> {
     }
   }
   return parsed;
+}
+
+async function resolvePageImagesForPublish(repo: string, sessionId: string, args: Record<string, string>): Promise<PageImageMapping[] | undefined> {
+  if (args.pageImages) {
+    const source = args.pageImages.startsWith("@") ? await readFile(args.pageImages.slice(1), "utf8") : args.pageImages;
+    const parsed = JSON.parse(source) as PageImageMapping[];
+    return parsed.map((item) => ({ page: item.page, imagePath: item.imagePath }));
+  }
+  if (args.allPages !== "true" && args.allpages !== "true") return undefined;
+  const session = await readOpenGraphCreatorSession(repo, sessionId);
+  const latestByPage = new Map<string, PageImageMapping>();
+  for (const item of session.exports) {
+    if (item.page) latestByPage.set(item.page, { page: item.page, imagePath: item.path });
+  }
+  if (latestByPage.size) return [...latestByPage.values()];
+  return [...session.publishRequests].reverse().find((request) => request.pageImages?.length)?.pageImages;
+}
+
+async function applyPageImageMetadataPlans(input: {
+  repo: string;
+  framework: Framework;
+  pageImages: PageImageMapping[];
+  confirm: boolean;
+}): Promise<{ mode: "preview" | "apply"; instructions: string[]; mutations: MetadataPlan["mutations"] }> {
+  const plans = await Promise.all(
+    input.pageImages.map((item) =>
+      applyMetadataPlanToRepo({
+        repo: input.repo,
+        framework: input.framework,
+        page: item.page,
+        imagePath: item.imagePath,
+        confirm: input.confirm
+      })
+    )
+  );
+  return {
+    mode: input.confirm ? "apply" : "preview",
+    instructions: plans.flatMap((plan) => plan.instructions),
+    mutations: plans.flatMap((plan) => plan.mutations)
+  };
 }
 
 function parseSessionWaitTarget(value?: string): SessionWaitTarget {
@@ -709,7 +866,7 @@ function parseWaitTimeout(value?: string): number {
   return timeout;
 }
 
-function sessionMatchesWaitTarget(session: Awaited<ReturnType<typeof readGraphForgeSession>>, target: SessionWaitTarget): boolean {
+function sessionMatchesWaitTarget(session: Awaited<ReturnType<typeof readOpenGraphCreatorSession>>, target: SessionWaitTarget): boolean {
   const hasExport = session.exports.length > 0;
   const hasPreview = session.publishRequests.some((request) => request.status === "preview");
   const hasConfirmed = session.publishRequests.some((request) => request.status === "confirmed");
@@ -748,8 +905,8 @@ function parseAgentKind(value?: string): AgentKind {
   return "unknown";
 }
 
-function parseInstallAgent(value?: string): "codex" | "claude" | "opencode" | "all" | undefined {
-  if (value === "codex" || value === "claude" || value === "opencode" || value === "all") return value;
+function parseInstallAgent(value?: string): "codex" | "claude" | "claude-code" | "opencode" | "all" | undefined {
+  if (value === "codex" || value === "claude" || value === "claude-code" || value === "opencode" || value === "all") return value;
   return undefined;
 }
 
@@ -775,9 +932,9 @@ function parsePreset(value?: string): ProjectPreset | undefined {
 }
 
 function parseSourceArtifactKind(value: string | undefined, source: string): SourceArtifactKind {
-  if (value === "graphforge-json" || value === "svg" || value === "html" || value === "image") return value;
+  if (value === "project-json" || value === "svg" || value === "html" || value === "image") return value;
   const normalized = source.toLowerCase();
-  if (normalized.endsWith(".og.json") || normalized.endsWith(".json")) return "graphforge-json";
+  if (normalized.endsWith(".og.json") || normalized.endsWith(".json")) return "project-json";
   if (normalized.endsWith(".svg")) return "svg";
   if (normalized.endsWith(".html") || normalized.endsWith(".htm")) return "html";
   return "image";
@@ -797,44 +954,47 @@ function parseGenerationMode(value?: string): GenerationMode {
 }
 
 function printHelp(): void {
-  console.log(`GraphForge OG Studio
+  console.log(`OpenGraph Creator
 
 Commands:
-  graphforge new --name <name> --strategy common|pages|hybrid --mode template|pure-image --preset founder-launch|product-shot|technical-article|studio-editorial|agent-canvas|release-notes --out project.og.json
-  graphforge save --project project.og.json
-  graphforge list
-  graphforge scan --repo <path>
-  graphforge brief --repo <path> --name <app> --strategy common|pages|hybrid --mode template|pure-image --reference image.png --out .graphforge/brief.json
-  graphforge import --source generated.svg --kind svg --name <app> --out project.og.json
-  graphforge install-skill --agent codex|claude|opencode|all
-  graphforge document new --name <app> --out project.ogdoc
-  graphforge document pack --project project.og.json --out project.ogdoc
-  graphforge document validate --source project.ogdoc
-  graphforge session create --repo <path> --agent codex|claude|opencode --strategy common|pages|hybrid
-  graphforge session open --repo <path> --id <session-id>
-  graphforge session launch --repo <path> --id <session-id> --open true --waitReady true --json
-  graphforge session wait --id <session-id> --until exported|publish-preview|publish-confirmed|agent-request|next-action|terminal --timeout 30000|0|never
-  graphforge session cancel --repo <path> --id <session-id> --reason "User cancelled"
-  graphforge session status --id <session-id>
-  graphforge studio --port 5123 --repo <path>
-  graphforge render --name <name> --out og.svg
-  graphforge export --project project.og.json --format png|webp|jpg|svg --out public/og.png --session <session-id>
-  graphforge variants --project project.og.json --outDir og-projects
-  graphforge agent-handoff --project project.og.json --prompt "art direction" --out public/og-agent.png --plan .graphforge/agent-handoff.json
-  graphforge agent-image --project project.og.json --out public/og-agent.png  (compatibility alias)
-  graphforge ai-image --project project.og.json --out public/og-agent.png  (compatibility alias)
-  graphforge library-export --projectId <id> --format png --out public/og.png
-  graphforge apply --framework next --image public/og.png --preview
-  graphforge apply --framework next --image public/og.png --confirm
-  graphforge publish --preview --session <session-id> --image public/og.png
-  graphforge publish --confirm --session <session-id> --image public/og.png
-  graphforge doctor
+  opengraph-creator new --name <name> --strategy common|pages|hybrid --mode template|pure-image --preset founder-launch|product-shot|technical-article|studio-editorial|agent-canvas|release-notes --out project.og.json
+  opengraph-creator save --project project.og.json
+  opengraph-creator list
+  opengraph-creator scan --repo <path>
+  opengraph-creator brief --repo <path> --name <app> --strategy common|pages|hybrid --mode template|pure-image --reference image.png --out .opengraph-creator/brief.json
+  opengraph-creator import --source generated.svg --kind svg --name <app> --out project.og.json
+  opengraph-creator install-skill --agent codex|claude-code|opencode|all --scope global|project  (fallback only; prefer npx skills add)
+  opengraph-creator document new --name <app> --out project.ogdoc
+  opengraph-creator document pack --project project.og.json --out project.ogdoc
+  opengraph-creator document validate --source project.ogdoc
+  opengraph-creator session create --repo <path> --agent codex|claude|opencode --strategy common|pages|hybrid
+  opengraph-creator session open --repo <path> --id <session-id>
+  opengraph-creator session launch --repo <path> --id <session-id> --open true --waitReady true --json
+  opengraph-creator session wait --id <session-id> --until exported|publish-preview|publish-confirmed|agent-request|next-action|terminal --timeout 30000|0|never
+  opengraph-creator session cancel --repo <path> --id <session-id> --reason "User cancelled"
+  opengraph-creator session status --id <session-id>
+  opengraph-creator studio --port 5123 --repo <path>
+  opengraph-creator render --name <name> --out og.svg
+  opengraph-creator export --project project.og.json --format png|webp|jpg|svg --out public/og.png --session <session-id>
+  opengraph-creator export --project project.og.json --format png|webp|jpg|svg --allPages true --outDir public/og --session <session-id>
+  opengraph-creator variants --project project.og.json --outDir og-projects
+  opengraph-creator agent-handoff --project project.og.json --prompt "art direction" --out public/og-agent.png --plan .opengraph-creator/agent-handoff.json
+  opengraph-creator agent-image --project project.og.json --out public/og-agent.png
+  opengraph-creator ai-image --project project.og.json --out public/og-agent.png
+  opengraph-creator library-export --projectId <id> --format png --out public/og.png
+  opengraph-creator apply --framework next --image public/og.png --preview
+  opengraph-creator apply --framework next --image public/og.png --confirm
+  opengraph-creator publish --preview --session <session-id> --image public/og.png
+  opengraph-creator publish --confirm --session <session-id> --image public/og.png
+  opengraph-creator publish --preview --session <session-id> --allPages true
+  opengraph-creator publish --confirm --session <session-id> --allPages true
+  opengraph-creator doctor
 `);
 }
 
 async function sessionExists(repo: string, sessionId: string): Promise<boolean> {
   try {
-    await readGraphForgeSession(repo, sessionId);
+    await readOpenGraphCreatorSession(repo, sessionId);
     return true;
   } catch {
     return false;
@@ -842,7 +1002,7 @@ async function sessionExists(repo: string, sessionId: string): Promise<boolean> 
 }
 
 function printDoctorReport(report: DoctorReport): void {
-  console.log("GraphForge doctor");
+  console.log("OpenGraph Creator doctor");
   for (const check of report.checks) {
     const marker = check.status === "pass" ? "PASS" : check.status === "warn" ? "WARN" : "FAIL";
     console.log(`- ${marker} ${check.label}: ${check.detail}`);
@@ -949,6 +1109,11 @@ function toPublicUrl(imagePath: string): string {
   return `/${imagePath.replaceAll("\\", "/").replace(/^public\//, "")}`;
 }
 
+function toRepoRelativePath(repo: string, target: string): string {
+  const relativePath = isAbsolute(target) ? relative(repo, target) : target;
+  return relativePath.replaceAll("\\", "/");
+}
+
 async function writeMetadataFile(file: string, framework: Framework, imageUrl: string): Promise<void> {
   await mkdir(dirname(file), { recursive: true });
   let existing: string | undefined;
@@ -956,7 +1121,7 @@ async function writeMetadataFile(file: string, framework: Framework, imageUrl: s
     const info = await stat(file);
     if (info.isFile()) {
       existing = await readFile(file, "utf8");
-      await copyFile(file, `${file}.graphforge.bak`);
+      await copyFile(file, `${file}.opengraph-creator.bak`);
     }
   } catch {
     // No existing metadata file to back up.

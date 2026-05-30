@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const cliPackage = JSON.parse(readFileSync(join(process.cwd(), "packages", "cli", "package.json"), "utf8")) as {
+  name: string;
   bin: Record<string, string>;
   bundledDependencies?: string[];
   bundleDependencies?: string[];
@@ -16,12 +17,14 @@ const rootPackage = JSON.parse(readFileSync(join(process.cwd(), "package.json"),
 
 describe("CLI package layout", () => {
   it("bundles the built studio assets for npx usage", () => {
-    expect(cliPackage.bin.graphforge).toBe("dist/index.js");
+    expect(cliPackage.name).toBe("opengraph-creator");
+    expect(cliPackage.bin["opengraph-creator"]).toBe("dist/index.js");
+    expect(Object.keys(cliPackage.bin)).toEqual(["opengraph-creator"]);
     expect(cliPackage.files).toContain("dist");
     expect(cliPackage.files).toContain("studio-dist");
     expect(cliPackage.files).toContain("codex-skill");
-    expect(cliPackage.bundledDependencies).toEqual(expect.arrayContaining(["@graphforge/core", "@graphforge/render"]));
-    expect(cliPackage.bundleDependencies).toEqual(expect.arrayContaining(["@graphforge/core", "@graphforge/render"]));
+    expect(cliPackage.bundledDependencies).toEqual(expect.arrayContaining(["@opengraph-creator/core", "@opengraph-creator/render"]));
+    expect(cliPackage.bundleDependencies).toEqual(expect.arrayContaining(["@opengraph-creator/core", "@opengraph-creator/render"]));
     expect(cliPackage.dependencies.sharp).toBeTruthy();
     expect(cliPackage.scripts.build).toContain("copy-studio-dist");
   });

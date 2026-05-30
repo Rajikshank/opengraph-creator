@@ -17,9 +17,9 @@
     "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {
-      "@graphforge/core": ["packages/core/src/index.ts"],
-      "@graphforge/render": ["packages/render/src/index.ts"],
-      "@graphforge/render/browser": ["packages/render/src/browser.ts"]
+      "@opengraph-creator/core": ["packages/core/src/index.ts"],
+      "@opengraph-creator/render": ["packages/render/src/index.ts"],
+      "@opengraph-creator/render/browser": ["packages/render/src/browser.ts"]
     }
   },
   "include": ["packages/**/*.ts", "packages/**/*.tsx", "vitest.config.ts"],

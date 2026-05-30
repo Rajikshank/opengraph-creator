@@ -1,14 +1,14 @@
-# GraphForge OG Studio
+# OpenGraph Creator
 
-GraphForge is a local, agent-first Open Graph finishing studio for app repositories. Codex, Claude Code, OpenCode, or another coding agent inspects the user's app, creates an editable `.ogdoc` document, opens Studio, waits for the user's decision, and resumes only after the user confirms the publish handoff.
+OpenGraph Creator is a local, agent-first Open Graph finishing studio for app repositories. Codex, Claude Code, OpenCode, or another coding agent inspects the user's app, creates an editable `.ogdoc` document, opens Studio, waits for the user's decision, and resumes only after the user confirms the publish handoff.
 
-GraphForge is not an AI provider client. It does not require OpenAI, Anthropic, or image-generation API keys. The coding agent owns generation. Studio owns editing, preview, export quality, compression, recovery, and handoff files.
+OpenGraph Creator is not an AI provider client. It does not require OpenAI, Anthropic, or image-generation API keys. The coding agent owns generation. Studio owns editing, preview, export quality, compression, recovery, and handoff files.
 
 ## Product Model
 
 - `.ogdoc` is the editable master document and the only default session source of truth.
 - PNG, WebP, JPEG, SVG, HTML, and JSON can be imported as assets or exported outputs, but they do not replace `.ogdoc` unless the user chooses pure-image fallback.
-- Sessions are file-based under `.graphforge/sessions/<id>/` so Codex, Claude Code, and OpenCode can recover from the same state.
+- Sessions are file-based under `.opengraph-creator/sessions/<id>/` so Codex, Claude Code, and OpenCode can recover from the same state.
 - Metadata is never changed by Studio alone. The agent wires metadata only after preview and explicit confirmation.
 - Platform preview and export use the same renderer path. The editing canvas must keep effect parity with that renderer.
 
@@ -19,19 +19,19 @@ Development checkout:
 ```bash
 npm install
 npm run build
-npm run graphforge -- doctor
-npm run graphforge -- studio --repo .
+npm run opengraph-creator -- doctor
+npm run opengraph-creator -- studio --repo .
 ```
 
-Packaged usage after release:
+Skill install and packaged runtime after release:
 
 ```bash
-npx @graphforge/cli doctor
-npx @graphforge/cli studio --repo .
-npx @graphforge/cli install-skill --agent codex
-npx @graphforge/cli install-skill --agent claude
-npx @graphforge/cli install-skill --agent opencode
+npx skills add -g your-org/opengraph-creator --skill opengraph-creator -y
+npx -y opengraph-creator@latest doctor --json
+npx -y opengraph-creator@latest studio --repo .
 ```
+
+The skills CLI is the primary install path for users. The installed skill runs the Studio/CLI runtime through `npx -y opengraph-creator@latest`. If a local skills installer cannot target a specific agent automatically, use the fallback `opengraph-creator install-skill --agent codex|claude-code|opencode --scope global` command only for local development or recovery.
 
 Manual launch opens the Project Hub. Agent launch opens the generated session `.ogdoc` directly.
 
@@ -42,16 +42,16 @@ The installed skill should:
 1. Inspect framework, routes, metadata, brand assets, screenshots, and copy.
 2. Ask only relevant designer-style questions: common/per-page/hybrid strategy, output mode, visual tone, pages, references, and final format.
 3. Create a durable session.
-4. Generate `.graphforge/sessions/<id>/document.ogdoc` with editable layers by default.
+4. Generate `.opengraph-creator/sessions/<id>/document.ogdoc` with editable layers by default.
 5. Validate the document.
 6. Launch Studio.
 7. Wait for the next Studio decision.
 
 ```bash
-graphforge session create --repo . --agent codex --strategy hybrid --mode template
-graphforge document validate --source ".graphforge/sessions/<id>/document.ogdoc"
-graphforge session launch --repo . --id "<id>" --open true --waitReady true --json
-graphforge session wait --repo . --id "<id>" --until next-action --timeout 0
+opengraph-creator session create --repo . --agent codex --strategy hybrid --mode template
+opengraph-creator document validate --source ".opengraph-creator/sessions/<id>/document.ogdoc"
+opengraph-creator session launch --repo . --id "<id>" --open true --waitReady true --json
+opengraph-creator session wait --repo . --id "<id>" --until next-action --timeout 0
 ```
 
 When `next-action` returns:
@@ -63,7 +63,7 @@ When `next-action` returns:
 ## Session Files
 
 ```text
-.graphforge/sessions/<id>/
+.opengraph-creator/sessions/<id>/
   session.json
   events.jsonl
   document.ogdoc
@@ -94,9 +94,9 @@ Unsupported layer/effect combinations must be hidden or disabled with a clear re
 
 ## Effect Parity Contract
 
-GraphForge has three visual surfaces: Studio canvas, platform preview, and export. A supported effect is complete only when all three surfaces reflect the same serialized `.ogdoc` state.
+OpenGraph Creator has three visual surfaces: Studio canvas, platform preview, and export. A supported effect is complete only when all three surfaces reflect the same serialized `.ogdoc` state.
 
-- Preview/export use the GraphForge SVG renderer as the source of truth.
+- Preview/export use the OpenGraph Creator SVG renderer as the source of truth.
 - Canvas uses Konva for interaction, but must not silently approximate blur as a shadow.
 - Blur must use real canvas filtering with cache invalidation.
 - Glow, shadow, noise, lighting, and vignette must be clipped to the intended layer bounds.
@@ -107,22 +107,22 @@ GraphForge has three visual surfaces: Studio canvas, platform preview, and expor
 Default final output:
 
 ```bash
-graphforge export --project project.og.json --format png --out public/og.png
+opengraph-creator export --project project.og.json --format png --out public/og.png
 ```
 
 Optional outputs:
 
 ```bash
-graphforge export --project project.og.json --format webp --quality 82 --out public/og.webp
-graphforge export --project project.og.json --format jpg --quality 82 --out public/og.jpg
-graphforge render --project project.og.json --out public/og.svg
+opengraph-creator export --project project.og.json --format webp --quality 82 --out public/og.webp
+opengraph-creator export --project project.og.json --format jpg --quality 82 --out public/og.jpg
+opengraph-creator render --project project.og.json --out public/og.svg
 ```
 
 Publish flow:
 
 ```bash
-graphforge publish --preview --repo . --session "<id>" --framework next --image public/og.png
-graphforge publish --confirm --repo . --session "<id>" --framework next --image public/og.png
+opengraph-creator publish --preview --repo . --session "<id>" --framework next --image public/og.png
+opengraph-creator publish --confirm --repo . --session "<id>" --framework next --image public/og.png
 ```
 
 Preview writes a handoff request only. Confirm writes the agent handoff state. The coding agent is responsible for applying metadata safely.
@@ -133,7 +133,8 @@ Preview writes a handoff request only. Confirm writes the agent handoff state. T
 - `packages/render`: SVG renderer and PNG/WebP/JPEG export pipeline.
 - `packages/studio`: React/Vite creative-tool interface.
 - `packages/cli`: CLI, local Studio server, sessions, packaging, skill install, publish helpers.
-- `packages/codex-skill` and `packages/cli/codex-skill`: agent skill source and packaged copy.
+- `skills/opengraph-creator`: public skills.sh-compatible skill package.
+- `packages/codex-skill` and `packages/cli/codex-skill`: skill source and packaged copy.
 - `scripts`: workflow, package, handoff, agent, and Studio smoke tests.
 
 ## Release Gate
@@ -150,14 +151,14 @@ npm run smoke:agent-handoff
 npm run smoke:agent-next-action
 npm run smoke:package
 npm run smoke:studio
-npm pack -w @graphforge/cli --dry-run
+npm pack -w opengraph-creator --dry-run
 ```
 
 The gate must prove: no provider-key requirement, packed/npx-style install works, agent session handoff works, Studio opens the generated `.ogdoc`, effects update live, platform previews stay stable, final raster exports are exact `1200x630`, and output is nonblank.
 
 ## Boundaries
 
-- GraphForge coordinates agent workflows; it does not call provider APIs.
+- OpenGraph Creator coordinates agent workflows; it does not call provider APIs.
 - Studio is an OG finishing tool, not a general-purpose design suite.
 - Platform previews are local simulations. Deployed URLs should still be checked with live social validators before launch.
-- Dynamic framework metadata may still require human review after GraphForge writes a preview or confirmed handoff.
+- Dynamic framework metadata may still require human review after OpenGraph Creator writes a confirmed handoff.

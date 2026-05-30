@@ -1,5 +1,5 @@
 {
-  "name": "@graphforge/core",
+  "name": "@opengraph-creator/core",
   "version": "0.0.0",
   "type": "module",
   "main": "dist/index.js",

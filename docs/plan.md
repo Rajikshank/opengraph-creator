@@ -1,33 +1,33 @@
-# GraphForge Product Architecture
+# OpenGraph Creator Product Architecture
 
-GraphForge is a local, agent-neutral Open Graph finishing studio. A coding agent generates an editable `.ogdoc` document for a user's app. Studio edits, previews, exports, and writes recovery/handoff files. The agent then resumes and wires metadata only after user confirmation.
+OpenGraph Creator is a local, agent-neutral Open Graph finishing studio. A coding agent generates an editable `.ogdoc` document for a user's app. Studio edits, previews, exports, and writes recovery/handoff files. The agent then resumes and wires metadata only after user confirmation.
 
 ## Non-Negotiables
 
 - Local-first v1: no hosted backend is required.
-- Provider-neutral: GraphForge does not require OpenAI, Anthropic, or image-provider keys.
+- Provider-neutral: OpenGraph Creator does not require OpenAI, Anthropic, or image-provider keys.
 - Agent-first generation: Codex, Claude Code, OpenCode, or another coding agent performs repo inspection and asset creation.
 - Document-first editing: `.ogdoc` is the master source of truth.
-- File-based bridge: `.graphforge/sessions/<id>/` is the recovery and handoff contract.
+- File-based bridge: `.opengraph-creator/sessions/<id>/` is the recovery and handoff contract.
 - Preview-first publish: no target app metadata changes without explicit confirmation.
 
 ## Primary Flow
 
 1. Agent skill inspects the target repo.
 2. Agent asks only relevant design questions.
-3. Agent creates `.graphforge/sessions/<id>/`.
+3. Agent creates `.opengraph-creator/sessions/<id>/`.
 4. Agent generates `document.ogdoc` with editable layers.
 5. Agent validates the document and launches Studio.
 6. Studio edits the document, previews platform crops, and exports the final `1200x630` image.
 7. Studio writes `agent-request.json` or confirmed `publish-request.json`.
-8. Agent waits with `graphforge session wait --until next-action`.
+8. Agent waits with `opengraph-creator session wait --until next-action`.
 9. Agent resumes from session files and publishes only after confirmation.
 
 ## Direct CLI Launch
 
-`graphforge studio` opens the Project Hub.
+`opengraph-creator studio` opens the Project Hub.
 
-`graphforge studio --repo <path>` opens a repo-scoped hub with:
+`opengraph-creator studio --repo <path>` opens a repo-scoped hub with:
 
 - no-active-agent state
 - open `.ogdoc`
@@ -113,7 +113,7 @@ npm run smoke:agent-handoff
 npm run smoke:agent-next-action
 npm run smoke:package
 npm run smoke:studio
-npm pack -w @graphforge/cli --dry-run
+npm pack -w opengraph-creator --dry-run
 ```
 
 The package must prove the CLI binary, bundled Studio assets, bundled skill files, local workspace dependencies, npx/global install path, session handoff, browser Studio flow, platform preview layout, export quality, and provider-neutral behavior.

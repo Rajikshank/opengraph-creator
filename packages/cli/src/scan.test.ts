@@ -7,7 +7,7 @@ import { scanRepo } from "./scan";
 
 describe("repo scanner", () => {
   it("detects framework, routes, metadata files, and brand assets", async () => {
-    const repo = await mkdtemp(join(tmpdir(), "graphforge-scan-"));
+    const repo = await mkdtemp(join(tmpdir(), "OpenGraphCreator-scan-"));
     await mkdir(join(repo, "app", "pricing"), { recursive: true });
     await mkdir(join(repo, "public"), { recursive: true });
     await writeFile(join(repo, "next.config.js"), "module.exports = {}");

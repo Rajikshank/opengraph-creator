@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createDefaultProject } from "@graphforge/core";
+import { createDefaultProject, createMultiPageProject } from "@opengraph-creator/core";
 import {
   addLayer,
   createEditorSession,
@@ -22,6 +22,7 @@ import {
   snapLayer,
   distributeLayers,
   updateProjectSettings,
+  selectPageVariant,
   updateSelectedLayer
 } from "./editor-model";
 
@@ -91,6 +92,29 @@ describe("editor model", () => {
     expect(undo(updated).project.targetPages).toEqual(["/"]);
   });
 
+  it("switches page variants and edits only the active page in a multi-page document", () => {
+    const project = createMultiPageProject(
+      createDefaultProject({ name: "Pages", strategy: "pages", pages: ["/", "/pricing"] }),
+      [
+        { route: "/", detectedTitle: "Home", confidence: "high" },
+        { route: "/pricing", detectedTitle: "Pricing", confidence: "high" }
+      ]
+    );
+    const session = selectPageVariant(createEditorSession(project), "page-pricing");
+    const updated = updateSelectedLayer(selectLayer(session, "headline"), { text: "Pricing made simple" });
+
+    expect(session.project.activePageId).toBe("page-pricing");
+    expect(session.project.layers.find((layer) => layer.id === "headline")).toMatchObject({ text: "Pricing" });
+    expect(updated.project.pages?.find((page) => page.id === "page-pricing")).toMatchObject({
+      status: "edited",
+      layers: expect.arrayContaining([expect.objectContaining({ id: "headline", text: "Pricing made simple" })])
+    });
+    expect(updated.project.pages?.find((page) => page.id === "page-home")?.layers.find((layer) => layer.id === "headline")).toMatchObject({
+      text: "Home"
+    });
+    expect(undo(updated).project.layers.find((layer) => layer.id === "headline")).toMatchObject({ text: "Pricing" });
+  });
+
   it("moves a layer to an absolute canvas position and clamps it inside the canvas", () => {
     const project = createDefaultProject({ name: "Editor", strategy: "common" });
     const session = selectLayer(createEditorSession(project), "headline");
@@ -153,7 +177,7 @@ describe("editor model", () => {
       id: "image-layer",
       kind: "image",
       name: "Image Layer",
-      src: "graphforge://image-placeholder",
+      src: "ogcreator://image-placeholder",
       fit: "contain"
     });
     expect(withBadge.project.layers.at(-1)).toMatchObject({
@@ -202,7 +226,7 @@ describe("editor model", () => {
     const withSource = attachSourceArtifact(session, {
       kind: "svg",
       origin: "codex",
-      path: ".graphforge/generated/og.svg",
+      path: ".opengraph-creator/generated/og.svg",
       createdAt: "2026-05-26T00:00:00.000Z"
     });
     const withEffects = setLayerEffects(withSource, "background", {

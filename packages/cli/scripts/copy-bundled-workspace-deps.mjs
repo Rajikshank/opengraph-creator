@@ -8,7 +8,7 @@ const packages = ["core", "render"];
 
 for (const packageName of packages) {
   const sourceRoot = resolve(repoRoot, "packages", packageName);
-  const targetRoot = resolve(cliRoot, "node_modules", "@graphforge", packageName);
+  const targetRoot = resolve(cliRoot, "node_modules", "@opengraph-creator", packageName);
   await rm(targetRoot, { recursive: true, force: true });
   await mkdir(targetRoot, { recursive: true });
   await cp(resolve(sourceRoot, "dist"), resolve(targetRoot, "dist"), { recursive: true });
@@ -16,7 +16,7 @@ for (const packageName of packages) {
     resolve(targetRoot, "package.json"),
     JSON.stringify(
       {
-        name: `@graphforge/${packageName}`,
+        name: `@opengraph-creator/${packageName}`,
         version: "0.0.0",
         type: "module",
         main: "dist/index.js",
