@@ -6,6 +6,8 @@ Your coding agent, such as Codex, Claude Code, or OpenCode, inspects the app and
 
 OpenGraph Creator does not call OpenAI, Anthropic, or image-generation providers directly. Generation belongs to the coding agent. Studio owns editing, preview, export, compression, recovery, and handoff.
 
+![OpenGraph Creator Studio preview](assets/studio-preview.png)
+
 ## Install
 
 Install the skill from GitHub for all supported local agents:
