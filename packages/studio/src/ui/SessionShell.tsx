@@ -22,7 +22,6 @@ export function SessionShell() {
   const shellRef = useRef<HTMLDivElement>(null);
   const hasPlayedEntranceRef = useRef(false);
   const project = useStudio((state) => state.project);
-  const hasProject = Boolean(project);
   const sourceRailOpen = useStudio((state) => state.sourceRailOpen);
   const setSourceRailOpen = useStudio((state) => state.setSourceRailOpen);
   const replaceProject = useStudio((state) => state.replaceProject);
@@ -169,7 +168,7 @@ export function SessionShell() {
     return () => {
       tween.kill();
     };
-  }, [hasProject]);
+  }, []);
 
   const openProject = async (projectId: string) => {
     try {
@@ -228,7 +227,9 @@ export function SessionShell() {
       />
       <header className="studio-commandbar" data-enter>
         <div className="brand-block">
-          <span className="brand-mark">OG</span>
+          <span className="brand-mark" aria-hidden="true">
+            <img className="brand-mark-image" src="/opengraph-creator-logo.png" alt="" />
+          </span>
           <div>
             <strong>OpenGraph Creator</strong>
             <span>{project ? project.name : "Project picker"}</span>

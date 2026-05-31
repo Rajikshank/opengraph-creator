@@ -37,7 +37,7 @@ Pure-image fallback is allowed only when the user explicitly asks for a flat ima
 
 Follow this state machine exactly:
 
-`inspect_repo -> question_gate -> reference_research -> style_thesis -> write_generation_brief -> create_session -> generate_editable_ogdoc -> validate_document -> launch_studio -> wait_next_action -> handle_restart_revision_or_publish -> apply_metadata_after_confirmation`
+`inspect_repo -> question_gate -> reference_research -> concept_thesis -> style_thesis -> write_generation_brief -> create_session -> generate_editable_ogdoc -> validate_document -> launch_studio -> wait_next_action -> handle_restart_revision_or_publish -> apply_metadata_after_confirmation`
 
 Do not skip the Question Gate. Do not create a session, document, image, SVG, HTML, or launch Studio before the Question Gate is complete. Do not end the chat after launch. The agent task remains active while Studio is open.
 
@@ -68,9 +68,9 @@ Ask these decisions before generation:
 
 Only treat the Question Gate as complete when the user explicitly answers these decisions in the current task or directly relevant earlier answers. If the user says "you decide", choose conservatively from repo evidence and record that decision in the brief.
 
-Write the resolved answers into `.opengraph-creator/sessions/<id>/generation-brief.json` after session creation. The brief must record `capabilities`, `coverage`, `visualBuildStyle`, `assetPermission`, `visualDirection`, `references`, `targetPages`, `exportFormats`, `referenceResearch`, `styleThesis`, `compositionPlan`, `assetPlan`, `negativeDirection`, `routeVariantRules`, and any assumptions.
+Write the resolved answers into `.opengraph-creator/sessions/<id>/generation-brief.json` after session creation. The brief must record `capabilities`, `coverage`, `visualBuildStyle`, `assetPermission`, `visualDirection`, `references`, `targetPages`, `exportFormats`, `referenceResearch`, `conceptThesis`, `styleThesis`, `semanticPalette`, `compositionPlan`, `assetPlan`, `negativeDirection`, `routeVariantRules`, and any assumptions.
 
-## Reference Research And Style Thesis
+## Reference Research, Concept Thesis, And Style Thesis
 
 After the Question Gate and before creating the session document, run a short Reference Research phase:
 
@@ -78,6 +78,13 @@ After the Question Gate and before creating the session document, run a short Re
 - If web/search tools are available and useful, gather mood/composition references only. Do not copy protected internet reference assets, brand imagery, illustrations, screenshots, or layouts into the `.ogdoc` unless the user provided them or license/permission is clear.
 - Record source names/URLs or local paths as reference notes, not as hidden dependencies.
 - For page-specific or hybrid OGs, identify what each route should visually communicate while preserving one shared system.
+
+Then write a Concept Thesis:
+
+- Name one visual metaphor tied to the app domain, page purpose, or user outcome. Do not use generic energy, sparkle, orbit, blob, or dashboard decoration unless it clearly explains the product.
+- Define a semantic palette: each color must have a role, such as brand anchor, data signal, warning, editorial paper, depth shadow, or action highlight.
+- Decide which 2-4 visual objects carry the concept, such as a route map, signal beam, publication spread, product window, data trail, layered document, or crafted emblem.
+- State why every large shape exists. If a shape has no job, remove it before packing the `.ogdoc`.
 
 Then write a Style Thesis:
 
@@ -119,7 +126,7 @@ If the command returns `published`, read `publish-request.json`, verify the requ
 1. Run `opengraph-creator doctor --json`. If `opengraph-creator` is not available, use `npx -y opengraph-creator@latest doctor --json`, or run `node scripts/ensure-opengraph-creator.mjs` for local install guidance. Do not clone or build the Studio repo for normal user runtime.
 2. Inspect the repo for framework, routes, metadata files, brand assets, screenshots, copy, product tone, and existing OG metadata.
 3. Complete the Hard Stop Capability And Question Gate and wait for missing answers.
-4. Run the Reference Research and Style Thesis phases. Record `referenceResearch`, `styleThesis`, `compositionPlan`, `assetPlan`, `negativeDirection`, and `routeVariantRules`.
+4. Run the Reference Research, Concept Thesis, and Style Thesis phases. Record `referenceResearch`, `conceptThesis`, `styleThesis`, `semanticPalette`, `compositionPlan`, `assetPlan`, `negativeDirection`, and `routeVariantRules`.
 5. Create a durable session with the current agent name, for example `opengraph-creator session create --repo "<repo>" --agent opencode --strategy hybrid --mode template`. Use `--agent codex` in Codex, `--agent claude` in Claude Code, and `--agent opencode` in OpenCode.
 6. Run `opengraph-creator brief --repo "<repo>" --name "<app>" --strategy common|pages|hybrid --mode template --out ".opengraph-creator/brief.json"` and write the resolved question gate answers plus research/thesis fields into `.opengraph-creator/sessions/<id>/generation-brief.json`.
 7. Generate the OG source as an editable `.ogdoc` package. The document must contain separate layers for text, badges, shapes, screenshots, logos, generated art, SVG/HTML source assets, references, and backgrounds.

@@ -1,6 +1,6 @@
 import { useState, type ChangeEvent } from "react";
 import { FileCode2, PanelLeftClose, Send, Upload } from "lucide-react";
-import { unpackStudioDocument, type OpenGraphCreatorSourceArtifact, type OgLayer, type OgProject, type SourceArtifactKind } from "@opengraph-creator/core";
+import { unpackStudioDocument, type OpenGraphCreatorSourceArtifact, type SourceArtifactKind } from "@opengraph-creator/core";
 import { createSessionAgentRequestViaApi, importSourceViaApi, saveSessionDocumentViaApi, uploadSessionAssetViaApi } from "../api";
 import { StudioSelect } from "../design-system/StudioSelect";
 import { StudioScrollArea } from "../design-system/StudioScrollArea";
@@ -211,7 +211,6 @@ export function SourceRail({ onClose }: { onClose?: () => void }) {
           <PageVariantNavigator
             project={project}
             onSelectPage={selectPageVariant}
-            onApplyStyleToAll={() => applyStyleToAllPages(project, replaceProject)}
           />
         ) : null}
         {session ? (
@@ -231,29 +230,4 @@ export function SourceRail({ onClose }: { onClose?: () => void }) {
       </StudioScrollArea>
     </aside>
   );
-}
-
-function applyStyleToAllPages(project: OgProject, replaceProject: (project: OgProject) => void) {
-  if (!project.pages?.length) return;
-  const currentLayers = project.layers;
-  const pages = project.pages.map((page) => ({
-    ...page,
-    layers: currentLayers.map((layer) => preservePageCopy(layer, page.layers.find((item) => item.id === layer.id)))
-  }));
-  replaceProject({
-    ...project,
-    pages,
-    updatedAt: new Date().toISOString()
-  });
-  notifyStudioSuccess("Applied current style to all page variants");
-}
-
-function preservePageCopy(templateLayer: OgLayer, existingLayer: OgLayer | undefined): OgLayer {
-  if ((templateLayer.kind === "text" || templateLayer.kind === "badge") && existingLayer && (existingLayer.kind === "text" || existingLayer.kind === "badge")) {
-    return {
-      ...templateLayer,
-      text: existingLayer.text
-    };
-  }
-  return JSON.parse(JSON.stringify(templateLayer)) as OgLayer;
 }

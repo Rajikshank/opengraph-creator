@@ -264,7 +264,7 @@ button:disabled {
   font-weight: 780;
 }
 
-.brand-block span:not(.brand-mark),
+.brand-block > div > span,
 .stage-toolbar span,
 .preview-dock-header span,
 .source-dropzone span,
@@ -276,18 +276,24 @@ button:disabled {
 }
 
 .brand-mark {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   flex: 0 0 auto;
   display: grid;
   place-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  overflow: hidden;
+  border: 1px solid color-mix(in oklch, var(--accent) 38%, #0b0c0d);
   border-radius: 6px;
-  background: #f3f1e8;
-  color: var(--chrome);
-  font-size: 11px;
-  font-weight: 850;
-  box-shadow: inset 0 -2px 0 var(--accent-focus);
+  background: #050505;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.42), inset 0 -1px 0 color-mix(in oklch, var(--accent) 42%, transparent);
+}
+
+.brand-mark-image {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+  padding: 2px;
 }
 
 .command-actions {
@@ -1076,10 +1082,6 @@ input[type="range"] {
 .page-variant-status.exported {
   color: #d5f0c0;
   background: color-mix(in oklch, #83bd6a 18%, transparent);
-}
-
-.page-variant-apply {
-  margin-top: 1px;
 }
 
 .agent-revision-card,

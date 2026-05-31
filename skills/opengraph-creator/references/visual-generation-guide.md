@@ -27,6 +27,18 @@ Use this router before the normal design questions:
 
 The goal is not to reduce creativity. The goal is to choose the strongest creative path the current agent can actually execute.
 
+## Concept Thesis
+
+Before creating any layer, write a compact concept thesis for the OG:
+
+- one domain metaphor that belongs to the app or page, not a generic decoration
+- one focal idea the viewer should understand within one second
+- one semantic palette where each color has a role, such as brand anchor, editorial surface, data signal, danger, success, depth, or action
+- 2-4 named visual objects that carry the concept
+- one negative rule that prevents the design from becoming clutter, copied reference work, or meaningless abstract blobs
+
+Do not build an OG as just stacked decorative layers. If a shape, symbol, glow, texture, screenshot, or SVG object cannot be explained by the concept thesis, remove it or turn it into a quieter supporting layer.
+
 ## Capability-Based Creative Paths
 
 ### With image generation

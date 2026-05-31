@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Download, RotateCcw, Send } from "lucide-react";
-import type { ExportFormat } from "@opengraph-creator/core";
+import type { ExportFormat, OpenGraphCreatorSession } from "@opengraph-creator/core";
 import {
   createAgentHandoffViaApi,
   createPublishRequestViaApi,
@@ -20,6 +20,7 @@ import { useStudio } from "./studio-store";
 export function ExportPublishPanel() {
   const project = useStudio((state) => state.project);
   const session = useStudio((state) => state.session);
+  const setSession = useStudio((state) => state.setSession);
   const setLastExportSizeBytes = useStudio((state) => state.setLastExportSizeBytes);
   const [format, setFormat] = useState<ExportFormat>("png");
   const [quality, setQuality] = useState(82);
@@ -30,6 +31,11 @@ export function ExportPublishPanel() {
   const [restartConfirmOpen, setRestartConfirmOpen] = useState(false);
   const [busyAction, setBusyAction] = useState<"export" | "publish" | "restart" | null>(null);
   const isBusy = busyAction !== null;
+  const publishUnavailableReason = getPublishUnavailableReason({
+    busyAction,
+    hasConfirmedPublish,
+    hasExported
+  });
 
   const runGuardedOperation = async (action: NonNullable<typeof busyAction>, operation: () => Promise<void>) => {
     if (busyAction) return;
@@ -40,6 +46,14 @@ export function ExportPublishPanel() {
       setBusyAction(null);
     }
   };
+
+  useEffect(() => {
+    const existingExportState = getSessionExportState(session);
+    if (!existingExportState.hasExported) return;
+    setHasExported(true);
+    setPageImages(existingExportState.pageImages);
+    if (existingExportState.target) setTarget(existingExportState.target);
+  }, [session]);
 
   const exportProject = async () => {
     if (!project) return;
@@ -52,7 +66,7 @@ export function ExportPublishPanel() {
       setPageImages(project.pages?.length ? [{ page: project.targetPages[0] ?? "/", imagePath: result.target }] : []);
       setHasConfirmedPublish(false);
       if (session) {
-        await recordSessionExportViaApi(fetch, {
+        const updatedSession = await recordSessionExportViaApi(fetch, {
           repo: session.repo,
           sessionId: session.id,
           path: result.target,
@@ -61,6 +75,7 @@ export function ExportPublishPanel() {
           height: result.height ?? 630,
           fileSizeBytes: result.fileSizeBytes
         });
+        setSession(updatedSession);
       }
       notifyStudioSuccess(`Exported ${result.target}`);
     } catch (error) {
@@ -93,7 +108,7 @@ export function ExportPublishPanel() {
       setHasConfirmedPublish(false);
       if (session) {
         for (const item of result.exports) {
-          await recordSessionExportViaApi(fetch, {
+          const updatedSession = await recordSessionExportViaApi(fetch, {
             repo: session.repo,
             sessionId: session.id,
             path: item.target,
@@ -103,6 +118,7 @@ export function ExportPublishPanel() {
             height: item.height ?? 630,
             fileSizeBytes: item.fileSizeBytes
           });
+          setSession(updatedSession);
         }
       }
       notifyStudioSuccess(`Exported ${result.exports.length} page OG image${result.exports.length === 1 ? "" : "s"}`);
@@ -142,7 +158,16 @@ export function ExportPublishPanel() {
         notifyStudioSuccess("Publish handoff sent to agent");
         return;
       }
-      if (!project) return;
+      if (!project) {
+        notifyStudioError(
+          normalizeStudioError("No editable document is open", {
+            kind: "agent-handoff",
+            title: "No document available",
+            recovery: "Open or import an editable .ogdoc before creating a publish handoff."
+          })
+        );
+        return;
+      }
       const result = await createAgentHandoffViaApi(fetch, {
         project,
         prompt: pageImages.length
@@ -224,19 +249,21 @@ export function ExportPublishPanel() {
       <button
         type="button"
         className="secondary-action"
-        disabled={isBusy || !hasExported || hasConfirmedPublish}
-        title={
-          !hasExported
-            ? "Export first"
-            : hasConfirmedPublish
-              ? "Publish handoff already sent"
-              : "Send confirmed export handoff to the coding agent"
-        }
+        disabled={Boolean(publishUnavailableReason)}
+        title={publishUnavailableReason ?? "Send confirmed export handoff to the coding agent"}
         onClick={() => void runGuardedOperation("publish", publishWithAgent)}
       >
         <Send size={15} /> {busyAction === "publish" ? "Publishing..." : "Publish with agent"}
       </button>
-      {hasConfirmedPublish ? <p className="quiet-copy">Waiting for the agent to preview and wire metadata.</p> : null}
+      <p className="quiet-copy">
+        {hasConfirmedPublish
+          ? "Waiting for the agent to preview and wire metadata."
+          : !hasExported
+            ? "Agent handoff needs an export first."
+            : session
+              ? "Exported, ready for agent handoff."
+              : "No agent session is connected; Studio will save a recovery handoff file."}
+      </p>
       <button
         type="button"
         className="secondary-action danger-action"
@@ -272,4 +299,34 @@ export function ExportPublishPanel() {
       ) : null}
     </section>
   );
+}
+
+function getPublishUnavailableReason(input: {
+  busyAction: "export" | "publish" | "restart" | null;
+  hasConfirmedPublish: boolean;
+  hasExported: boolean;
+}): string | undefined {
+  if (input.busyAction) return "Another export action is running";
+  if (!input.hasExported) return "Export first";
+  if (input.hasConfirmedPublish) return "Publish handoff already sent";
+  return undefined;
+}
+
+function getSessionExportState(session: OpenGraphCreatorSession | null): {
+  hasExported: boolean;
+  target?: string;
+  pageImages: Array<{ page: string; imagePath: string }>;
+} {
+  const sessionExports = session?.exports ?? [];
+  if (!sessionExports.length) return { hasExported: false, pageImages: [] };
+  const latest = sessionExports.at(-1);
+  const latestByPage = new Map<string, string>();
+  sessionExports.forEach((item) => {
+    if (item.page) latestByPage.set(item.page, item.path);
+  });
+  return {
+    hasExported: true,
+    target: latest?.path,
+    pageImages: Array.from(latestByPage, ([page, imagePath]) => ({ page, imagePath }))
+  };
 }

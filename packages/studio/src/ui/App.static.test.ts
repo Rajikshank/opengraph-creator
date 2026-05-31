@@ -100,7 +100,6 @@ describe("reengineered studio UI contract", () => {
       "page-variant-navigator",
       "page-variant-route",
       "page-variant-status",
-      "Apply style to all",
       "Export all pages",
       "Restart OG generation",
       "Restart from question gate",
@@ -216,11 +215,28 @@ describe("reengineered studio UI contract", () => {
     expect(pageNavigator).toContain("page-variant-title-row");
     expect(pageNavigator).toContain("page-variant-meta-row");
     expect(pageNavigator).toContain("StudioScrollArea");
+    expect(pageNavigator).not.toContain("Apply style to all");
+    expect(pageNavigator).not.toContain("onApplyStyleToAll");
     expect(sourceRail).toContain("source-rail-body");
     expect(sourceRail).toContain("agent-revision-card");
+    expect(sourceRail).not.toContain("applyStyleToAllPages");
     expect(stylesSource).toContain("grid-template-columns: 28px minmax(0, 1fr) auto");
     expect(stylesSource).toContain(".page-variant-list > div");
     expect(stylesSource).not.toContain(".page-variant-status {\n  grid-column: 2;");
+  });
+
+  it("keeps publish handoff visible with clear unavailable states and uses the real app logo", () => {
+    const sessionShell = readFileSync(join(uiDir, "SessionShell.tsx"), "utf8");
+    const exportPanel = readFileSync(join(uiDir, "ExportPublishPanel.tsx"), "utf8");
+
+    expect(sessionShell).toContain("opengraph-creator-logo.png");
+    expect(sessionShell).toContain("brand-mark-image");
+    expect(exportPanel).toContain("getPublishUnavailableReason");
+    expect(exportPanel).toContain("Publish with agent");
+    expect(exportPanel).toContain("Agent handoff needs an export first");
+    expect(exportPanel).toContain("Exported, ready for agent handoff");
+    expect(exportPanel).toContain("No agent session is connected");
+    expect(exportPanel).not.toContain("hasConfirmedPublish ? <p className=\"quiet-copy\">");
   });
 
   it("keeps studio slider keyboard and pointer edits wired into React state", () => {

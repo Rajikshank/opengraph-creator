@@ -1,6 +1,6 @@
 {
   "name": "opengraph-creator-monorepo",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "private": true,
   "type": "module",
   "description": "Agent-first local Open Graph Creator studio with editable layered projects.",

@@ -13,12 +13,10 @@ const pageStatusCopy: Record<OgPageStatus, { label: string; icon: typeof CircleD
 
 export function PageVariantNavigator({
   project,
-  onSelectPage,
-  onApplyStyleToAll
+  onSelectPage
 }: {
   project: OgProject;
   onSelectPage: (pageIdOrRoute: string) => void;
-  onApplyStyleToAll: () => void;
 }) {
   const pages = project.pages ?? [];
   const activePage = pages.find((page) => page.id === project.activePageId) ?? pages[0];
@@ -81,9 +79,6 @@ export function PageVariantNavigator({
           );
         })}
       </StudioScrollArea>
-      <button type="button" className="secondary-action page-variant-apply" onClick={onApplyStyleToAll}>
-        Apply style to all
-      </button>
     </section>
   );
 }
