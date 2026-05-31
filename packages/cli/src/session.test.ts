@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { createDefaultProject, unpackStudioDocument } from "@opengraph-creator/core";
 import {
   appendSessionEvent,
+  attachOpenGraphCreatorSession,
   atomicWriteJson,
   createAgentRequest,
   cancelOpenGraphCreatorSession,
@@ -57,6 +58,34 @@ describe("OpenGraphCreator durable sessions", () => {
       strategy: "common",
       mode: "template"
     });
+  });
+
+  it("attaches an existing editable project as a live Studio session", async () => {
+    const repo = await mkdtemp(join(tmpdir(), "OpenGraphCreator-session-attach-project-"));
+    const project = createDefaultProject({ name: "Manual Studio Project", strategy: "hybrid" });
+
+    const session = await attachOpenGraphCreatorSession({
+      repo,
+      id: "attached-manual-project",
+      agent: "codex",
+      project,
+      source: "library-project"
+    });
+    const paths = getSessionPaths(repo, "attached-manual-project");
+    const document = await unpackStudioDocument(await readFile(paths.documentFile));
+
+    expect(session).toMatchObject({
+      id: "attached-manual-project",
+      agent: "codex",
+      strategy: "hybrid",
+      status: "editing",
+      pendingAction: "studio-editing",
+      activeProjectId: project.projectId,
+      activeDocumentPath: paths.documentFile
+    });
+    expect(document.project.name).toBe("Manual Studio Project");
+    expect(document.project.sessionId).toBe("attached-manual-project");
+    expect(session.recoverInstructions.join(" ")).toContain("session wait --until next-action --timeout 0");
   });
 
   it("atomically writes JSON and appends an event log", async () => {

@@ -225,7 +225,8 @@ async function handleRequest(input: {
 
   if (url.pathname === "/api/connect-recipe" && input.request.method === "GET") {
     const repo = url.searchParams.get("repo") ?? input.sessionRepo ?? input.library.root;
-    sendJson(input.response, 200, createConnectRecipe(repo));
+    const project = url.searchParams.get("project") ?? undefined;
+    sendJson(input.response, 200, createConnectRecipe(repo, project));
     return;
   }
 
@@ -453,12 +454,12 @@ async function handleRequest(input: {
   await serveStatic(input.response, input.staticDir, url.pathname);
 }
 
-function createConnectRecipe(repo: string): { repo: string; command: string; prompt: string; sessionRoot: string } {
+function createConnectRecipe(repo: string, project = "<project-id-or-ogdoc>"): { repo: string; command: string; prompt: string; sessionRoot: string } {
   return {
     repo,
-    command: `opengraph-creator session create --repo "${repo}" --agent codex --strategy hybrid --mode template`,
+    command: `opengraph-creator session attach --repo "${repo}" --project "${project}" --agent codex --launch true --wait true`,
     prompt:
-      "Use the OpenGraph Creator skill to inspect this repo, ask only relevant OG design questions, create an editable .ogdoc at .opengraph-creator/sessions/<id>/document.ogdoc, launch Studio, then wait with opengraph-creator session wait --until next-action.",
+      "Use the OpenGraph Creator skill to attach this already-open Studio work to a durable session, launch or reuse Studio, then wait with opengraph-creator session wait --until next-action. Keep the editable .ogdoc as the source of truth and publish only from confirmed publish-request.json.",
     sessionRoot: join(repo, ".opengraph-creator", "sessions")
   };
 }

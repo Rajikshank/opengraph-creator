@@ -519,6 +519,88 @@ describe("OpenGraphCreator CLI helpers", () => {
     expect(files).toContain("Saved CLI");
   });
 
+  it("attaches a saved library project to a live durable session without launching Studio", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-cli-attach-library-"));
+    const home = join(dir, "home");
+    const repo = join(dir, "app");
+    const project = createDefaultProject({ name: "Attach Library", strategy: "hybrid" });
+    const projectPath = join(dir, "attach.og.json");
+    await mkdir(repo, { recursive: true });
+    await writeFile(projectPath, JSON.stringify(project), "utf8");
+    await runCli(["save", "--project", projectPath, "--home", home]);
+
+    await runCli([
+      "session",
+      "attach",
+      "--repo",
+      repo,
+      "--home",
+      home,
+      "--id",
+      "attached-library",
+      "--project",
+      project.projectId,
+      "--agent",
+      "codex",
+      "--launch",
+      "false",
+      "--wait",
+      "false"
+    ]);
+
+    const paths = getSessionPaths(repo, "attached-library");
+    const session = JSON.parse(await readFile(paths.sessionJson, "utf8"));
+    const document = await unpackStudioDocument(await readFile(paths.documentFile));
+    expect(session).toMatchObject({
+      id: "attached-library",
+      status: "editing",
+      pendingAction: "studio-editing",
+      activeProjectId: project.projectId
+    });
+    expect(document.project.name).toBe("Attach Library");
+    expect(document.project.sessionId).toBe("attached-library");
+  });
+
+  it("attaches an existing .ogdoc file and waits only after a confirmed Studio decision", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-cli-attach-ogdoc-"));
+    const repo = join(dir, "app");
+    const documentPath = join(dir, "manual.ogdoc");
+    await mkdir(repo, { recursive: true });
+    await runCli(["document", "new", "--name", "Manual Ogdoc", "--strategy", "common", "--out", documentPath]);
+
+    await runCli([
+      "session",
+      "attach",
+      "--repo",
+      repo,
+      "--id",
+      "attached-ogdoc",
+      "--project",
+      documentPath,
+      "--agent",
+      "opencode",
+      "--launch",
+      "false",
+      "--wait",
+      "false"
+    ]);
+    const started = Date.now();
+    await runCli(["session", "wait", "--repo", repo, "--id", "attached-ogdoc", "--until", "next-action", "--timeout", "100"]);
+    const elapsed = Date.now() - started;
+
+    await runCli(["publish", "--confirm", "--repo", repo, "--session", "attached-ogdoc", "--framework", "vite", "--image", "public/og.png"]);
+    await runCli(["session", "wait", "--repo", repo, "--id", "attached-ogdoc", "--until", "next-action", "--timeout", "1000"]);
+
+    const paths = getSessionPaths(repo, "attached-ogdoc");
+    const session = JSON.parse(await readFile(paths.sessionJson, "utf8"));
+    const document = await unpackStudioDocument(await readFile(paths.documentFile));
+    expect(elapsed).toBeGreaterThanOrEqual(75);
+    expect(session.status).toBe("published");
+    expect(session.publishRequests).toEqual([expect.objectContaining({ status: "confirmed", imagePath: "public/og.png" })]);
+    expect(document.project.name).toBe("Manual Ogdoc");
+    expect(document.project.sessionId).toBe("attached-ogdoc");
+  });
+
   it("writes page-specific variant project files from a base project", async () => {
     const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-variants-"));
     const projectPath = join(dir, "base.og.json");

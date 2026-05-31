@@ -38,6 +38,16 @@ export interface CreateSessionInput {
   project?: OgProject;
 }
 
+export interface AttachSessionInput {
+  repo: string;
+  id?: string;
+  agent?: AgentKind;
+  project: OgProject;
+  assets?: Record<string, Uint8Array>;
+  previews?: Record<string, Uint8Array>;
+  source?: string;
+}
+
 export interface SessionExportRecord {
   path: string;
   format: ExportFormat;
@@ -119,6 +129,45 @@ export async function createOpenGraphCreatorSession(input: CreateSessionInput): 
     await writeFile(paths.documentFile, await packStudioDocument({ project }));
   }
   await writeFile(paths.eventsJsonl, `${JSON.stringify(createSessionEvent(id, "session.created", "Session created"))}\n`, "utf8");
+  return session;
+}
+
+export async function attachOpenGraphCreatorSession(input: AttachSessionInput): Promise<OpenGraphCreatorSession> {
+  const id = input.id ?? `ogc-${Date.now().toString(36)}`;
+  const paths = getSessionPaths(input.repo, id);
+  const now = new Date().toISOString();
+  const project: OgProject = { ...input.project, sessionId: id };
+  const session: OpenGraphCreatorSession = {
+    id,
+    repo: input.repo,
+    agent: input.agent ?? "unknown",
+    strategy: project.strategy,
+    mode: project.generationMode ?? "template",
+    status: "editing",
+    activeProjectId: project.projectId,
+    activeDocumentPath: paths.documentFile,
+    incomingArtifacts: [],
+    exports: [],
+    publishRequests: [],
+    agentRequests: [],
+    lastHeartbeatAt: now,
+    pendingAction: "studio-editing",
+    recoverInstructions: [
+      `Read ${paths.sessionJson}.`,
+      `Continue editing the attached Studio document at ${paths.documentFile}.`,
+      `Launch or reuse Studio with opengraph-creator session launch --repo "${input.repo}" --id "${id}" --open true --waitReady true --json.`,
+      `Wait for Studio with opengraph-creator session wait --until next-action --timeout 0 --repo "${input.repo}" --id "${id}".`,
+      "On confirmed publish, read publish-request.json and wire metadata only after preview and user confirmation."
+    ]
+  };
+  await mkdir(paths.incomingDir, { recursive: true });
+  await atomicWriteJson(paths.sessionJson, session);
+  await writeFile(paths.documentFile, await packStudioDocument({
+    project,
+    assets: input.assets ?? {},
+    previews: input.previews ?? {}
+  }));
+  await writeFile(paths.eventsJsonl, `${JSON.stringify(createSessionEvent(id, "session.attached", "Manual Studio work attached to durable session", { source: input.source }))}\n`, "utf8");
   return session;
 }
 

@@ -29,12 +29,13 @@ import {
 import { createGenerationBrief } from "./brief.js";
 import { createImportedSourceDocument, createImportedSourceProject } from "./import-source.js";
 import { readStudioDocumentFile, writeStudioDocumentFile } from "./document-io.js";
-import { createLibrary, listLibraryProjects, saveLibraryProject } from "./library.js";
+import { createLibrary, listLibraryProjects, readLibraryProject, saveLibraryProject } from "./library.js";
 import { scanRepo } from "./scan.js";
 import { createStudioServer, getDefaultStudioStaticDir } from "./server.js";
 import {
   createOpenGraphCreatorSession,
   appendSessionEvent,
+  attachOpenGraphCreatorSession,
   cancelOpenGraphCreatorSession,
   createPublishRequest,
   getSessionPaths,
@@ -328,6 +329,52 @@ export async function runCli(argv: string[]): Promise<void> {
       console.log(JSON.stringify({ session, paths: getSessionPaths(repo, session.id) }, null, 2));
       return;
     }
+    if (subcommand === "attach") {
+      if (!args.project) throw new Error("--project is required");
+      const source = await readAttachProjectSource(args.project, args.home);
+      const session = await attachOpenGraphCreatorSession({
+        repo,
+        id: args.id,
+        agent: parseAgentKind(args.agent),
+        project: source.project,
+        assets: source.assets,
+        previews: source.previews,
+        source: source.source
+      });
+      if (args.launch === "true") {
+        await runCli([
+          "session",
+          "launch",
+          "--repo",
+          repo,
+          "--id",
+          session.id,
+          "--open",
+          args.open ?? "true",
+          "--waitReady",
+          args.waitReady ?? "true",
+          "--json",
+          args.json ?? "true"
+        ]);
+      }
+      if (args.wait === "true") {
+        await runCli([
+          "session",
+          "wait",
+          "--repo",
+          repo,
+          "--id",
+          session.id,
+          "--until",
+          args.until ?? "next-action",
+          "--timeout",
+          args.timeout ?? "0"
+        ]);
+        return;
+      }
+      console.log(JSON.stringify({ session, paths: getSessionPaths(repo, session.id) }, null, 2));
+      return;
+    }
     if (subcommand === "status") {
       if (!args.id) throw new Error("--id is required");
       console.log(JSON.stringify(await readOpenGraphCreatorSession(repo, args.id), null, 2));
@@ -425,7 +472,7 @@ export async function runCli(argv: string[]): Promise<void> {
       console.log(args.json === "true" ? JSON.stringify(launch, null, 2) : `OpenGraph Creator Studio launched at ${url}`);
       return;
     }
-    throw new Error("Unknown session command. Use create, open, launch, wait, cancel, validate, or status.");
+    throw new Error("Unknown session command. Use create, attach, open, launch, wait, cancel, validate, or status.");
   }
 
   if (command === "document") {
@@ -823,6 +870,48 @@ function parseArgs(args: string[]): Record<string, string> {
   return parsed;
 }
 
+async function readAttachProjectSource(
+  source: string,
+  home?: string
+): Promise<{ project: OgProject; assets?: Record<string, Uint8Array>; previews?: Record<string, Uint8Array>; source: string }> {
+  const sourcePath = await resolveExistingSourcePath(source);
+  if (sourcePath) {
+    if (sourcePath.toLowerCase().endsWith(".ogdoc")) {
+      const document = await readStudioDocumentFile(sourcePath);
+      return {
+        project: document.project,
+        assets: document.assets,
+        previews: document.previews,
+        source: sourcePath
+      };
+    }
+    if (sourcePath.toLowerCase().endsWith(".json")) {
+      return {
+        project: JSON.parse(await readFile(sourcePath, "utf8")) as OgProject,
+        source: sourcePath
+      };
+    }
+    throw new Error("--project must be a Studio project id, .ogdoc file, or project JSON file");
+  }
+
+  try {
+    const project = await readLibraryProject(createLibrary({ root: home }), source);
+    return { project, source: `library:${source}` };
+  } catch (error) {
+    throw new Error(
+      `Could not attach project "${source}". Provide a saved Studio project id, .ogdoc path, or project JSON path. ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+}
+
+async function resolveExistingSourcePath(source: string): Promise<string | undefined> {
+  const candidates = isAbsolute(source) ? [source] : [source, join(process.cwd(), source)];
+  for (const candidate of candidates) {
+    if (await pathExists(candidate)) return candidate;
+  }
+  return undefined;
+}
+
 async function resolvePageImagesForPublish(repo: string, sessionId: string, args: Record<string, string>): Promise<PageImageMapping[] | undefined> {
   if (args.pageImages) {
     const source = args.pageImages.startsWith("@") ? await readFile(args.pageImages.slice(1), "utf8") : args.pageImages;
@@ -1128,6 +1217,7 @@ Commands:
   opengraph-creator document pack --project project.og.json --out project.ogdoc
   opengraph-creator document validate --source project.ogdoc
   opengraph-creator session create --repo <path> --agent codex --strategy common|pages|hybrid
+  opengraph-creator session attach --repo <path> --project <project-id-or-ogdoc> --agent codex --launch true --wait true
   opengraph-creator session open --repo <path> --id <session-id>
   opengraph-creator session launch --repo <path> --id <session-id> --open true --waitReady true --json
   opengraph-creator session validate --repo <path> --id <session-id> --repair true

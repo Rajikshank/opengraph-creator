@@ -121,6 +121,16 @@ If the command returns `agent-requested`, inspect `pendingAction`:
 
 If the command returns `published`, read `publish-request.json`, verify the request is confirmed, preview metadata changes, and apply only after explicit user confirmation. If it returns `cancelled` or `terminal`, stop without mutating app metadata.
 
+## Manual Studio Attach Flow
+
+If Studio was opened manually or the user already has a Studio project or `.ogdoc` open, do not start a disconnected generation flow and do not add UI controls. Use the backend attach command to attach this already-open Studio work to a durable session:
+
+```bash
+opengraph-creator session attach --repo "<repo>" --project "<project-id-or-ogdoc>" --agent codex --launch true --wait true
+```
+
+Use `--agent codex` in Codex, `--agent claude` in Claude Code, and `--agent opencode` in OpenCode. The attach command must create `.opengraph-creator/sessions/<id>/document.ogdoc`, launch or reuse Studio when requested, and wait for the next Studio decision. After attach, follow the same wait loop as the normal generated-session flow. Do not finish the chat until the attached session returns `published`, `agent-requested`, `cancelled`, or `terminal`.
+
 ## Workflow
 
 1. Run `opengraph-creator doctor --json`. If `opengraph-creator` is not available, use `npx -y opengraph-creator@latest doctor --json`, or run `node scripts/ensure-opengraph-creator.mjs` for local install guidance. Do not clone or build the Studio repo for normal user runtime.

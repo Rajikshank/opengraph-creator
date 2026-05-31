@@ -232,7 +232,7 @@ describe("studio API client", () => {
       new Response(
         JSON.stringify({
           repo: "D:/app",
-          command: "opengraph-creator session create --repo \"D:/app\" --agent codex --strategy hybrid --mode template",
+          command: "opengraph-creator session attach --repo \"D:/app\" --project \"<project-id-or-ogdoc>\" --agent codex --launch true --wait true",
           prompt: "Use the OpenGraph Creator skill and wait with next-action.",
           sessionRoot: "D:/app/.opengraph-creator/sessions"
         })

@@ -253,7 +253,7 @@ describe("OpenGraph Creator Studio local API", () => {
     const repo = join(root, "user-app");
     handle = await createStudioServer({ library, port: 0, sessionRepo: repo });
 
-    const response = await fetch(`${handle.url}/api/connect-recipe?repo=${encodeURIComponent(repo)}`);
+    const response = await fetch(`${handle.url}/api/connect-recipe?repo=${encodeURIComponent(repo)}&project=${encodeURIComponent("project-123")}`);
     const recipe = await response.json();
 
     expect(response.status).toBe(200);
@@ -261,9 +261,12 @@ describe("OpenGraph Creator Studio local API", () => {
       repo,
       sessionRoot: join(repo, ".opengraph-creator", "sessions")
     });
-    expect(recipe.command).toContain("opengraph-creator session create");
+    expect(recipe.command).toContain("opengraph-creator session attach");
     expect(recipe.command).toContain(`--repo "${repo}"`);
+    expect(recipe.command).toContain('--project "project-123"');
+    expect(recipe.command).toContain("--wait true");
     expect(recipe.prompt).toContain("editable .ogdoc");
+    expect(recipe.prompt).toContain("attach this already-open Studio work");
     expect(recipe.prompt).toContain("next-action");
     expect(JSON.stringify(recipe).toLowerCase()).not.toContain("openai_api_key");
   });

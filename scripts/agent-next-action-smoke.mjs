@@ -9,6 +9,32 @@ const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const cli = join(root, "packages", "cli", "dist", "index.js");
 const repo = await mkdtemp(join(tmpdir(), "OpenGraphCreator-next-action-"));
 
+const manualDocument = join(repo, "manual.ogdoc");
+await runCli(["document", "new", "--name", "Manual Studio Attach", "--strategy", "common", "--out", manualDocument]);
+await runCli([
+  "session",
+  "attach",
+  "--repo",
+  repo,
+  "--id",
+  "attached-manual",
+  "--project",
+  manualDocument,
+  "--agent",
+  "codex",
+  "--launch",
+  "false",
+  "--wait",
+  "false"
+]);
+const attachWait = waitCli(["session", "wait", "--repo", repo, "--id", "attached-manual", "--until", "next-action", "--timeout", "30000"]);
+await delay(250);
+await runCli(["publish", "--confirm", "--repo", repo, "--session", "attached-manual", "--framework", "vite", "--image", "public/og.png"]);
+const attachWaitOutput = await attachWait;
+if (!attachWaitOutput.includes('"status": "published"') || !attachWaitOutput.includes('"status": "confirmed"')) {
+  throw new Error(`Expected attached manual session to publish through next-action, got:\n${attachWaitOutput}`);
+}
+
 await runCli(["session", "create", "--repo", repo, "--id", "agent-loop", "--agent", "codex", "--strategy", "hybrid"]);
 const agentWait = waitCli(["session", "wait", "--repo", repo, "--id", "agent-loop", "--until", "next-action", "--timeout", "30000"]);
 await delay(250);
@@ -42,6 +68,7 @@ if (!restartWaitOutput.includes('"status": "agent-requested"') || !restartWaitOu
 }
 
 const request = await readFile(join(repo, ".opengraph-creator", "sessions", "agent-loop", "agent-request.json"), "utf8");
+const attachPublish = await readFile(join(repo, ".opengraph-creator", "sessions", "attached-manual", "publish-request.json"), "utf8");
 const publish = await readFile(join(repo, ".opengraph-creator", "sessions", "publish-loop", "publish-request.json"), "utf8");
 const restart = await readFile(join(repo, ".opengraph-creator", "sessions", "restart-loop", "agent-request.json"), "utf8");
 const restartRequest = JSON.parse(restart);
@@ -52,6 +79,7 @@ if (!restartRequest.prompt.includes("Generate a fresh editable .ogdoc master") |
 console.log(JSON.stringify({
   ok: true,
   repo,
+  attachedPublishRequest: JSON.parse(attachPublish).status,
   agentRequest: JSON.parse(request).status,
   publishRequest: JSON.parse(publish).status,
   restartRequest: restartRequest.status
