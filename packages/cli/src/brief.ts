@@ -204,11 +204,12 @@ function buildVisualTasteProfile(input: GenerationBriefInput, scan: RepoScanResu
 
 function buildCompositionPlan(input: GenerationBriefInput, routes: string[]): string[] {
   return [
-    "Use a shared 1200x630 composition with headline, subtitle, badge, logo/screenshot/art, background, and safe-zone aware spacing.",
+    "Choose a fresh composition archetype from the app/page evidence before placing layers; examples include editorial spread, cinematic object scene, product-window collage, route-map system, typographic poster, document stack, or data-signal field.",
     input.strategy === "pages" || input.strategy === "hybrid"
-      ? `Create route-specific compositions for ${routes.join(", ")} while preserving the same visual system.`
-      : "Create a common app-level composition unless the user later asks for page variants.",
-    "Keep all text, badges, shapes, and key layout objects separately editable in the Studio document."
+      ? `Create route-specific variants for ${routes.join(", ")} while preserving one recognizable visual system and changing the focal motif where the page context changes.`
+      : "Create one app-level composition unless the user later asks for page variants.",
+    "Keep all text, badges, shapes, and key layout objects separately editable in the Studio document.",
+    "Do not reuse the last OpenGraph Creator document structure unless this is an explicit recovery task."
   ];
 }
 
@@ -218,7 +219,8 @@ function buildAssetPlan(input: GenerationBriefInput): string[] {
     input.generationMode === "pure-image"
       ? "Pure-image output is a fallback path; still record what text would need to remain editable if converted back to .ogdoc."
       : "Pack screenshots, generated backgrounds, SVG/HTML captures, logos, textures, and references into the .ogdoc package or incoming assets.",
-    "Use generated image tools only for non-text art, texture, environment, product-scene, lighting, or background assets unless the user explicitly chose pure-image fallback."
+    "Use generated image tools only for non-text art, texture, environment, product-scene, lighting, or background assets unless the user explicitly chose pure-image fallback.",
+    "Noise, grain, and texture are opt-in: set noisePolicy or texturePolicy to allowed only when the user/reference explicitly asks for it, otherwise leave noise effects out of generated layers."
   ];
 }
 
@@ -227,6 +229,7 @@ function buildNegativeDirection(input: GenerationBriefInput): string[] {
     "Do not bake important text, route labels, badges, or logos into one flat SVG/image.",
     "Do not copy protected internet references or third-party artwork.",
     "Do not produce a generic AI dashboard card, vague glow collage, unreadable small text, or disconnected page variants.",
+    "Do not repeat the same left-text/right-art structure, badge stack, or background treatment across fresh generations unless the user asks to preserve it.",
     input.generationMode === "pure-image" ? "Do not pretend a pure bitmap is fully editable in Studio." : "Do not use pure bitmap output when an editable .ogdoc can represent the design."
   ];
 }

@@ -10,6 +10,7 @@ import {
   createMultiPageProject,
   createPageVariantProjects,
   createProjectFromPreset,
+  sanitizeGeneratedProjectEffects,
   validateStudioDocument,
   getRenderableProject,
   type ExportFormat,
@@ -969,17 +970,39 @@ export async function preflightSessionDocument(
   if (await pathExists(paths.documentFile)) {
     try {
       const document = await readStudioDocumentFile(paths.documentFile);
-      const validation = validateStudioDocument(document.project, document.assets);
+      const effectPolicy = await readGeneratedEffectsPolicy(paths.generationBriefJson);
+      const sanitized = sanitizeGeneratedProjectEffects(document.project, effectPolicy);
+      const project = sanitized.project;
+      const nextWarnings = [...warnings, ...sanitized.warnings];
+      const validation = validateStudioDocument(project, document.assets);
       if (!validation.ok) {
         return {
           ok: false,
           sessionId,
           documentPath: paths.documentFile,
           repaired: false,
-          projectId: document.project.projectId,
+          projectId: project.projectId,
           errors: validation.errors,
-          warnings,
+          warnings: nextWarnings,
           recovery
+        };
+      }
+      if (sanitized.changed && options.repairLegacyProject) {
+        await writeStudioDocumentFile(paths.documentFile, project, document.assets, document.previews);
+        await appendSessionEvent(repo, sessionId, {
+          type: "document.sanitized",
+          message: "Sanitized generated document effects before Studio launch",
+          data: { documentPath: paths.documentFile, warnings: sanitized.warnings }
+        });
+        return {
+          ok: true,
+          sessionId,
+          documentPath: paths.documentFile,
+          repaired: true,
+          projectId: project.projectId,
+          errors: [],
+          warnings: nextWarnings,
+          recovery: []
         };
       }
       return {
@@ -987,9 +1010,9 @@ export async function preflightSessionDocument(
         sessionId,
         documentPath: paths.documentFile,
         repaired: false,
-        projectId: document.project.projectId,
+        projectId: project.projectId,
         errors: [],
-        warnings,
+        warnings: nextWarnings,
         recovery: []
       };
     } catch (error) {
@@ -1020,26 +1043,28 @@ export async function preflightSessionDocument(
     }
     try {
       const project = JSON.parse(await readFile(paths.projectJson, "utf8")) as OgProject;
-      await writeStudioDocumentFile(paths.documentFile, project);
+      const effectPolicy = await readGeneratedEffectsPolicy(paths.generationBriefJson);
+      const sanitized = sanitizeGeneratedProjectEffects(project, effectPolicy);
+      await writeStudioDocumentFile(paths.documentFile, sanitized.project);
       await writeOpenGraphCreatorSession({
         ...session,
-        activeProjectId: project.projectId,
+        activeProjectId: sanitized.project.projectId,
         activeDocumentPath: paths.documentFile,
         lastHeartbeatAt: new Date().toISOString()
       }, repo);
       await appendSessionEvent(repo, sessionId, {
         type: "document.recovered",
         message: "Packed legacy project JSON into document.ogdoc before Studio launch",
-        data: { projectJson: paths.projectJson, documentPath: paths.documentFile }
+        data: { projectJson: paths.projectJson, documentPath: paths.documentFile, warnings: sanitized.warnings }
       });
       return {
         ok: true,
         sessionId,
         documentPath: paths.documentFile,
         repaired: true,
-        projectId: project.projectId,
+        projectId: sanitized.project.projectId,
         errors: [],
-        warnings,
+        warnings: [...warnings, ...sanitized.warnings],
         recovery: []
       };
     } catch (error) {
@@ -1113,6 +1138,27 @@ function parseWaitTimeout(value?: string): number {
   const timeout = Number(value);
   if (!Number.isFinite(timeout) || timeout < 0) throw new Error("--timeout must be a positive number, 0, or never");
   return timeout;
+}
+
+async function readGeneratedEffectsPolicy(
+  generationBriefPath: string
+): Promise<{ allowNoise: boolean; maxNoiseAmount?: number }> {
+  try {
+    const raw = await readFile(generationBriefPath, "utf8");
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const policyText = String(parsed.noisePolicy ?? parsed.texturePolicy ?? "").toLowerCase();
+    const deniesNoise = /\b(no|without|avoid|disable|remove|off)\b[^.]{0,48}\b(noise|grain|texture)\b/.test(policyText);
+    const explicitAllow =
+      parsed.allowNoise === true ||
+      parsed.noisePolicy === "allowed" ||
+      parsed.noisePolicy === "opt-in-approved" ||
+      parsed.texturePolicy === "allowed" ||
+      /\b(allow|allowed|approved|requested|explicit|opt-in)\b/.test(policyText);
+    const maxNoiseAmount = typeof parsed.maxNoiseAmount === "number" ? parsed.maxNoiseAmount : undefined;
+    return { allowNoise: explicitAllow && !deniesNoise, maxNoiseAmount };
+  } catch {
+    return { allowNoise: false };
+  }
 }
 
 function sessionMatchesWaitTarget(session: Awaited<ReturnType<typeof readOpenGraphCreatorSession>>, target: SessionWaitTarget): boolean {

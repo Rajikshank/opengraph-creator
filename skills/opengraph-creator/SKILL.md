@@ -68,7 +68,7 @@ Ask these decisions before generation:
 
 Only treat the Question Gate as complete when the user explicitly answers these decisions in the current task or directly relevant earlier answers. If the user says "you decide", choose conservatively from repo evidence and record that decision in the brief.
 
-Write the resolved answers into `.opengraph-creator/sessions/<id>/generation-brief.json` after session creation. The brief must record `capabilities`, `coverage`, `visualBuildStyle`, `assetPermission`, `visualDirection`, `references`, `targetPages`, `exportFormats`, `referenceResearch`, `conceptThesis`, `styleThesis`, `semanticPalette`, `compositionPlan`, `assetPlan`, `negativeDirection`, `routeVariantRules`, and any assumptions.
+Write the resolved answers into `.opengraph-creator/sessions/<id>/generation-brief.json` after session creation. The brief must record `capabilities`, `coverage`, `visualBuildStyle`, `assetPermission`, `visualDirection`, `references`, `targetPages`, `exportFormats`, `referenceResearch`, `conceptThesis`, `styleThesis`, `semanticPalette`, `compositionPlan`, `compositionArchetype`, `assetPlan`, `noisePolicy`, `texturePolicy`, `negativeDirection`, `routeVariantRules`, and any assumptions.
 
 ## Reference Research, Concept Thesis, And Style Thesis
 
@@ -89,10 +89,12 @@ Then write a Concept Thesis:
 Then write a Style Thesis:
 
 - State the intended visual character in one or two concrete sentences.
-- Define the composition plan: hierarchy, focal asset, text zones, safe-zone behavior, and page-variant rhythm.
+- Define the composition plan and composition archetype: hierarchy, focal asset, text zones, safe-zone behavior, and page-variant rhythm. Choose the archetype from the app/page evidence rather than reusing a default OpenGraph Creator layout.
 - Define the asset plan: which generated images, SVG/HTML captures, screenshots, textures, lighting, or references become editable asset layers.
+- Noise, grain, and texture are opt-in. Set `noisePolicy` or `texturePolicy` to `allowed` only if the user explicitly requests it or a provided reference clearly depends on it; otherwise do not add `effects.noise` to generated layers.
 - Define the negative direction: what the design must avoid, including generic AI dashboard styling, flat baked text, copied references, unreadable detail, or disconnected variants.
 - Define routeVariantRules for common, page-specific, or hybrid output.
+- Do not repeat the previous OpenGraph Creator structure, grid, badge placement, or left-text/right-art formula unless this is a recovery task or the user explicitly asks to preserve that direction.
 - Read `references/visual-generation-guide.md` before generating SVG, HTML, image, screenshot, or mixed visual assets. Use the guide to choose the best path for the current capabilities; no-image agents should produce strong SVG/HTML/repo-asset compositions rather than weak fake image art.
 
 ### Required First Response Example
@@ -141,7 +143,7 @@ Use `--agent codex` in Codex, `--agent claude` in Claude Code, and `--agent open
 6. Run `opengraph-creator brief --repo "<repo>" --name "<app>" --strategy common|pages|hybrid --mode template --out ".opengraph-creator/brief.json"` and write the resolved question gate answers plus research/thesis fields into `.opengraph-creator/sessions/<id>/generation-brief.json`.
 7. Generate the OG source as an editable `.ogdoc` package. The document must contain separate layers for text, badges, shapes, screenshots, logos, generated art, SVG/HTML source assets, references, and backgrounds.
    - If the user chooses page-specific or hybrid, generate one `.ogdoc` with internal page variants, not disconnected documents per route.
-   - Every page variant must keep a shared visual system while changing route-specific text, badges, and image context.
+   - Every page variant must keep a shared visual system while changing route-specific text, badges, image context, and focal motif.
    - If image generation tools are available and allowed, use them only for non-text asset layers unless the user explicitly requested pure-image fallback.
 8. If raw project JSON is generated first, pack it with `opengraph-creator document pack --project "<project.json>" --out ".opengraph-creator/sessions/<id>/document.ogdoc"`, then delete or ignore the temporary JSON. If SVG/image/HTML assets were generated, import or package them as assets inside the document. Do not use invented `ogcreator://` asset URLs; use real `assets/*` entries, data URLs, or editable vector/shape layers.
 9. Validate with `opengraph-creator document validate --source ".opengraph-creator/sessions/<id>/document.ogdoc"`. If validation fails because important text is baked into one SVG/image, regenerate editable layers.

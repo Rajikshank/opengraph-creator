@@ -89,6 +89,8 @@ export function getNoiseDisplayOpacity(amount: number): number {
   return Math.min(0.56, Math.max(0.05, amount * 3.2));
 }
 
+const defaultGeneratedNoiseMax = 0.025;
+
 export interface CanvasShadowVisual {
   color: string;
   blur: number;
@@ -390,6 +392,17 @@ export interface CreatePresetProjectInput extends CreateProjectInput {
 export interface ValidationResult {
   ok: boolean;
   errors: string[];
+}
+
+export interface GeneratedProjectEffectsPolicy {
+  allowNoise?: boolean;
+  maxNoiseAmount?: number;
+}
+
+export interface GeneratedProjectEffectsSanitization {
+  project: OgProject;
+  changed: boolean;
+  warnings: string[];
 }
 
 export interface PlatformWarning {
@@ -883,6 +896,74 @@ export function validateProject(project: OgProject): ValidationResult {
   }
 
   return { ok: errors.length === 0, errors };
+}
+
+export function sanitizeGeneratedProjectEffects(
+  project: OgProject,
+  policy: GeneratedProjectEffectsPolicy = {}
+): GeneratedProjectEffectsSanitization {
+  const counters = { removedNoise: 0, clampedNoise: 0 };
+  const maxNoiseAmount = clampNumber(policy.maxNoiseAmount ?? defaultGeneratedNoiseMax, 0, 0.08);
+  const layers = project.layers.map((layer) =>
+    sanitizeGeneratedLayerEffects(layer, policy.allowNoise === true, maxNoiseAmount, counters)
+  );
+  const pages = project.pages?.map((page) => ({
+    ...page,
+    layers: page.layers.map((layer) =>
+      sanitizeGeneratedLayerEffects(layer, policy.allowNoise === true, maxNoiseAmount, counters)
+    )
+  }));
+  const changed = counters.removedNoise > 0 || counters.clampedNoise > 0;
+  const warnings: string[] = [];
+
+  if (counters.removedNoise > 0) {
+    warnings.push(
+      `Removed unapproved generated noise/grain from ${counters.removedNoise} layer effects. Noise is opt-in and can be added later in Studio.`
+    );
+  }
+  if (counters.clampedNoise > 0) {
+    warnings.push(
+      `Clamped generated noise/grain on ${counters.clampedNoise} layer effect${counters.clampedNoise === 1 ? "" : "s"} to ${maxNoiseAmount} for social preview readability.`
+    );
+  }
+
+  return {
+    project: changed ? { ...project, layers, pages, updatedAt: new Date().toISOString() } : project,
+    changed,
+    warnings
+  };
+}
+
+function sanitizeGeneratedLayerEffects(
+  layer: OgLayer,
+  allowNoise: boolean,
+  maxNoiseAmount: number,
+  counters: { removedNoise: number; clampedNoise: number }
+): OgLayer {
+  if (!("effects" in layer) || !layer.effects.noise || layer.effects.noise.amount <= 0) return layer;
+
+  if (!allowNoise) {
+    const effects = { ...layer.effects };
+    delete effects.noise;
+    counters.removedNoise += 1;
+    return { ...layer, effects };
+  }
+
+  if (layer.effects.noise.amount > maxNoiseAmount) {
+    counters.clampedNoise += 1;
+    return {
+      ...layer,
+      effects: {
+        ...layer.effects,
+        noise: {
+          ...layer.effects.noise,
+          amount: maxNoiseAmount
+        }
+      }
+    };
+  }
+
+  return layer;
 }
 
 export function normalizeGlowEffect(glow: LayerEffects["glow"], fallbackColor: string): GlowEffect {

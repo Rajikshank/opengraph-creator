@@ -30,9 +30,13 @@ describe("generation brief", () => {
     expect(brief.referenceResearch).toContain("Inspect local brand assets, screenshots, existing metadata, and route copy before selecting a visual direction.");
     expect(brief.styleThesis).toContain("BillingKit");
     expect(brief.visualTasteProfile.join("\n")).toContain("premium but specific");
-    expect(brief.compositionPlan.join("\n")).toContain("shared 1200x630 composition");
+    expect(brief.compositionPlan.join("\n")).toContain("composition archetype");
+    expect(brief.compositionPlan.join("\n")).toContain("Do not reuse the last OpenGraph Creator document structure");
+    expect(brief.compositionPlan.join("\n")).not.toContain("Use a shared 1200x630 composition with headline, subtitle, badge, logo/screenshot/art");
     expect(brief.assetPlan.join("\n")).toContain("Keep generated imagery as editable asset layers");
+    expect(brief.assetPlan.join("\n")).toContain("Noise, grain, and texture are opt-in");
     expect(brief.negativeDirection.join("\n")).toContain("Do not bake important text");
+    expect(brief.negativeDirection.join("\n")).toContain("Do not repeat the same left-text/right-art structure");
     expect(brief.designQualityChecklist.join("\n")).toContain("Each route variant has route-specific reason");
     expect(brief.outputContract).toContain("editable .ogdoc Studio document package");
     expect(brief.codexPrompt).toContain("Create page-specific Open Graph images");
@@ -44,6 +48,8 @@ describe("generation brief", () => {
     expect(brief.codexPrompt).toContain("Route context:");
     expect(brief.codexPrompt).toContain("Pricing Plans");
     expect(brief.codexPrompt).toContain("one .ogdoc with internal page variants");
+    expect(brief.codexPrompt).toContain("composition archetype");
+    expect(brief.codexPrompt).toContain("Noise, grain, and texture are opt-in");
     expect(brief.codexPrompt).toContain("/pricing");
   });
 

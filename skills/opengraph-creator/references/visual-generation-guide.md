@@ -39,6 +39,34 @@ Before creating any layer, write a compact concept thesis for the OG:
 
 Do not build an OG as just stacked decorative layers. If a shape, symbol, glow, texture, screenshot, or SVG object cannot be explained by the concept thesis, remove it or turn it into a quieter supporting layer.
 
+## Composition Archetype Router
+
+Choose a composition archetype from the product/page evidence before drawing layers. Do not reuse the last generated structure, default badge stack, or left-text/right-art formula unless the user explicitly asks to preserve it.
+
+Useful archetypes include:
+
+- editorial spread: strong headline rhythm, publication surface, one meaningful image or symbol
+- cinematic object scene: one product/domain object with dramatic but restrained lighting
+- product-window collage: real app UI, screenshots, code panes, or browser surfaces with editable labels
+- route-map system: paths, signals, nodes, search trails, or navigation metaphors for multi-page apps
+- typographic poster: type as the main visual, with disciplined supporting geometry
+- document stack: layered reports, cards, receipts, articles, or pages when the product manages content
+- data-signal field: charts, pulses, logs, timelines, or metrics when the app exposes data or news
+
+Each generated `.ogdoc` should record the chosen `compositionArchetype` and why it fits. If the next run has the same app prompt but no recovery request, choose a different archetype or materially different layout logic.
+
+## Texture And Noise Policy
+
+Noise, grain, and texture are opt-in. Do not add `effects.noise` to generated layers by default.
+
+Only use noise/grain when:
+
+- the user explicitly asks for grain, noise, paper texture, film texture, roughness, print, editorial paper, analog, vintage, or similar
+- a user-provided reference clearly depends on visible grain or texture
+- `generation-brief.json` records `noisePolicy: "allowed"` or `texturePolicy: "allowed"`
+
+When allowed, keep it subtle, clipped to the intended layer, and low enough to remain readable in platform previews. If the design works without noise, leave noise out and use color, typography, shape, or lighting instead.
+
 ## Capability-Based Creative Paths
 
 ### With image generation

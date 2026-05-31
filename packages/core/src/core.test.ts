@@ -17,6 +17,7 @@ import {
   hasComposedLayerEffect,
   isGlowEffectEnabled,
   normalizeGlowEffect,
+  sanitizeGeneratedProjectEffects,
   setActivePage,
   updateActivePageLayers,
   validateProject
@@ -192,6 +193,48 @@ describe("OpenGraphCreator core", () => {
     expect(getNoiseDisplayOpacity(0.06)).toBe(0.192);
     expect(getNoiseDisplayOpacity(0.001)).toBe(0.05);
     expect(getNoiseDisplayOpacity(0.5)).toBe(0.56);
+  });
+
+  it("removes accidental agent-generated noise unless the brief explicitly allows it", () => {
+    const project = createMultiPageProject(
+      createDefaultProject({ name: "Generated Noise", strategy: "pages", pages: ["/", "/pricing"] })
+    );
+    const noisyLayers = project.layers.map((layer) =>
+      "effects" in layer ? { ...layer, effects: { ...layer.effects, noise: { amount: 0.18, blendMode: "overlay" as const } } } : layer
+    );
+    const noisyPages = project.pages?.map((page) => ({
+      ...page,
+      layers: page.layers.map((layer) =>
+        "effects" in layer ? { ...layer, effects: { ...layer.effects, noise: { amount: 0.12, blendMode: "soft-light" as const } } } : layer
+      )
+    }));
+
+    const result = sanitizeGeneratedProjectEffects({ ...project, layers: noisyLayers, pages: noisyPages });
+
+    expect(result.changed).toBe(true);
+    expect(result.warnings).toEqual([
+      "Removed unapproved generated noise/grain from 15 layer effects. Noise is opt-in and can be added later in Studio."
+    ]);
+    expect(JSON.stringify(result.project)).not.toContain('"noise"');
+  });
+
+  it("preserves but caps generated noise when the brief explicitly allows grain", () => {
+    const project = createDefaultProject({ name: "Approved Grain", strategy: "common" });
+    const noisyLayers = project.layers.map((layer) =>
+      layer.id === "background" && "effects" in layer
+        ? { ...layer, effects: { ...layer.effects, noise: { amount: 0.2, blendMode: "soft-light" as const } } }
+        : layer
+    );
+
+    const result = sanitizeGeneratedProjectEffects({ ...project, layers: noisyLayers }, { allowNoise: true });
+    const background = result.project.layers.find((layer) => layer.id === "background");
+
+    expect(result.changed).toBe(true);
+    expect(result.warnings).toEqual(["Clamped generated noise/grain on 1 layer effect to 0.025 for social preview readability."]);
+    expect(background && "effects" in background ? background.effects.noise : undefined).toEqual({
+      amount: 0.025,
+      blendMode: "soft-light"
+    });
   });
 
   it("rejects projects without editable layers", () => {

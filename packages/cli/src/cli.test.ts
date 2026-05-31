@@ -967,6 +967,28 @@ describe("OpenGraphCreator CLI helpers", () => {
     expect(document.project.name).toBe("Legacy Project");
   });
 
+  it("sanitizes unapproved generated noise during session preflight before Studio launch", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-session-noise-sanitize-"));
+    const project = createDefaultProject({ name: "Generated Noise", strategy: "common" });
+    project.layers = project.layers.map((layer) =>
+      "effects" in layer
+        ? { ...layer, effects: { ...layer.effects, noise: { amount: 0.2, blendMode: "overlay" } } }
+        : layer
+    );
+    await createOpenGraphCreatorSession({ repo: dir, id: "generated-noise", agent: "opencode", project });
+
+    const result = await preflightSessionDocument(dir, "generated-noise", { repairLegacyProject: true });
+    const paths = getSessionPaths(dir, "generated-noise");
+    const document = await unpackStudioDocument(await readFile(paths.documentFile));
+
+    expect(result).toMatchObject({
+      ok: true,
+      repaired: true,
+      warnings: [expect.stringContaining("Removed unapproved generated noise/grain")]
+    });
+    expect(JSON.stringify(document.project)).not.toContain('"noise"');
+  });
+
   it("writes an agent handoff plan without calling a provider", async () => {
     const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-ai-plan-"));
     const projectPath = join(dir, "project.og.json");
