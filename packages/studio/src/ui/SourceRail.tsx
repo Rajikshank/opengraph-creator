@@ -112,6 +112,7 @@ export function SourceRail({ onClose }: { onClose?: () => void }) {
             dataUrl: loaded
           });
           artifactPath = uploaded.assetPath;
+          inline = undefined;
         } catch {
           notifyStudioWarning("Using inline asset", "The asset upload failed, so Studio kept the image inline for recovery.");
         }

@@ -6,7 +6,9 @@ import {
   getCanvasShadowVisual,
   getNoiseDisplayOpacity,
   hasComposedLayerEffect,
+  isDefaultPerspectiveQuad,
   isGlowEffectEnabled,
+  normalizePerspectiveQuad,
   type ImageLayer,
   type LayerEffects,
   type NoiseEffect,
@@ -92,6 +94,10 @@ export function ArtboardEditor({ sourceRailOpen = true, onOpenSourceRail }: Artb
       cancelled = true;
     };
   }, [visibleLayers, visibleTextFontKey]);
+
+  useEffect(() => {
+    clearTextMeasureCache();
+  }, [fontReadyVersion]);
 
   if (!project) return null;
   const editingTextLayer = editingTextLayerId
@@ -366,13 +372,29 @@ function estimateTextLineWidth(layer: TextLayer, line: string): number {
 }
 
 function measureCanvasText(layer: TextLayer, line: string): number {
+  const key = `${layer.fontFamily}:${layer.fontWeight}:${layer.fontStyle ?? "normal"}:${layer.fontSize}:${layer.letterSpacing ?? 0}:${layer.strokeWidth ?? 0}:${line}`;
+  const cached = textMeasureCache.get(key);
+  if (cached !== undefined) return cached;
   if (typeof document === "undefined") return line.length * layer.fontSize * 0.64;
-  const canvas = document.createElement("canvas");
-  const context = canvas.getContext("2d");
+  const context = getMeasureContext();
   if (!context) return line.length * layer.fontSize * 0.64;
   const style = layer.fontStyle && layer.fontStyle !== "normal" ? `${layer.fontStyle} ` : "";
   context.font = `${style}${layer.fontWeight} ${layer.fontSize}px ${layer.fontFamily}`;
-  return Math.ceil(context.measureText(line).width);
+  const measured = Math.ceil(context.measureText(line).width);
+  textMeasureCache.set(key, measured);
+  return measured;
+}
+
+let measureCanvas: HTMLCanvasElement | undefined;
+const textMeasureCache = new Map<string, number>();
+
+function getMeasureContext(): CanvasRenderingContext2D | null {
+  measureCanvas ??= document.createElement("canvas");
+  return measureCanvas.getContext("2d");
+}
+
+function clearTextMeasureCache() {
+  textMeasureCache.clear();
 }
 
 function wrapText(text: string, maxChars: number): string[] {
@@ -395,13 +417,22 @@ function wrapText(text: string, maxChars: number): string[] {
 
 function ImageLayerNode({ layer, accent }: { layer: ImageLayer; accent: string }) {
   const image = useLayerImage(layer.src);
+  const placement = useMemo(() => (image ? getImagePlacement(layer, image) : undefined), [image, layer.width, layer.height, layer.fit, layer.crop, layer.focalPoint]);
+  const warped = useMemo(
+    () => (image && placement && !isDefaultPerspectiveQuad(layer.perspective) ? createPerspectiveCanvas(layer, image, placement) : null),
+    [image, placement, layer.width, layer.height, layer.perspective]
+  );
   if (image) {
-    const placement = getImagePlacement(layer, image);
+    if (!placement) return null;
     const imageCacheKey = `${image.src}:${image.naturalWidth}:${image.naturalHeight}:${image.complete}`;
     return (
-      <EffectfulNode effects={layer.effects} accent={accent} bounds={{ width: layer.width, height: layer.height }} cacheKey={`${imageCacheKey}:${layer.fit}:${layer.width}:${layer.height}:${JSON.stringify(layer.crop)}:${JSON.stringify(layer.focalPoint)}`}>
+      <EffectfulNode effects={layer.effects} accent={accent} bounds={{ width: layer.width, height: layer.height }} cacheKey={`${imageCacheKey}:${layer.fit}:${layer.width}:${layer.height}:${JSON.stringify(layer.crop)}:${JSON.stringify(layer.focalPoint)}:${JSON.stringify(layer.perspective)}`}>
         <Group clipX={0} clipY={0} clipWidth={layer.width} clipHeight={layer.height}>
-          <KonvaImage image={image} {...placement} cornerRadius={layer.borderRadius} />
+          {warped ? (
+            <KonvaImage image={warped} x={0} y={0} width={layer.width} height={layer.height} cornerRadius={layer.borderRadius} />
+          ) : (
+            <KonvaImage image={image} {...placement} cornerRadius={layer.borderRadius} />
+          )}
           <EffectOverlays
             x={placement.x ?? 0}
             y={placement.y ?? 0}
@@ -419,6 +450,108 @@ function ImageLayerNode({ layer, accent }: { layer: ImageLayer; accent: string }
       <ImagePlaceholderThumbnail layer={layer} accent={accent} />
     </EffectfulNode>
   );
+}
+
+function createPerspectiveCanvas(layer: ImageLayer, image: HTMLImageElement, placement: ReturnType<typeof getImagePlacement>): HTMLCanvasElement | null {
+  if (typeof document === "undefined") return null;
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(layer.width));
+  canvas.height = Math.max(1, Math.round(layer.height));
+  const context = canvas.getContext("2d");
+  if (!context) return null;
+  for (const triangle of createPerspectiveMesh(layer)) {
+    const matrix = getAffineMatrix(triangle.source, triangle.destination);
+    if (!matrix) continue;
+    context.save();
+    context.beginPath();
+    context.moveTo(triangle.destination[0].x, triangle.destination[0].y);
+    context.lineTo(triangle.destination[1].x, triangle.destination[1].y);
+    context.lineTo(triangle.destination[2].x, triangle.destination[2].y);
+    context.closePath();
+    context.clip();
+    context.setTransform(matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f);
+    if (placement.crop) {
+      context.drawImage(image, placement.crop.x, placement.crop.y, placement.crop.width, placement.crop.height, placement.x, placement.y, placement.width, placement.height);
+    } else {
+      context.drawImage(image, placement.x, placement.y, placement.width, placement.height);
+    }
+    context.restore();
+  }
+  return canvas;
+}
+
+interface MeshTriangle {
+  source: [Point, Point, Point];
+  destination: [Point, Point, Point];
+}
+
+interface Point {
+  x: number;
+  y: number;
+}
+
+function createPerspectiveMesh(layer: ImageLayer): MeshTriangle[] {
+  const quad = normalizePerspectiveQuad(layer.perspective);
+  const steps = 6;
+  const triangles: MeshTriangle[] = [];
+  for (let y = 0; y < steps; y += 1) {
+    for (let x = 0; x < steps; x += 1) {
+      const u0 = x / steps;
+      const v0 = y / steps;
+      const u1 = (x + 1) / steps;
+      const v1 = (y + 1) / steps;
+      const sourceTopLeft = sourcePoint(layer, u0, v0);
+      const sourceTopRight = sourcePoint(layer, u1, v0);
+      const sourceBottomRight = sourcePoint(layer, u1, v1);
+      const sourceBottomLeft = sourcePoint(layer, u0, v1);
+      const destTopLeft = perspectivePoint(layer, quad, u0, v0);
+      const destTopRight = perspectivePoint(layer, quad, u1, v0);
+      const destBottomRight = perspectivePoint(layer, quad, u1, v1);
+      const destBottomLeft = perspectivePoint(layer, quad, u0, v1);
+      triangles.push(
+        { source: [sourceTopLeft, sourceTopRight, sourceBottomRight], destination: [destTopLeft, destTopRight, destBottomRight] },
+        { source: [sourceTopLeft, sourceBottomRight, sourceBottomLeft], destination: [destTopLeft, destBottomRight, destBottomLeft] }
+      );
+    }
+  }
+  return triangles;
+}
+
+function sourcePoint(layer: ImageLayer, u: number, v: number): Point {
+  return {
+    x: layer.width * u,
+    y: layer.height * v
+  };
+}
+
+function perspectivePoint(layer: ImageLayer, quad: ReturnType<typeof normalizePerspectiveQuad>, u: number, v: number): Point {
+  const topX = lerp(quad[0].x, quad[1].x, u);
+  const topY = lerp(quad[0].y, quad[1].y, u);
+  const bottomX = lerp(quad[3].x, quad[2].x, u);
+  const bottomY = lerp(quad[3].y, quad[2].y, u);
+  return {
+    x: lerp(topX, bottomX, v) * layer.width,
+    y: lerp(topY, bottomY, v) * layer.height
+  };
+}
+
+function getAffineMatrix(source: [Point, Point, Point], destination: [Point, Point, Point]): { a: number; b: number; c: number; d: number; e: number; f: number } | null {
+  const [s0, s1, s2] = source;
+  const [d0, d1, d2] = destination;
+  const denominator = s0.x * (s1.y - s2.y) + s1.x * (s2.y - s0.y) + s2.x * (s0.y - s1.y);
+  if (Math.abs(denominator) < 0.0001) return null;
+  return {
+    a: (d0.x * (s1.y - s2.y) + d1.x * (s2.y - s0.y) + d2.x * (s0.y - s1.y)) / denominator,
+    c: (d0.x * (s2.x - s1.x) + d1.x * (s0.x - s2.x) + d2.x * (s1.x - s0.x)) / denominator,
+    e: (d0.x * (s1.x * s2.y - s2.x * s1.y) + d1.x * (s2.x * s0.y - s0.x * s2.y) + d2.x * (s0.x * s1.y - s1.x * s0.y)) / denominator,
+    b: (d0.y * (s1.y - s2.y) + d1.y * (s2.y - s0.y) + d2.y * (s0.y - s1.y)) / denominator,
+    d: (d0.y * (s2.x - s1.x) + d1.y * (s0.x - s2.x) + d2.y * (s1.x - s0.x)) / denominator,
+    f: (d0.y * (s1.x * s2.y - s2.x * s1.y) + d1.y * (s2.x * s0.y - s0.x * s2.y) + d2.y * (s0.x * s1.y - s1.x * s0.y)) / denominator
+  };
+}
+
+function lerp(start: number, end: number, amount: number): number {
+  return start + (end - start) * amount;
 }
 
 function ImagePlaceholderThumbnail({ layer, accent }: { layer: ImageLayer; accent: string }) {

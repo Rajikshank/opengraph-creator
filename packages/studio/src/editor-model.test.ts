@@ -23,7 +23,9 @@ import {
   distributeLayers,
   updateProjectSettings,
   selectPageVariant,
-  updateSelectedLayer
+  updateSelectedLayer,
+  commitTransientHistory,
+  updateLayerTransient
 } from "./editor-model";
 
 describe("editor model", () => {
@@ -69,6 +71,21 @@ describe("editor model", () => {
 
     expect(updated.project.layers.find((layer) => layer.id === "headline")?.name).toBe("Hero headline");
     expect(undo(updated).project.layers.find((layer) => layer.id === "headline")?.name).toBe("Headline");
+  });
+
+  it("coalesces continuous layer edits into one undo step and ignores no-op patches", () => {
+    const project = createDefaultProject({ name: "Editor", strategy: "common" });
+    const session = selectLayer(createEditorSession(project), "headline");
+    const noOp = updateSelectedLayer(session, { x: 82 });
+    expect(noOp).toBe(session);
+
+    const first = updateLayerTransient(session, "headline", { x: 100 }, "slider:x");
+    const second = updateLayerTransient(first, "headline", { x: 120 }, "slider:x");
+    const committed = commitTransientHistory(second);
+
+    expect(committed.project.layers.find((layer) => layer.id === "headline")).toMatchObject({ x: 120 });
+    expect(committed.past).toHaveLength(1);
+    expect(undo(committed).project.layers.find((layer) => layer.id === "headline")).toMatchObject({ x: 82 });
   });
 
   it("updates generation strategy and mode as undoable project setup", () => {

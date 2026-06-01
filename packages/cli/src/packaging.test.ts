@@ -11,6 +11,7 @@ const cliPackage = JSON.parse(readFileSync(join(process.cwd(), "packages", "cli"
   files: string[];
   scripts: Record<string, string>;
 };
+const cliReadme = readFileSync(join(process.cwd(), "packages", "cli", "README.md"), "utf8");
 const rootPackage = JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf8")) as {
   scripts: Record<string, string>;
 };
@@ -31,5 +32,14 @@ describe("CLI package layout", () => {
 
   it("exposes a packed-install smoke so npx-style usage is verified", () => {
     expect(rootPackage.scripts["smoke:package"]).toBe("node scripts/package-install-smoke.mjs");
+  });
+
+  it("documents the public npx skill and runtime flow in the npm README", () => {
+    expect(cliReadme).toContain("## Install Skill");
+    expect(cliReadme).toContain('npx skills add -g Rajikshank/opengraph-creator --skill opengraph-creator --agent "*" -y');
+    expect(cliReadme).toContain("npx -y opengraph-creator@latest doctor --json");
+    expect(cliReadme).toContain("npx -y opengraph-creator@latest studio --repo .");
+    expect(cliReadme).toContain("## Agent Workflow");
+    expect(cliReadme).toContain("## Troubleshooting");
   });
 });

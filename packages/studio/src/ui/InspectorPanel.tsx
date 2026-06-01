@@ -20,6 +20,8 @@ export function InspectorPanel() {
   const project = useStudio((state) => state.project);
   const selectedLayerId = useStudio((state) => state.selectedLayerId);
   const updateLayer = useStudio((state) => state.updateLayer);
+  const updateLayerTransient = useStudio((state) => state.updateLayerTransient);
+  const commitTransientHistory = useStudio((state) => state.commitTransientHistory);
   const resizeSelected = useStudio((state) => state.resizeSelected);
   const snapLayer = useStudio((state) => state.snapLayer);
   const layer = project?.layers.find((item) => item.id === selectedLayerId) ?? project?.layers[0];
@@ -41,7 +43,15 @@ export function InspectorPanel() {
         <label>Width<input type="number" value={Math.round(layer.width)} onChange={(event) => resizeSelected({ width: Number(event.target.value), height: layer.height })} /></label>
         <label>Height<input type="number" value={Math.round(layer.height)} onChange={(event) => resizeSelected({ width: layer.width, height: Number(event.target.value) })} /></label>
       </div>
-      <StudioSlider label="Opacity" min={0} max={1} step={0.05} value={layer.opacity} onValueChange={(value) => updateLayer(layer.id, { opacity: value } as Partial<OgLayer>)} />
+      <StudioSlider
+        label="Opacity"
+        min={0}
+        max={1}
+        step={0.05}
+        value={layer.opacity}
+        onValueChange={(value) => updateLayerTransient(layer.id, { opacity: value } as Partial<OgLayer>, `${layer.id}:opacity`)}
+        onValueCommit={commitTransientHistory}
+      />
       <label>
         Skew/tilt
         <input type="number" value={layer.skewX ?? 0} onChange={(event) => updateLayer(layer.id, { skewX: Number(event.target.value) } as Partial<OgLayer>)} />
@@ -69,6 +79,8 @@ export function InspectorPanel() {
 
 function TextControls({ layer }: { layer: TextLayer }) {
   const updateLayer = useStudio((state) => state.updateLayer);
+  const updateLayerTransient = useStudio((state) => state.updateLayerTransient);
+  const commitTransientHistory = useStudio((state) => state.commitTransientHistory);
   const fontOptions = useMemo(
     () =>
       getStudioFontOptions(layer.fontFamily).map((option) => ({
@@ -128,10 +140,10 @@ function TextControls({ layer }: { layer: TextLayer }) {
         onValueChange={(value) => updateLayer(layer.id, { align: value as TextLayer["align"] } as Partial<OgLayer>)}
       />
       <div className="text-slider-stack">
-        <StudioSlider label="Size" min={8} max={140} step={1} value={layer.fontSize} unit="px" onValueChange={(value) => updateLayer(layer.id, { fontSize: value } as Partial<OgLayer>)} />
-        <StudioSlider label="Line height" min={0.8} max={1.8} step={0.02} value={layer.lineHeight} onValueChange={(value) => updateLayer(layer.id, { lineHeight: value } as Partial<OgLayer>)} />
-        <StudioSlider label="Tracking" min={-2} max={10} step={0.25} value={layer.letterSpacing ?? 0} unit="px" onValueChange={(value) => updateLayer(layer.id, { letterSpacing: value } as Partial<OgLayer>)} />
-        <StudioSlider label="Stroke width" min={0} max={12} step={0.5} value={layer.strokeWidth ?? 0} unit="px" onValueChange={(value) => updateLayer(layer.id, { strokeWidth: value } as Partial<OgLayer>)} />
+        <StudioSlider label="Size" min={8} max={140} step={1} value={layer.fontSize} unit="px" onValueChange={(value) => updateLayerTransient(layer.id, { fontSize: value } as Partial<OgLayer>, `${layer.id}:fontSize`)} onValueCommit={commitTransientHistory} />
+        <StudioSlider label="Line height" min={0.8} max={1.8} step={0.02} value={layer.lineHeight} onValueChange={(value) => updateLayerTransient(layer.id, { lineHeight: value } as Partial<OgLayer>, `${layer.id}:lineHeight`)} onValueCommit={commitTransientHistory} />
+        <StudioSlider label="Tracking" min={-2} max={10} step={0.25} value={layer.letterSpacing ?? 0} unit="px" onValueChange={(value) => updateLayerTransient(layer.id, { letterSpacing: value } as Partial<OgLayer>, `${layer.id}:letterSpacing`)} onValueCommit={commitTransientHistory} />
+        <StudioSlider label="Stroke width" min={0} max={12} step={0.5} value={layer.strokeWidth ?? 0} unit="px" onValueChange={(value) => updateLayerTransient(layer.id, { strokeWidth: value } as Partial<OgLayer>, `${layer.id}:strokeWidth`)} onValueCommit={commitTransientHistory} />
       </div>
       <div className="grid-two">
         <ColorTextField label="Fill" value={layer.color} onChange={(value) => updateLayer(layer.id, { color: value } as Partial<OgLayer>)} />
@@ -179,6 +191,35 @@ function ImageControls({ layer }: { layer: ImageLayer }) {
   const crop = layer.crop ?? { x: 0, y: 0, width: 1, height: 1 };
   const focalPoint = layer.focalPoint ?? { x: 0.5, y: 0.5 };
   const perspective = normalizePerspective(layer.perspective);
+  const setPerspectivePreset = (preset: "reset" | "subtle" | "medium" | "dramatic") => {
+    const presets = {
+      reset: [
+        { x: 0, y: 0 },
+        { x: 1, y: 0 },
+        { x: 1, y: 1 },
+        { x: 0, y: 1 }
+      ],
+      subtle: [
+        { x: 0.04, y: 0.02 },
+        { x: 0.96, y: 0.08 },
+        { x: 1, y: 0.96 },
+        { x: 0, y: 1 }
+      ],
+      medium: [
+        { x: 0.08, y: 0.04 },
+        { x: 0.94, y: 0.16 },
+        { x: 1, y: 0.9 },
+        { x: 0, y: 1 }
+      ],
+      dramatic: [
+        { x: 0.16, y: 0.02 },
+        { x: 0.9, y: 0.22 },
+        { x: 1, y: 0.82 },
+        { x: 0.04, y: 1 }
+      ]
+    } satisfies Record<string, NonNullable<ImageLayer["perspective"]>>;
+    setImagePerspective(layer.id, presets[preset]);
+  };
   return (
     <>
       <label>Source<input value={layer.src} onChange={(event) => updateLayer(layer.id, { src: event.target.value } as Partial<OgLayer>)} /></label>
@@ -217,6 +258,12 @@ function ImageControls({ layer }: { layer: ImageLayer }) {
         <label>Crop H<input type="number" min="0" max="1" step="0.05" value={crop.height} onChange={(event) => setImageCrop(layer.id, { ...crop, height: Number(event.target.value) })} /></label>
       </div>
       <div className="perspective-grid">
+        <div className="perspective-actions">
+          <button type="button" onClick={() => setPerspectivePreset("reset")}>Reset perspective</button>
+          <button type="button" onClick={() => setPerspectivePreset("subtle")}>Subtle</button>
+          <button type="button" onClick={() => setPerspectivePreset("medium")}>Medium</button>
+          <button type="button" onClick={() => setPerspectivePreset("dramatic")}>Dramatic</button>
+        </div>
         {perspective.map((point, index) => (
           <fieldset key={index}>
             <legend>{["TL", "TR", "BR", "BL"][index]}</legend>

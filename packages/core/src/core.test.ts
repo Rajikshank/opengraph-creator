@@ -11,11 +11,14 @@ import {
   getExportPath,
   getLayerEffectCapabilities,
   getNoiseDisplayOpacity,
+  getPerspectiveBounds,
   getRenderableProject,
   getPlatformWarnings,
   getSvgShadowVisual,
   hasComposedLayerEffect,
   isGlowEffectEnabled,
+  isDefaultPerspectiveQuad,
+  normalizePerspectiveQuad,
   normalizeGlowEffect,
   sanitizeGeneratedProjectEffects,
   setActivePage,
@@ -193,6 +196,30 @@ describe("OpenGraphCreator core", () => {
     expect(getNoiseDisplayOpacity(0.06)).toBe(0.192);
     expect(getNoiseDisplayOpacity(0.001)).toBe(0.05);
     expect(getNoiseDisplayOpacity(0.5)).toBe(0.56);
+  });
+
+  it("normalizes perspective quads and detects default image geometry", () => {
+    const normalized = normalizePerspectiveQuad([
+      { x: -0.3, y: 0.08 },
+      { x: 1.4, y: -0.2 },
+      { x: 0.94, y: 1.3 },
+      { x: 0.12, y: 0.88 }
+    ]);
+
+    expect(normalized).toEqual([
+      { x: 0, y: 0.08 },
+      { x: 1, y: 0 },
+      { x: 0.94, y: 1 },
+      { x: 0.12, y: 0.88 }
+    ]);
+    expect(isDefaultPerspectiveQuad(normalized)).toBe(false);
+    expect(isDefaultPerspectiveQuad(normalizePerspectiveQuad(undefined))).toBe(true);
+    expect(getPerspectiveBounds({ x: 100, y: 80, width: 300, height: 160 }, normalized)).toEqual({
+      x: 100,
+      y: 80,
+      width: 300,
+      height: 160
+    });
   });
 
   it("removes accidental agent-generated noise unless the brief explicitly allows it", () => {

@@ -25,6 +25,10 @@ export interface EditorSession {
   selectedLayerId: string;
   past: OgProject[];
   future: OgProject[];
+  transientHistory?: {
+    key: string;
+    before: OgProject;
+  };
 }
 
 const maxHistoryEntries = 60;
@@ -82,6 +86,17 @@ export function setLayerEffects(session: EditorSession, layerId: string, effects
       ...effectsPatch
     }
   } as Partial<OgLayer>);
+}
+
+export function setLayerEffectsTransient(session: EditorSession, layerId: string, effectsPatch: Partial<LayerEffects>, key: string): EditorSession {
+  const layer = getRenderableProject(session.project).layers.find((item) => item.id === layerId);
+  if (!layer || !("effects" in layer)) return session;
+  return updateLayerTransient(session, layerId, {
+    effects: {
+      ...layer.effects,
+      ...effectsPatch
+    }
+  } as Partial<OgLayer>, key);
 }
 
 export function alignLayers(session: EditorSession, layerIds: string[], mode: LayerAlignMode): EditorSession {
@@ -217,9 +232,36 @@ export function updateProjectSettings(
 
 export function updateLayer(session: EditorSession, layerId: string, patch: Partial<OgLayer>): EditorSession {
   const renderableProject = getRenderableProject(session.project);
+  const current = renderableProject.layers.find((layer) => layer.id === layerId);
+  if (!current || isNoOpPatch(current, patch)) return session;
   const layers = renderableProject.layers.map((layer) => (layer.id === layerId ? ({ ...layer, ...patch } as OgLayer) : layer));
   const nextProject = updateActivePageLayers(session.project, layers);
   return pushHistory(session, nextProject);
+}
+
+export function updateLayerTransient(session: EditorSession, layerId: string, patch: Partial<OgLayer>, key: string): EditorSession {
+  const renderableProject = getRenderableProject(session.project);
+  const current = renderableProject.layers.find((layer) => layer.id === layerId);
+  if (!current || isNoOpPatch(current, patch)) return session;
+  const layers = renderableProject.layers.map((layer) => (layer.id === layerId ? ({ ...layer, ...patch } as OgLayer) : layer));
+  const nextProject = updateActivePageLayers(session.project, layers);
+  return {
+    ...session,
+    project: nextProject,
+    selectedLayerId: session.selectedLayerId,
+    transientHistory: session.transientHistory?.key === key ? session.transientHistory : { key, before: session.project },
+    future: []
+  };
+}
+
+export function commitTransientHistory(session: EditorSession): EditorSession {
+  if (!session.transientHistory) return session;
+  return {
+    ...session,
+    past: keepRecentHistory([...session.past, session.transientHistory.before]),
+    future: [],
+    transientHistory: undefined
+  };
 }
 
 export function nudgeSelectedLayer(session: EditorSession, delta: { dx: number; dy: number }): EditorSession {
@@ -331,36 +373,40 @@ export function reorderLayers(session: EditorSession, activeId: string, overId: 
 }
 
 export function undo(session: EditorSession): EditorSession {
-  const previous = session.past.at(-1);
-  if (!previous) return session;
+  const committed = commitTransientHistory(session);
+  const previous = committed.past.at(-1);
+  if (!previous) return committed;
   const previousRenderable = getRenderableProject(previous);
   return {
     project: previous,
-    selectedLayerId: previousRenderable.layers.find((layer) => layer.id === session.selectedLayerId)?.id ?? previousRenderable.layers[0]?.id ?? "",
-    past: session.past.slice(0, -1),
-    future: [session.project, ...session.future]
+    selectedLayerId: previousRenderable.layers.find((layer) => layer.id === committed.selectedLayerId)?.id ?? previousRenderable.layers[0]?.id ?? "",
+    past: committed.past.slice(0, -1),
+    future: [committed.project, ...committed.future]
   };
 }
 
 export function redo(session: EditorSession): EditorSession {
-  const next = session.future[0];
-  if (!next) return session;
+  const committed = commitTransientHistory(session);
+  const next = committed.future[0];
+  if (!next) return committed;
   const nextRenderable = getRenderableProject(next);
   return {
     project: next,
-    selectedLayerId: nextRenderable.layers.find((layer) => layer.id === session.selectedLayerId)?.id ?? nextRenderable.layers[0]?.id ?? "",
-    past: keepRecentHistory([...session.past, session.project]),
-    future: session.future.slice(1)
+    selectedLayerId: nextRenderable.layers.find((layer) => layer.id === committed.selectedLayerId)?.id ?? nextRenderable.layers[0]?.id ?? "",
+    past: keepRecentHistory([...committed.past, committed.project]),
+    future: committed.future.slice(1)
   };
 }
 
 function pushHistory(session: EditorSession, project: OgProject, selectedLayerId = session.selectedLayerId): EditorSession {
+  const committed = commitTransientHistory(session);
   return {
-    ...session,
+    ...committed,
     project,
     selectedLayerId,
-    past: keepRecentHistory([...session.past, session.project]),
-    future: []
+    past: keepRecentHistory([...committed.past, committed.project]),
+    future: [],
+    transientHistory: undefined
   };
 }
 
@@ -398,6 +444,11 @@ function roundPosition(position: Partial<Pick<OgLayer, "x" | "y">>): Partial<Pic
     ...(position.x === undefined ? {} : { x: Math.round(position.x) }),
     ...(position.y === undefined ? {} : { y: Math.round(position.y) })
   };
+}
+
+function isNoOpPatch(layer: OgLayer, patch: Partial<OgLayer>): boolean {
+  const entries = Object.entries(patch) as Array<[keyof OgLayer, unknown]>;
+  return entries.length > 0 && entries.every(([key, value]) => JSON.stringify(layer[key]) === JSON.stringify(value));
 }
 
 function isImageLayer(layer: OgLayer | undefined): layer is ImageLayer {

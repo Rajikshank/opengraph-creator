@@ -128,6 +128,31 @@ describe("OpenGraphCreator durable sessions", () => {
     expect(await readFile(paths.publishRequestJson, "utf8")).toContain("preview");
   });
 
+  it("records exports for older attached sessions that lack optional arrays", async () => {
+    const repo = await mkdtemp(join(tmpdir(), "OpenGraphCreator-session-legacy-export-"));
+    await createOpenGraphCreatorSession({ repo, id: "legacy-session" });
+    const paths = getSessionPaths(repo, "legacy-session");
+    const legacy = JSON.parse(await readFile(paths.sessionJson, "utf8"));
+    delete legacy.exports;
+    delete legacy.publishRequests;
+    delete legacy.agentRequests;
+    await atomicWriteJson(paths.sessionJson, legacy);
+
+    const updated = await recordSessionExport(repo, "legacy-session", {
+      path: "public/og.png",
+      format: "png",
+      width: 1200,
+      height: 630,
+      fileSizeBytes: 71_564,
+      createdAt: "2026-06-01T00:00:00.000Z"
+    });
+
+    expect(updated.exports).toEqual([
+      expect.objectContaining({ path: "public/og.png", width: 1200, height: 630 })
+    ]);
+    expect(await readFile(paths.exportJson, "utf8")).toContain("public/og.png");
+  });
+
   it("records page-aware export and publish mappings for per-page handoff", async () => {
     const repo = await mkdtemp(join(tmpdir(), "OpenGraphCreator-session-pages-"));
     await createOpenGraphCreatorSession({ repo, id: "session-pages", strategy: "pages" });

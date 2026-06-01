@@ -61,10 +61,7 @@ export function ExportPublishPanel() {
       if (session) await saveSessionDocumentViaApi(fetch, { repo: session.repo, sessionId: session.id, project });
       await saveProjectViaApi(fetch, project);
       const result = await exportProjectViaApi(fetch, { projectId: project.projectId, format, target, quality, repo: session?.repo });
-      setLastExportSizeBytes(result.fileSizeBytes);
-      setHasExported(true);
-      setPageImages(project.pages?.length ? [{ page: project.targetPages[0] ?? "/", imagePath: result.target }] : []);
-      setHasConfirmedPublish(false);
+      const nextPageImages = project.pages?.length ? [{ page: project.targetPages[0] ?? "/", imagePath: result.target }] : [];
       if (session) {
         const updatedSession = await recordSessionExportViaApi(fetch, {
           repo: session.repo,
@@ -77,6 +74,10 @@ export function ExportPublishPanel() {
         });
         setSession(updatedSession);
       }
+      setLastExportSizeBytes(result.fileSizeBytes);
+      setHasExported(true);
+      setPageImages(nextPageImages);
+      setHasConfirmedPublish(false);
       notifyStudioSuccess(`Exported ${result.target}`);
     } catch (error) {
       notifyStudioError(
@@ -102,10 +103,6 @@ export function ExportPublishPanel() {
         repo: session?.repo
       });
       const mappings = result.exports.map((item) => ({ page: item.page, imagePath: item.target }));
-      setPageImages(mappings);
-      setLastExportSizeBytes(result.exports.reduce((total, item) => total + (item.fileSizeBytes ?? 0), 0));
-      setHasExported(true);
-      setHasConfirmedPublish(false);
       if (session) {
         for (const item of result.exports) {
           const updatedSession = await recordSessionExportViaApi(fetch, {
@@ -121,6 +118,10 @@ export function ExportPublishPanel() {
           setSession(updatedSession);
         }
       }
+      setPageImages(mappings);
+      setLastExportSizeBytes(result.exports.reduce((total, item) => total + (item.fileSizeBytes ?? 0), 0));
+      setHasExported(true);
+      setHasConfirmedPublish(false);
       notifyStudioSuccess(`Exported ${result.exports.length} page OG image${result.exports.length === 1 ? "" : "s"}`);
     } catch (error) {
       notifyStudioError(

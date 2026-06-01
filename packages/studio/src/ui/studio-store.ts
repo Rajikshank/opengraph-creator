@@ -28,12 +28,15 @@ import {
   setImageFocalPoint as setSessionImageFocalPoint,
   setImagePerspective as setSessionImagePerspective,
   setLayerEffects as setSessionLayerEffects,
+  setLayerEffectsTransient as setSessionLayerEffectsTransient,
   selectPageVariant as selectSessionPageVariant,
   snapLayer as snapSessionLayer,
   toggleLayerHidden as toggleSessionLayerHidden,
   toggleLayerLocked as toggleSessionLayerLocked,
   undo as undoSession,
   updateLayer as updateSessionLayer,
+  updateLayerTransient as updateSessionLayerTransient,
+  commitTransientHistory as commitSessionTransientHistory,
   redo as redoSession,
   type EditorSession
 } from "../editor-model";
@@ -56,7 +59,10 @@ interface StudioStore {
   selectPageVariant: (pageIdOrRoute: string) => void;
   setSelectedLayerId: (id: string) => void;
   updateLayer: (id: string, patch: Partial<OgLayer>) => void;
+  updateLayerTransient: (id: string, patch: Partial<OgLayer>, key: string) => void;
+  commitTransientHistory: () => void;
   setLayerEffects: (id: string, patch: Partial<LayerEffects>) => void;
+  setLayerEffectsTransient: (id: string, patch: Partial<LayerEffects>, key: string) => void;
   alignLayers: (ids: string[], mode: LayerAlignMode) => void;
   distributeLayers: (ids: string[], mode: LayerDistributeMode) => void;
   snapLayer: (id: string, target: LayerSnapTarget) => void;
@@ -103,8 +109,13 @@ export const useStudio = create<StudioStore>((set) => ({
   selectPageVariant: (pageIdOrRoute) => set((state) => (state.project ? selectSessionPageVariant(state as EditorSession, pageIdOrRoute) : state)),
   setSelectedLayerId: (id) => set((state) => (state.project ? selectLayer(state as EditorSession, id) : state)),
   updateLayer: (id, patch) => set((state) => (state.project ? { ...updateSessionLayer(state as EditorSession, id, patch), dirty: true } : state)),
+  updateLayerTransient: (id, patch, key) =>
+    set((state) => (state.project ? { ...updateSessionLayerTransient(state as EditorSession, id, patch, key), dirty: true } : state)),
+  commitTransientHistory: () => set((state) => (state.project ? { ...commitSessionTransientHistory(state as EditorSession), dirty: true } : state)),
   setLayerEffects: (id, patch) =>
     set((state) => (state.project ? { ...setSessionLayerEffects(state as EditorSession, id, patch), dirty: true } : state)),
+  setLayerEffectsTransient: (id, patch, key) =>
+    set((state) => (state.project ? { ...setSessionLayerEffectsTransient(state as EditorSession, id, patch, key), dirty: true } : state)),
   alignLayers: (ids, mode) => set((state) => (state.project ? { ...alignSessionLayers(state as EditorSession, ids, mode), dirty: true } : state)),
   distributeLayers: (ids, mode) =>
     set((state) => (state.project ? { ...distributeSessionLayers(state as EditorSession, ids, mode), dirty: true } : state)),
@@ -208,6 +219,8 @@ export function createProjectWithImportedAsset(project: OgProject, artifact: Ope
   }
 
   const now = new Date().toISOString();
+  const packagedAssetPath = artifact.path?.startsWith("assets/") ? artifact.path : undefined;
+  const storedArtifact = packagedAssetPath ? { ...artifact, inline: undefined } : artifact;
   const layer: OgLayer = {
     id: `imported-${Date.now().toString(36)}`,
     kind: "image",
@@ -220,8 +233,8 @@ export function createProjectWithImportedAsset(project: OgProject, artifact: Ope
     opacity: 1,
     locked: false,
     hidden: false,
-    src: artifact.inline ?? artifact.path ?? "ogcreator://image-placeholder",
-    assetPath: artifact.path?.startsWith("assets/") ? artifact.path : undefined,
+    src: packagedAssetPath ?? artifact.inline ?? artifact.path ?? "ogcreator://image-placeholder",
+    assetPath: packagedAssetPath,
     fit: "contain",
     borderRadius: 8,
     effects: { shadow: true, glow: false, blur: 0 }
@@ -229,7 +242,7 @@ export function createProjectWithImportedAsset(project: OgProject, artifact: Ope
 
   return {
     ...updateActivePageLayers(project, [...project.layers, layer]),
-    sourceArtifacts: [...project.sourceArtifacts, artifact],
+    sourceArtifacts: [...project.sourceArtifacts, storedArtifact],
     updatedAt: now
   };
 }

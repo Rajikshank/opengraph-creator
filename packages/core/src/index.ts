@@ -19,6 +19,14 @@ export type SessionStatus =
   | "stale";
 export type EffectCapability = "supported" | "disabled";
 export type EffectName = "gradient" | "noise" | "lighting" | "vignette" | "blur" | "shadow" | "glow";
+export {
+  clampPerspectivePoint,
+  getPerspectiveBounds,
+  isDefaultPerspectiveQuad,
+  normalizePerspectiveQuad,
+  type PerspectivePoint,
+  type PerspectiveQuad
+} from "./perspective.js";
 
 export * from "./document-package.js";
 

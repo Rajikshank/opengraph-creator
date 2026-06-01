@@ -3,7 +3,9 @@ import {
   getRenderableProject,
   getSvgShadowVisual,
   hasComposedLayerEffect,
+  isDefaultPerspectiveQuad,
   isGlowEffectEnabled,
+  normalizePerspectiveQuad,
   normalizeGlowEffect,
   type ImageLayer,
   type OgLayer,
@@ -78,6 +80,9 @@ function renderLayer(layer: OgLayer, project: OgProject): string {
 }
 
 function renderImageLayer(layer: ImageLayer, common: string, filter: string): string {
+  if (!isDefaultPerspectiveQuad(layer.perspective)) {
+    return renderPerspectiveImageLayer(layer, common, filter);
+  }
   const preserveAspectRatio = getImagePreserveAspectRatio(layer.fit, layer.focalPoint);
   const crop = layer.crop;
   const clipId = `gf-image-clip-${safeId(layer.id)}`;
@@ -98,6 +103,21 @@ function renderImageLayer(layer: ImageLayer, common: string, filter: string): st
   const y = Math.round(layer.y - cropY * height);
 
   return `<g ${common}><g${filterAttr} clip-path="url(#${clipId})"><image href="${escapeXml(layer.src)}" x="${x}" y="${y}" width="${width}" height="${height}" preserveAspectRatio="${preserveAspectRatio}"/></g>${overlays}</g>`;
+}
+
+function renderPerspectiveImageLayer(layer: ImageLayer, common: string, filter: string): string {
+  const id = safeId(layer.id);
+  const filterAttr = filter ? ` filter="${filter}"` : "";
+  const overlays = renderEffectOverlays(layer, { maskId: `gf-image-mask-${id}` });
+  const mesh = createPerspectiveMesh(layer)
+    .map((triangle, index) => {
+      const matrix = getAffineMatrix(triangle.source, triangle.destination);
+      if (!matrix) return "";
+      const clipId = `gf-perspective-clip-${id}-${index}`;
+      return `<g clip-path="url(#${clipId})"><image href="${escapeXml(layer.src)}" x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" preserveAspectRatio="none" transform="${matrix}"/></g>`;
+    })
+    .join("");
+  return `<g ${common} data-og-perspective="${escapeXml(layer.id)}"><g${filterAttr}>${mesh}</g>${overlays}</g>`;
 }
 
 function renderImagePlaceholderLayer(layer: ImageLayer, project: OgProject, common: string, filter: string): string {
@@ -258,10 +278,19 @@ function renderImageDefs(layer: OgLayer): string[] {
     : crop
     ? getCroppedImageGeometry(layer, preserveAspectRatio)
     : `<image href="${escapeXml(layer.src)}" x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" preserveAspectRatio="${preserveAspectRatio}"/>`;
-  return [
+  const defs = [
     `<clipPath id="gf-image-clip-${safeId(layer.id)}"><rect x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" rx="${layer.borderRadius}"/></clipPath>`,
     `<mask id="gf-image-mask-${safeId(layer.id)}" maskUnits="userSpaceOnUse" x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" style="mask-type:alpha">${image}</mask>`
   ];
+  if (!isDefaultPerspectiveQuad(layer.perspective)) {
+    defs.push(
+      ...createPerspectiveMesh(layer).map((triangle, index) => {
+        const points = triangle.destination.map((point) => `${round(point.x)},${round(point.y)}`).join(" ");
+        return `<clipPath id="gf-perspective-clip-${safeId(layer.id)}-${index}"><polygon points="${points}"/></clipPath>`;
+      })
+    );
+  }
+  return defs;
 }
 
 function renderEffectOverlays(
@@ -358,4 +387,81 @@ function safeId(value: string): string {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
+}
+
+interface MeshTriangle {
+  source: [Point, Point, Point];
+  destination: [Point, Point, Point];
+}
+
+interface Point {
+  x: number;
+  y: number;
+}
+
+function createPerspectiveMesh(layer: ImageLayer): MeshTriangle[] {
+  const quad = normalizePerspectiveQuad(layer.perspective);
+  const steps = 6;
+  const triangles: MeshTriangle[] = [];
+  for (let y = 0; y < steps; y += 1) {
+    for (let x = 0; x < steps; x += 1) {
+      const u0 = x / steps;
+      const v0 = y / steps;
+      const u1 = (x + 1) / steps;
+      const v1 = (y + 1) / steps;
+      const sourceTopLeft = sourcePoint(layer, u0, v0);
+      const sourceTopRight = sourcePoint(layer, u1, v0);
+      const sourceBottomRight = sourcePoint(layer, u1, v1);
+      const sourceBottomLeft = sourcePoint(layer, u0, v1);
+      const destTopLeft = perspectivePoint(layer, quad, u0, v0);
+      const destTopRight = perspectivePoint(layer, quad, u1, v0);
+      const destBottomRight = perspectivePoint(layer, quad, u1, v1);
+      const destBottomLeft = perspectivePoint(layer, quad, u0, v1);
+      triangles.push(
+        { source: [sourceTopLeft, sourceTopRight, sourceBottomRight], destination: [destTopLeft, destTopRight, destBottomRight] },
+        { source: [sourceTopLeft, sourceBottomRight, sourceBottomLeft], destination: [destTopLeft, destBottomRight, destBottomLeft] }
+      );
+    }
+  }
+  return triangles;
+}
+
+function sourcePoint(layer: ImageLayer, u: number, v: number): Point {
+  return {
+    x: layer.x + layer.width * u,
+    y: layer.y + layer.height * v
+  };
+}
+
+function perspectivePoint(layer: ImageLayer, quad: ReturnType<typeof normalizePerspectiveQuad>, u: number, v: number): Point {
+  const topX = lerp(quad[0].x, quad[1].x, u);
+  const topY = lerp(quad[0].y, quad[1].y, u);
+  const bottomX = lerp(quad[3].x, quad[2].x, u);
+  const bottomY = lerp(quad[3].y, quad[2].y, u);
+  return {
+    x: layer.x + lerp(topX, bottomX, v) * layer.width,
+    y: layer.y + lerp(topY, bottomY, v) * layer.height
+  };
+}
+
+function getAffineMatrix(source: [Point, Point, Point], destination: [Point, Point, Point]): string {
+  const [s0, s1, s2] = source;
+  const [d0, d1, d2] = destination;
+  const denominator = s0.x * (s1.y - s2.y) + s1.x * (s2.y - s0.y) + s2.x * (s0.y - s1.y);
+  if (Math.abs(denominator) < 0.0001) return "";
+  const a = (d0.x * (s1.y - s2.y) + d1.x * (s2.y - s0.y) + d2.x * (s0.y - s1.y)) / denominator;
+  const c = (d0.x * (s2.x - s1.x) + d1.x * (s0.x - s2.x) + d2.x * (s1.x - s0.x)) / denominator;
+  const e = (d0.x * (s1.x * s2.y - s2.x * s1.y) + d1.x * (s2.x * s0.y - s0.x * s2.y) + d2.x * (s0.x * s1.y - s1.x * s0.y)) / denominator;
+  const b = (d0.y * (s1.y - s2.y) + d1.y * (s2.y - s0.y) + d2.y * (s0.y - s1.y)) / denominator;
+  const d = (d0.y * (s2.x - s1.x) + d1.y * (s0.x - s2.x) + d2.y * (s1.x - s0.x)) / denominator;
+  const f = (d0.y * (s1.x * s2.y - s2.x * s1.y) + d1.y * (s2.x * s0.y - s0.x * s2.y) + d2.y * (s0.x * s1.y - s1.x * s0.y)) / denominator;
+  return `matrix(${[a, b, c, d, e, f].map(round).join(" ")})`;
+}
+
+function lerp(start: number, end: number, amount: number): number {
+  return start + (end - start) * amount;
+}
+
+function round(value: number): number {
+  return Math.round(value * 1000) / 1000;
 }

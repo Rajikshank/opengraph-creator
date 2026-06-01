@@ -50,6 +50,40 @@ describe("OpenGraphCreator renderer", () => {
     expect(fillSvg).toContain('preserveAspectRatio="none"');
   });
 
+  it("renders non-default image perspective as a warped mesh instead of a flat rectangle", () => {
+    const baseProject = createDefaultProject({ name: "Perspective", strategy: "common" });
+    const imageLayer: ImageLayer = {
+      id: "angled-reference",
+      kind: "image",
+      name: "Angled Reference",
+      x: 100,
+      y: 100,
+      width: 300,
+      height: 180,
+      rotation: 0,
+      opacity: 1,
+      locked: false,
+      hidden: false,
+      src: "data:image/png;base64,abc",
+      fit: "fill",
+      borderRadius: 0,
+      perspective: [
+        { x: 0.08, y: 0.04 },
+        { x: 0.94, y: 0.16 },
+        { x: 1, y: 0.9 },
+        { x: 0, y: 1 }
+      ],
+      effects: { shadow: false, glow: false, blur: 0 }
+    };
+
+    const svg = renderProjectToSvg({ ...baseProject, layers: [imageLayer] });
+
+    expect(svg).toContain('data-og-perspective="angled-reference"');
+    expect(svg).toContain("gf-perspective-clip-angled-reference-0");
+    expect(svg).toContain("matrix(");
+    expect((svg.match(/transform="matrix\(/g) ?? [])).toHaveLength(72);
+  });
+
   it("renders the active page variant instead of the legacy root layers in multi-page documents", () => {
     const project = createMultiPageProject(
       createDefaultProject({ name: "Renderer Pages", strategy: "pages", pages: ["/", "/pricing"] }),

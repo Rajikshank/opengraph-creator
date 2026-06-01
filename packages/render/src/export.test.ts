@@ -28,6 +28,19 @@ describe("OpenGraph Creator export pipeline", () => {
     });
   });
 
+  it("does not report an all-hidden SVG as nonblank or social-ready", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-"));
+    const target = join(dir, "blank.svg");
+    const project = createDefaultProject({ name: "Blank SVG", strategy: "common" });
+    project.layers = project.layers.map((layer) => ({ ...layer, hidden: true }));
+
+    const result = await exportProject(project, { format: "svg", target });
+
+    expect(result.qualityReport.nonblank).toBe(false);
+    expect(result.qualityReport.socialReady).toBe(false);
+    expect(result.qualityReport.warnings).toContain("Export appears blank.");
+  });
+
   it("exports an optimized PNG with correct OG dimensions", async () => {
     const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-"));
     const target = join(dir, "og.png");

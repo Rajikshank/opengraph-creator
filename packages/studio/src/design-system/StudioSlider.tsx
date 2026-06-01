@@ -8,9 +8,10 @@ interface StudioSliderProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 
   step?: number;
   unit?: string;
   onValueChange: (value: number) => void;
+  onValueCommit?: () => void;
 }
 
-export function StudioSlider({ label, value, min, max, step = 1, unit = "", onValueChange, disabled, ...props }: StudioSliderProps) {
+export function StudioSlider({ label, value, min, max, step = 1, unit = "", onValueChange, onValueCommit, disabled, ...props }: StudioSliderProps) {
   const lastEmittedValueRef = useRef(value);
   const shellRef = useRef<HTMLSpanElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -50,6 +51,7 @@ export function StudioSlider({ label, value, min, max, step = 1, unit = "", onVa
     const handlePointerUp = () => {
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("pointerup", handlePointerUp);
+      onValueCommit?.();
     };
     window.addEventListener("pointermove", handlePointerMove);
     window.addEventListener("pointerup", handlePointerUp, { once: true });
@@ -75,7 +77,10 @@ export function StudioSlider({ label, value, min, max, step = 1, unit = "", onVa
           disabled={disabled}
           onInput={handleSliderChange}
           onChange={handleSliderChange}
-          onKeyUp={handleSliderChange}
+          onKeyUp={(event) => {
+            handleSliderChange(event);
+            onValueCommit?.();
+          }}
         />
       </span>
     </label>

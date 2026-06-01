@@ -8,7 +8,7 @@ OpenGraph Creator does not call OpenAI, Anthropic, or image-generation providers
 
 ![OpenGraph Creator Studio preview](assets/studio-preview.png)
 
-## Install
+## Install Skill
 
 Install the skill from GitHub for all supported local agents:
 
@@ -24,7 +24,7 @@ npx -y opengraph-creator@latest doctor --json
 
 Then open your app in Codex, Claude Code, or OpenCode and ask for an editable Open Graph image. The installed skill should inspect the app, ask the required design questions, create a `.ogdoc`, launch Studio, and wait for your publish decision.
 
-## Manual Launch
+## Run Studio
 
 You can also open Studio directly from any app repo:
 
@@ -33,6 +33,10 @@ npx -y opengraph-creator@latest studio --repo .
 ```
 
 Manual launch opens the Project Hub. Agent launch opens the generated session document directly.
+
+## Agent Workflow
+
+After the skill is installed, open your app in Codex, Claude Code, or OpenCode and ask for an editable Open Graph image. The agent should inspect the app, ask the relevant design questions, create the `.ogdoc` session, launch Studio, and wait for your publish decision.
 
 ## How It Works
 

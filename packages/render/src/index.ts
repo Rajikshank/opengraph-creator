@@ -89,14 +89,16 @@ async function createExportQualityReport(input: {
   const warnings: string[] = [];
   let width = input.width;
   let height = input.height;
-  let nonblank = input.svg.includes("<svg") && input.svg.length > 100;
+  let nonblank = hasVisibleSvgContent(input.svg);
 
-  if (input.format !== "svg") {
+  if (input.format !== "svg" || !nonblank) {
     const metadata = await input.sharp(input.target).metadata();
-    const stats = await input.sharp(input.target).stats();
     width = metadata.width ?? width;
     height = metadata.height ?? height;
-    nonblank = stats.channels.some((channel) => channel.stdev > 0.5);
+    if (input.format !== "svg") {
+      const stats = await input.sharp(input.target).stats();
+      nonblank = stats.channels.some((channel) => channel.stdev > 0.5);
+    }
   }
 
   if (width !== 1200 || height !== 630) warnings.push(`Expected 1200x630 OG output, got ${width}x${height}.`);
@@ -114,6 +116,12 @@ async function createExportQualityReport(input: {
     socialReady: width === 1200 && height === 630 && nonblank && input.fileSizeBytes <= 5_000_000,
     warnings
   };
+}
+
+function hasVisibleSvgContent(svg: string): boolean {
+  const body = svg.replace(/<defs>[\s\S]*?<\/defs>/g, "").replace(/<desc>[\s\S]*?<\/desc>/g, "");
+  if (!body.includes("<svg")) return false;
+  return /<(rect|circle|ellipse|path|polygon|polyline|line|text|image)\b/i.test(body);
 }
 
 function getMimeType(format: ExportFormat): ExportQualityReport["mimeType"] {

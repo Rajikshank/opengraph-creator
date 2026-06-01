@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getPlatformWarnings } from "@opengraph-creator/core";
 import { renderProjectToSvg } from "@opengraph-creator/render/browser";
 import { getPlatformPreviewCards, getPlatformPreviewSpecs, type PlatformPreviewCard, type PlatformPreviewSpec } from "../platforms";
@@ -10,8 +10,31 @@ export function PreviewDock({ variant = "dock" }: { variant?: "dock" | "stage" }
   const project = useStudio((state) => state.project);
   const lastExportSizeBytes = useStudio((state) => state.lastExportSizeBytes);
   const [activeId, setActiveId] = useState("x");
-  const svg = useMemo(() => (project ? renderProjectToSvg(project) : ""), [project]);
+  const [svg, setSvg] = useState("");
   const specs = useMemo(() => getPlatformPreviewSpecs(), []);
+
+  useEffect(() => {
+    if (!project) {
+      setSvg("");
+      return;
+    }
+    let cancelled = false;
+    const render = () => {
+      if (!cancelled) setSvg(renderProjectToSvg(project));
+    };
+    if (!svg) {
+      render();
+      return () => {
+        cancelled = true;
+      };
+    }
+    const timer = window.setTimeout(render, 80);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [project, svg]);
+
   if (!project) return null;
 
   const cards = getPlatformPreviewCards(project);

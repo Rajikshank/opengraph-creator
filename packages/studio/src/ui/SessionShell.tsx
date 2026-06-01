@@ -40,6 +40,7 @@ export function SessionShell() {
   const [loadedDocumentRevision, setLoadedDocumentRevision] = useState<string | undefined>();
   const [pendingAgentBundle, setPendingAgentBundle] = useState<SessionBundle | undefined>();
   const refreshStateRef = useRef({ dirty: false, loadedDocumentRevision: undefined as string | undefined });
+  const pendingRevisionRef = useRef<string | undefined>();
 
   const loadSessionBundle = (bundle: SessionBundle, options: { notify?: boolean } = {}) => {
     setSession(bundle.session);
@@ -47,6 +48,7 @@ export function SessionShell() {
       replaceProject(bundle.project);
       setLoadedDocumentRevision(bundle.documentRevision);
       setPendingAgentBundle(undefined);
+      pendingRevisionRef.current = undefined;
       setRecoveryMessage(undefined);
       if (options.notify) notifyStudioSuccess("Loaded agent update");
       return true;
@@ -114,6 +116,8 @@ export function SessionShell() {
         const bundle = await readSessionBundleViaApi(fetch, { id: session.id, repo: session.repo });
         if (cancelled || !bundle.documentRevision || bundle.documentRevision === refreshStateRef.current.loadedDocumentRevision) return;
         if (refreshStateRef.current.dirty) {
+          if (bundle.documentRevision === pendingRevisionRef.current) return;
+          pendingRevisionRef.current = bundle.documentRevision;
           setPendingAgentBundle(bundle);
           return;
         }
@@ -264,6 +268,7 @@ export function SessionShell() {
               onClick={() => {
                 setLoadedDocumentRevision(pendingAgentBundle.documentRevision);
                 setPendingAgentBundle(undefined);
+                pendingRevisionRef.current = undefined;
               }}
             >
               Keep current

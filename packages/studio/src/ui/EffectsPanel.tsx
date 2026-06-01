@@ -10,6 +10,8 @@ export function EffectsPanel() {
   const project = useStudio((state) => state.project);
   const selectedLayerId = useStudio((state) => state.selectedLayerId);
   const setLayerEffects = useStudio((state) => state.setLayerEffects);
+  const setLayerEffectsTransient = useStudio((state) => state.setLayerEffectsTransient);
+  const commitTransientHistory = useStudio((state) => state.commitTransientHistory);
   const layer = project?.layers.find((item) => item.id === selectedLayerId);
   const effects = layer && "effects" in layer ? layer.effects : undefined;
   if (!layer || !effects) return null;
@@ -65,14 +67,14 @@ export function EffectsPanel() {
               <ColorSwatchField label="Stop A" value={gradient?.stops[0]?.color ?? "#ffffff"} disabled={!gradient} onChange={(value) => updateGradientStop(0, { color: value })} />
               <ColorSwatchField label="Stop B" value={gradient?.stops[1]?.color ?? "#dfe9e5"} disabled={!gradient} onChange={(value) => updateGradientStop(1, { color: value })} />
             </div>
-            <StudioSlider label="Stop A opacity" min={0} max={1} step={0.05} value={gradient?.stops[0]?.opacity ?? 1} onValueChange={(value) => updateGradientStop(0, { opacity: value })} disabled={!gradient} />
-            <StudioSlider label="Stop B opacity" min={0} max={1} step={0.05} value={gradient?.stops[1]?.opacity ?? 0.92} onValueChange={(value) => updateGradientStop(1, { opacity: value })} disabled={!gradient} />
+            <StudioSlider label="Stop A opacity" min={0} max={1} step={0.05} value={gradient?.stops[0]?.opacity ?? 1} onValueChange={(value) => updateGradientStop(0, { opacity: value })} onValueCommit={commitTransientHistory} disabled={!gradient} />
+            <StudioSlider label="Stop B opacity" min={0} max={1} step={0.05} value={gradient?.stops[1]?.opacity ?? 0.92} onValueChange={(value) => updateGradientStop(1, { opacity: value })} onValueCommit={commitTransientHistory} disabled={!gradient} />
           </div>
         ) : null}
         {capabilities.noise === "supported" ? (
           <div className="effect-control-section">
             <h3>Texture</h3>
-            <StudioSlider label="Noise" min={0} max={0.2} step={0.01} value={noise.amount} onValueChange={(value) => setLayerEffects(layer.id, { noise: { ...noise, amount: value } })} />
+            <StudioSlider label="Noise" min={0} max={0.2} step={0.01} value={noise.amount} onValueChange={(value) => setLayerEffectsTransient(layer.id, { noise: { ...noise, amount: value } }, `${layer.id}:noise`)} onValueCommit={commitTransientHistory} />
             <StudioSelect
               label="Blend mode"
               value={noise.blendMode === "soft-light" ? "normal" : noise.blendMode}
@@ -88,19 +90,19 @@ export function EffectsPanel() {
         {capabilities.lighting === "supported" || capabilities.vignette === "supported" ? (
           <div className="effect-control-section">
             <h3>Light</h3>
-            {capabilities.lighting === "supported" ? <StudioSlider label="Lighting" min={0} max={1} step={0.05} value={effects.lighting?.intensity ?? 0} onValueChange={(value) => setLayerEffects(layer.id, { lighting: { type: "spotlight", x: 0.55, y: 0.35, intensity: value, color: "#ffffff" } })} /> : null}
-            {capabilities.vignette === "supported" ? <StudioSlider label="Vignette" min={0} max={0.4} step={0.02} value={effects.vignette ?? 0} onValueChange={(value) => setLayerEffects(layer.id, { vignette: value })} /> : null}
+            {capabilities.lighting === "supported" ? <StudioSlider label="Lighting" min={0} max={1} step={0.05} value={effects.lighting?.intensity ?? 0} onValueChange={(value) => setLayerEffectsTransient(layer.id, { lighting: { type: "spotlight", x: 0.55, y: 0.35, intensity: value, color: "#ffffff" } }, `${layer.id}:lighting`)} onValueCommit={commitTransientHistory} /> : null}
+            {capabilities.vignette === "supported" ? <StudioSlider label="Vignette" min={0} max={0.4} step={0.02} value={effects.vignette ?? 0} onValueChange={(value) => setLayerEffectsTransient(layer.id, { vignette: value }, `${layer.id}:vignette`)} onValueCommit={commitTransientHistory} /> : null}
           </div>
         ) : null}
         <div className="effect-control-section">
           <h3>Depth</h3>
-          <StudioSlider label="Blur" min={0} max={14} step={1} value={effects.blur} unit="px" onValueChange={(value) => setLayerEffects(layer.id, { blur: value })} />
+          <StudioSlider label="Blur" min={0} max={14} step={1} value={effects.blur} unit="px" onValueChange={(value) => setLayerEffectsTransient(layer.id, { blur: value }, `${layer.id}:blur`)} onValueCommit={commitTransientHistory} />
           <StudioSwitch label="Shadow" checked={effects.shadow} onCheckedChange={(checked) => setLayerEffects(layer.id, { shadow: checked })} />
           <StudioSwitch label="Glow" checked={glow.enabled} onCheckedChange={(checked) => setLayerEffects(layer.id, { glow: { ...glow, enabled: checked } })} />
           <ColorSwatchField label="Glow color" value={glow.color ?? "#f6c36b"} onChange={(value) => setLayerEffects(layer.id, { glow: patchGlow(glow, { color: value, enabled: true }) })} />
-          <StudioSlider label="Glow intensity" min={0} max={1} step={0.05} value={glow.intensity} onValueChange={(value) => setLayerEffects(layer.id, { glow: patchGlow(glow, { intensity: value, enabled: value > 0 }) })} />
-          <StudioSlider label="Glow radius" min={0} max={80} step={1} value={glow.radius} unit="px" onValueChange={(value) => setLayerEffects(layer.id, { glow: patchGlow(glow, { radius: value, enabled: value > 0 }) })} />
-          <StudioSlider label="Glow spread" min={0} max={24} step={1} value={glow.spread ?? 0} unit="px" onValueChange={(value) => setLayerEffects(layer.id, { glow: patchGlow(glow, { spread: value, enabled: glow.enabled || value > 0 }) })} />
+          <StudioSlider label="Glow intensity" min={0} max={1} step={0.05} value={glow.intensity} onValueChange={(value) => setLayerEffectsTransient(layer.id, { glow: patchGlow(glow, { intensity: value, enabled: value > 0 }) }, `${layer.id}:glowIntensity`)} onValueCommit={commitTransientHistory} />
+          <StudioSlider label="Glow radius" min={0} max={80} step={1} value={glow.radius} unit="px" onValueChange={(value) => setLayerEffectsTransient(layer.id, { glow: patchGlow(glow, { radius: value, enabled: value > 0 }) }, `${layer.id}:glowRadius`)} onValueCommit={commitTransientHistory} />
+          <StudioSlider label="Glow spread" min={0} max={24} step={1} value={glow.spread ?? 0} unit="px" onValueChange={(value) => setLayerEffectsTransient(layer.id, { glow: patchGlow(glow, { spread: value, enabled: glow.enabled || value > 0 }) }, `${layer.id}:glowSpread`)} onValueCommit={commitTransientHistory} />
         </div>
       </div>
     </section>

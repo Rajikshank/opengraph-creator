@@ -173,7 +173,7 @@ export async function attachOpenGraphCreatorSession(input: AttachSessionInput): 
 
 export async function readOpenGraphCreatorSession(repo: string, sessionId: string): Promise<OpenGraphCreatorSession> {
   const paths = getSessionPaths(repo, sessionId);
-  const session = JSON.parse(await readFile(paths.sessionJson, "utf8")) as OpenGraphCreatorSession;
+  const session = normalizeSession(JSON.parse(await readFile(paths.sessionJson, "utf8")) as OpenGraphCreatorSession);
   if (isStale(session)) {
     return { ...session, status: "stale" };
   }
@@ -208,15 +208,16 @@ export async function recordSessionExport(
 ): Promise<OpenGraphCreatorSession> {
   const paths = getSessionPaths(repo, sessionId);
   const session = await readOpenGraphCreatorSession(repo, sessionId);
+  const previousExports = session.exports ?? [];
   const next: OpenGraphCreatorSession = {
     ...session,
     status: "exported",
-    exports: [...session.exports, exportRecord],
+    exports: [...previousExports, exportRecord],
     lastHeartbeatAt: new Date().toISOString(),
     pendingAction: "publish-preview"
   };
   await atomicWriteJson(paths.exportJson, {
-    exports: [...session.exports, exportRecord],
+    exports: [...previousExports, exportRecord],
     latest: exportRecord
   });
   await writeOpenGraphCreatorSession(next, repo);
@@ -243,7 +244,7 @@ export async function createPublishRequest(input: CreatePublishRequestInput): Pr
   const next: OpenGraphCreatorSession = {
     ...session,
     status: input.confirmed ? "published" : "publish-requested",
-    publishRequests: [...session.publishRequests, request],
+    publishRequests: [...(session.publishRequests ?? []), request],
     lastHeartbeatAt: new Date().toISOString(),
     pendingAction: input.confirmed ? undefined : "agent-preview-metadata"
   };
@@ -380,6 +381,17 @@ function isStale(session: OpenGraphCreatorSession): boolean {
   const last = Date.parse(session.lastHeartbeatAt);
   if (!Number.isFinite(last)) return true;
   return Date.now() - last > 30 * 60 * 1000;
+}
+
+function normalizeSession(session: OpenGraphCreatorSession): OpenGraphCreatorSession {
+  return {
+    ...session,
+    incomingArtifacts: session.incomingArtifacts ?? [],
+    exports: session.exports ?? [],
+    publishRequests: session.publishRequests ?? [],
+    agentRequests: session.agentRequests ?? [],
+    recoverInstructions: session.recoverInstructions ?? []
+  };
 }
 
 export async function fileExists(path: string): Promise<boolean> {

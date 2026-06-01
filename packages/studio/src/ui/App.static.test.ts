@@ -243,7 +243,8 @@ describe("reengineered studio UI contract", () => {
     expect(designSystemSource).toContain("handleSliderChange");
     expect(designSystemSource).toContain("onInput={handleSliderChange}");
     expect(designSystemSource).toContain("onChange={handleSliderChange}");
-    expect(designSystemSource).toContain("onKeyUp={handleSliderChange}");
+    expect(designSystemSource).toContain("onKeyUp={(event) =>");
+    expect(designSystemSource).toContain("onValueCommit?.()");
     expect(designSystemSource).toContain("handlePointerDown");
     expect(designSystemSource).toContain("commitValueFromClientX");
     expect(stylesSource).toMatch(/\.slider-shell input\s*\{\s*position:\s*absolute;/);
