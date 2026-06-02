@@ -159,8 +159,8 @@ npm run opengraph-creator -- studio --repo .
 - `packages/render`: SVG renderer and PNG/WebP/JPEG export pipeline.
 - `packages/studio`: React/Vite creative-tool interface.
 - `packages/cli`: CLI, local Studio server, sessions, packaging, skill install, and publish helpers.
-- `skills/opengraph-creator`: public skill package.
-- `packages/codex-skill`: packaged skill source used by the runtime installer.
+- `skills/opengraph-creator`: the single authored public skill package for Codex, Claude Code, and OpenCode.
+- `packages/cli/codex-skill` and `packages/cli/studio-dist`: generated during `npm run build` for the packed npm runtime; they are not committed source.
 - `scripts`: workflow, package, handoff, agent, and Studio smoke tests.
 
 ## Release

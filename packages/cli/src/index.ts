@@ -1309,6 +1309,7 @@ function printDoctorReport(report: DoctorReport): void {
 
 async function hasBundledSkillSource(): Promise<boolean> {
   const candidates = [
+    new URL("../../../skills/opengraph-creator/SKILL.md", import.meta.url),
     new URL("../codex-skill/SKILL.md", import.meta.url),
     new URL("../../codex-skill/SKILL.md", import.meta.url)
   ];

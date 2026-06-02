@@ -4,6 +4,8 @@ coverage/
 docs/
 .tmp-smoke/
 .tmp-*/
+packages/cli/codex-skill/
+packages/cli/studio-dist/
 .graphforge/
 public/og.*
 *.tsbuildinfo
