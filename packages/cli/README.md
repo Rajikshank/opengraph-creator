@@ -8,17 +8,45 @@ OpenGraph Creator does not call OpenAI, Anthropic, or image-generation providers
 
 ## Install Skill
 
-Install the skill for all supported local agents:
+Install the public skill with the skills CLI. The skill is shared by Codex, Claude Code, and OpenCode; the `--agent` option only controls where the skills CLI installs it.
+
+### Install For All Supported Agents
+
+Use this when you want every supported local coding agent to receive the skill:
 
 ```bash
 npx skills add -g Rajikshank/opengraph-creator --skill opengraph-creator --agent "*" -y
 ```
 
-Then verify the runtime:
+`--agent "*"` targets every supported detected agent. It is the public all-agent install path.
+
+### Install For One Agent
+
+Use one of these when you only want a specific coding agent to receive the skill:
+
+```bash
+npx skills add -g Rajikshank/opengraph-creator --skill opengraph-creator --agent codex -y
+npx skills add -g Rajikshank/opengraph-creator --skill opengraph-creator --agent claude-code -y
+npx skills add -g Rajikshank/opengraph-creator --skill opengraph-creator --agent opencode -y
+```
+
+### Install For Selected Agents
+
+Repeat `--agent`, or use its short alias `-a`, when installing to more than one specific agent:
+
+```bash
+npx skills add -g Rajikshank/opengraph-creator --skill opengraph-creator -a codex -a opencode -y
+```
+
+## Verify Runtime
+
+The skill delegates Studio and export work to the npm runtime. Verify the runtime after installing or updating the skill:
 
 ```bash
 npx -y opengraph-creator@latest doctor --json
 ```
+
+The doctor should report that no provider API key is required and that the agent skill is installed in at least one known skills directory.
 
 ## Run Studio
 
@@ -44,44 +72,67 @@ The installed skill should:
 6. Wait for Studio to request a revision, publish, cancel, or restart.
 7. Wire metadata only after the user confirms publish.
 
-## Manual Launch
+## Session Handoff Files
 
-Use manual launch when you want to open existing `.ogdoc` files, import generated assets, or inspect a repo without an active agent session:
+OpenGraph Creator uses a local file bridge so agents and Studio can resume safely:
 
-```bash
-npx -y opengraph-creator@latest studio --repo .
+```text
+.opengraph-creator/sessions/<id>/
+  session.json
+  events.jsonl
+  document.ogdoc
+  incoming/
+  export.json
+  publish-request.json
+  agent-request.json
+  studio.json
 ```
 
-## Update
+Treat these files as recovery state. Preview requests are review state only; metadata should be changed only after a confirmed publish request.
 
-Update installed skills:
+## Update Skill And Runtime
+
+Update installed skills through the skills CLI:
 
 ```bash
 npx skills check
 npx skills update
 ```
 
-The Studio runtime uses the latest npm package when invoked with:
+Use the latest Studio runtime through npm:
 
 ```bash
 npx -y opengraph-creator@latest doctor --json
 ```
+
+Skill updates and runtime updates are separate. The skill tells the coding agent what to do; the npm runtime launches Studio, validates `.ogdoc` documents, exports images, and writes handoff files.
 
 ## Troubleshooting
 
-If the skill cannot find the runtime, run:
+If the skill cannot find the runtime, verify the npm runtime:
 
 ```bash
 npx -y opengraph-creator@latest doctor --json
 ```
 
-If an agent-specific skill install needs repair:
+If the skill is missing for one agent, prefer reinstalling through the skills CLI:
 
 ```bash
 npx skills add -g Rajikshank/opengraph-creator --skill opengraph-creator --agent codex -y
 npx skills add -g Rajikshank/opengraph-creator --skill opengraph-creator --agent claude-code -y
 npx skills add -g Rajikshank/opengraph-creator --skill opengraph-creator --agent opencode -y
 ```
+
+`opengraph-creator install-skill` is a fallback repair command for local development or recovery only. It uses `--agent all` instead of `--agent "*"`:
+
+```bash
+opengraph-creator install-skill --agent codex --scope global
+opengraph-creator install-skill --agent claude-code --scope global
+opengraph-creator install-skill --agent opencode --scope global
+opengraph-creator install-skill --agent all --scope global
+```
+
+Normal users should install through `npx skills add`, not by cloning or building this repository.
 
 ## Repository
 
