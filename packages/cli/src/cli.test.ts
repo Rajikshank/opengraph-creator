@@ -651,7 +651,7 @@ describe("OpenGraphCreator CLI helpers", () => {
       strategy: "pages"
     });
     const paths = getSessionPaths(dir, session.id);
-    await writeFile(paths.sessionJson, JSON.stringify({ ...session, repo: "/mnt/c/Users/kraji/Desktop/news-app" }, null, 2));
+    await writeFile(paths.sessionJson, JSON.stringify({ ...session, repo: "/workspace/news-app" }, null, 2));
 
     await recordSessionExport(dir, session.id, {
       path: "public/og/home.png",
