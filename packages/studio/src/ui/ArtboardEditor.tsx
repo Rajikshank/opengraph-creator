@@ -957,7 +957,7 @@ function getImagePlacement(layer: ImageLayer, image: HTMLImageElement) {
 function getKonvaFillProps(layer: ShapeLayer) {
   const gradient = layer.effects.gradient;
   if (!gradient) return { fill: layer.fill };
-  const colors = gradient.stops.flatMap((stop) => [stop.position, stop.color]);
+  const colors = gradient.stops.flatMap((stop) => [normalizeGradientStopPosition(stop.position), stop.color]);
   if (gradient.type === "radial") {
     return {
       fillRadialGradientStartPoint: { x: layer.width / 2, y: layer.height / 2 },
@@ -975,6 +975,11 @@ function getKonvaFillProps(layer: ShapeLayer) {
     fillLinearGradientEndPoint: { x: layer.width / 2 + x, y: layer.height / 2 + y },
     fillLinearGradientColorStops: colors
   };
+}
+
+function normalizeGradientStopPosition(position: number): number {
+  const normalized = Number.isFinite(position) && position > 1 && position <= 100 ? position / 100 : position;
+  return Math.min(1, Math.max(0, Number.isFinite(normalized) ? normalized : 0));
 }
 
 export function useLayerImage(src: string): HTMLImageElement | null {

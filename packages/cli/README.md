@@ -108,20 +108,23 @@ When run with `--repo` and `--id`, failed checks append recoverable entries to `
 
 ## Update Skill And Runtime
 
-Update installed skills through the skills CLI:
+Check runtime and skill freshness:
+
+```bash
+npx -y opengraph-creator@latest update check --json
+```
+
+The Studio runtime can relaunch itself through the latest npm package when a newer runtime is available.
+
+Skill updates are manual because the running agent may already have loaded the old skill instructions. If the update check reports a stale or missing skill, stop the current OG task, run:
 
 ```bash
 npx skills check
 npx skills update
-```
-
-Use the latest Studio runtime through npm:
-
-```bash
 npx -y opengraph-creator@latest doctor --json
 ```
 
-Skill updates and runtime updates are separate. The skill tells the coding agent what to do; the npm runtime launches Studio, validates `.ogdoc` documents, exports images, and writes handoff files.
+Then start a new agent session. Skill updates and runtime updates are separate: the skill tells the coding agent what to do; the npm runtime launches Studio, validates `.ogdoc` documents, exports images, and writes handoff files.
 
 ## Troubleshooting
 

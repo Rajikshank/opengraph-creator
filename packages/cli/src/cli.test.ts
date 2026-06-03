@@ -7,12 +7,14 @@ import { createDefaultProject, unpackStudioDocument } from "@opengraph-creator/c
 import {
   applyMetadataPlanToRepo,
   createDoctorReport,
+  createUpdateReport,
   createProjectFromArgs,
   createMetadataPlan,
   exportProjectPages,
   exportProjectFile,
   preflightSessionDocument,
   readReusableStudioLaunch,
+  shouldAutoRefreshRuntime,
   runCli
 } from "./index";
 import { createOpenGraphCreatorSession, getSessionPaths, recordSessionExport } from "./session";
@@ -724,6 +726,40 @@ describe("OpenGraphCreator CLI helpers", () => {
     }
   });
 
+  it("does not reuse an older Studio server when a newer runtime is available", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-cli-old-studio-"));
+    await runCli(["session", "create", "--repo", dir, "--id", "old-studio", "--agent", "codex", "--strategy", "pages"]);
+
+    const server = createServer((request, response) => {
+      if (request.url?.startsWith("/api/version")) {
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end(JSON.stringify({ name: "opengraph-creator", version: "0.1.7" }));
+        return;
+      }
+      if (request.url?.startsWith("/api/session")) {
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end(JSON.stringify({ session: { id: "old-studio", repo: dir }, project: undefined }));
+        return;
+      }
+      response.writeHead(404, { "content-type": "application/json" });
+      response.end("{}");
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("test server did not bind");
+    const url = `http://127.0.0.1:${address.port}?session=old-studio&repo=${encodeURIComponent(dir)}`;
+    await writeFile(
+      join(dir, ".opengraph-creator", "sessions", "old-studio", "studio.json"),
+      JSON.stringify({ sessionId: "old-studio", repo: dir, url, pid: 12345, openedAt: new Date().toISOString() }, null, 2)
+    );
+
+    try {
+      await expect(readReusableStudioLaunch(dir, "old-studio", { latestVersion: "0.1.8" })).resolves.toBeUndefined();
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+    }
+  });
+
   it("ignores a stale Studio launch when the health endpoint is gone", async () => {
     const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-cli-stale-studio-"));
     await runCli(["session", "create", "--repo", dir, "--id", "stale-session", "--agent", "codex", "--strategy", "pages"]);
@@ -1032,6 +1068,7 @@ describe("OpenGraphCreator CLI helpers", () => {
 
     expect(report.checks.map((check) => check.id)).toEqual([
       "cli",
+      "runtime-update",
       "renderer",
       "studio-build",
       "agent-skill-source",
@@ -1053,6 +1090,62 @@ describe("OpenGraphCreator CLI helpers", () => {
     expect(report.ready).toBe(false);
   });
 
+  it("reports runtime auto-refresh and stale skill update guidance separately", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-update-report-"));
+    const home = join(dir, "home");
+    const skillDir = join(home, ".codex", "skills", "opengraph-creator");
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(join(skillDir, "SKILL.md"), "---\nname: opengraph-creator\nmetadata:\n  opengraph_creator_skill_version: 0.1.6\n---\n", "utf8");
+
+    const report = await createUpdateReport({
+      home,
+      currentRuntimeVersion: "0.1.7",
+      latestRuntimeVersion: "0.1.8",
+      bundledSkillVersion: "0.1.8"
+    });
+
+    expect(report.runtime).toMatchObject({
+      currentVersion: "0.1.7",
+      latestVersion: "0.1.8",
+      updateAvailable: true,
+      autoUpdateCommand: "npx -y opengraph-creator@latest"
+    });
+    expect(report.skill).toMatchObject({
+      updateRequired: true,
+      manualUpdateCommands: [
+        "npx skills check",
+        "npx skills update",
+        "npx -y opengraph-creator@latest doctor --json"
+      ],
+      restartRequired: true
+    });
+    expect(report.skill.installed[0]).toMatchObject({
+      status: "stale",
+      version: "0.1.6"
+    });
+  });
+
+  it("detects when a command should trampoline to the latest runtime", () => {
+    expect(shouldAutoRefreshRuntime({
+      command: "session",
+      currentVersion: "0.1.7",
+      latestVersion: "0.1.8",
+      env: {}
+    })).toBe(true);
+    expect(shouldAutoRefreshRuntime({
+      command: "session",
+      currentVersion: "0.1.7",
+      latestVersion: "0.1.8",
+      env: { OPENGRAPH_CREATOR_AUTO_UPDATED: "1" }
+    })).toBe(false);
+    expect(shouldAutoRefreshRuntime({
+      command: "install-skill",
+      currentVersion: "0.1.7",
+      latestVersion: "0.1.8",
+      env: {}
+    })).toBe(false);
+  });
+
   it("recognizes the OpenCode singular skill directory during doctor checks", async () => {
     const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-doctor-opencode-"));
     const home = join(dir, "home");
@@ -1064,6 +1157,9 @@ describe("OpenGraphCreator CLI helpers", () => {
 
     const report = await createDoctorReport({ repo: dir, home, staticDir });
 
-    expect(report.checks.find((check) => check.id === "agent-skill-installed")).toMatchObject({ status: "pass" });
+    expect(report.checks.find((check) => check.id === "agent-skill-installed")).toMatchObject({
+      status: "warn",
+      action: expect.stringContaining("npx skills update")
+    });
   });
 });

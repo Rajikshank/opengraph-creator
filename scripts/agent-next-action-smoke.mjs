@@ -8,8 +8,10 @@ import { createAgentRequest, getSessionPaths, restartOpenGraphCreatorSession } f
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const cli = join(root, "packages", "cli", "dist", "index.js");
 const repo = await mkdtemp(join(tmpdir(), "OpenGraphCreator-next-action-"));
+const home = join(repo, "home");
 
 const manualDocument = join(repo, "manual.ogdoc");
+await runCli(["install-skill", "--agent", "all", "--home", home]);
 await runCli(["document", "new", "--name", "Manual Studio Attach", "--strategy", "common", "--out", manualDocument]);
 await runCli([
   "session",
@@ -22,6 +24,8 @@ await runCli([
   manualDocument,
   "--agent",
   "codex",
+  "--home",
+  home,
   "--launch",
   "false",
   "--wait",
@@ -35,7 +39,7 @@ if (!attachWaitOutput.includes('"status": "published"') || !attachWaitOutput.inc
   throw new Error(`Expected attached manual session to publish through next-action, got:\n${attachWaitOutput}`);
 }
 
-await runCli(["session", "create", "--repo", repo, "--id", "agent-loop", "--agent", "codex", "--strategy", "hybrid"]);
+await runCli(["session", "create", "--repo", repo, "--id", "agent-loop", "--agent", "codex", "--strategy", "hybrid", "--home", home]);
 const agentWait = waitCli(["session", "wait", "--repo", repo, "--id", "agent-loop", "--until", "next-action", "--timeout", "30000"]);
 await delay(250);
 await createAgentRequest({
@@ -49,7 +53,7 @@ if (!agentWaitOutput.includes('"status": "agent-requested"')) {
   throw new Error(`Expected agent-requested next action, got:\n${agentWaitOutput}`);
 }
 
-await runCli(["session", "create", "--repo", repo, "--id", "publish-loop", "--agent", "claude", "--strategy", "common"]);
+await runCli(["session", "create", "--repo", repo, "--id", "publish-loop", "--agent", "claude", "--strategy", "common", "--home", home]);
 const publishWait = waitCli(["session", "wait", "--repo", repo, "--id", "publish-loop", "--until", "next-action", "--timeout", "30000"]);
 await delay(250);
 await runCli(["publish", "--confirm", "--repo", repo, "--session", "publish-loop", "--framework", "vite", "--image", "public/og.png"]);
@@ -58,7 +62,7 @@ if (!publishWaitOutput.includes('"status": "published"') || !publishWaitOutput.i
   throw new Error(`Expected published next action, got:\n${publishWaitOutput}`);
 }
 
-await runCli(["session", "create", "--repo", repo, "--id", "restart-loop", "--agent", "opencode", "--strategy", "hybrid"]);
+await runCli(["session", "create", "--repo", repo, "--id", "restart-loop", "--agent", "opencode", "--strategy", "hybrid", "--home", home]);
 const restartWait = waitCli(["session", "wait", "--repo", repo, "--id", "restart-loop", "--until", "next-action", "--timeout", "30000"]);
 await delay(250);
 await restartOpenGraphCreatorSession(repo, "restart-loop", "Smoke test restart");

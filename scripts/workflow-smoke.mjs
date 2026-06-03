@@ -44,7 +44,8 @@ const sessionId = "workflow-session";
 
 await mkdir(dirname(exportPath), { recursive: true });
 await runOpenGraphCreator(["doctor", "--home", home, "--json"]);
-await runOpenGraphCreator(["session", "create", "--repo", appRepo, "--id", sessionId, "--agent", "codex", "--strategy", "hybrid"]);
+await runOpenGraphCreator(["install-skill", "--agent", "codex", "--home", home]);
+await runOpenGraphCreator(["session", "create", "--repo", appRepo, "--id", sessionId, "--agent", "codex", "--strategy", "hybrid", "--home", home]);
 await runOpenGraphCreator(["brief", "--repo", appRepo, "--name", "Workflow App", "--strategy", "hybrid", "--mode", "template", "--out", briefPath]);
 await runOpenGraphCreator(["brief", "--repo", appRepo, "--name", "Workflow App", "--strategy", "common", "--mode", "pure-image", "--out", pureBriefPath]);
 await runOpenGraphCreator(["new", "--name", "Workflow App", "--strategy", "pages", "--mode", "pure-image", "--repo", appRepo, "--pages", "/,/pricing", "--out", projectPath, "--library", "true", "--home", home]);

@@ -13,6 +13,7 @@ import {
   createLayerStyleEffect,
   getLayerStyleEffectCapabilities,
   normalizeLayerStyleEffects,
+  normalizeProjectEffects,
   getNoiseDisplayOpacity,
   getPerspectiveBounds,
   getRenderableProject,
@@ -128,6 +129,44 @@ describe("OpenGraphCreator core", () => {
     expect(serializedVisual && "effects" in serializedVisual ? serializedVisual.effects.noise?.blendMode : undefined).toBe("soft-light");
     expect(serializedVisual && "effects" in serializedVisual ? serializedVisual.effects.lighting?.type : undefined).toBe("spotlight");
     expect(serializedVisual && "effects" in serializedVisual ? serializedVisual.effects.vignette : undefined).toBe(0.16);
+  });
+
+  it("normalizes percent-style generated gradient stops before Studio uses them", () => {
+    const project = createDefaultProject({ name: "Percent Gradient", strategy: "common" });
+    project.layers = project.layers.map((layer) =>
+      layer.id === "background" && "effects" in layer
+        ? {
+            ...layer,
+            effects: {
+              ...layer.effects,
+              gradient: {
+                type: "linear",
+                angle: 0,
+                stops: [
+                  { color: "#05080c", position: 0, opacity: 1.2 },
+                  { color: "#07111a", position: 62, opacity: 0.72 },
+                  { color: "#07111a", position: 100, opacity: -0.4 }
+                ]
+              }
+            }
+          }
+        : layer
+    );
+
+    const { project: normalized, changed, warnings } = normalizeProjectEffects(project);
+    const background = normalized.layers.find((layer) => layer.id === "background");
+    const stops = background && "effects" in background ? background.effects.gradient?.stops : undefined;
+
+    expect(changed).toBe(true);
+    expect(warnings).toEqual(expect.arrayContaining([
+      "Normalized gradient stop position on layer Background from 62 to 0.62.",
+      "Normalized gradient stop position on layer Background from 100 to 1.",
+      "Clamped gradient stop opacity on layer Background to 0..1."
+    ]));
+    expect(warnings).toHaveLength(3);
+    expect(stops?.map((stop) => stop.position)).toEqual([0, 0.62, 1]);
+    expect(stops?.map((stop) => stop.opacity)).toEqual([1, 0.72, 0]);
+    expect(validateProject(normalized).ok).toBe(true);
   });
 
   it("uses the editorial production template palette instead of the rejected blue-gray defaults", () => {

@@ -2,7 +2,7 @@
 import { realpathSync } from "node:fs";
 import { appendFile, copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, normalize, relative } from "node:path";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createServer } from "node:http";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
@@ -11,6 +11,7 @@ import {
   createPageVariantProjects,
   createProjectFromPreset,
   sanitizeGeneratedProjectEffects,
+  normalizeProjectEffects,
   validateStudioDocument,
   getRenderableProject,
   type ExportFormat,
@@ -77,6 +78,35 @@ export interface StudioLaunchRecord {
   pid?: number;
   openedAt: string;
   reused?: boolean;
+}
+
+export interface UpdateReportInput {
+  home?: string;
+  currentRuntimeVersion?: string;
+  latestRuntimeVersion?: string;
+  bundledSkillVersion?: string;
+}
+
+export interface InstalledSkillStatus {
+  path: string;
+  version?: string;
+  status: "fresh" | "stale" | "unknown";
+}
+
+export interface UpdateReport {
+  runtime: {
+    currentVersion: string;
+    latestVersion?: string;
+    updateAvailable: boolean | "unknown";
+    autoUpdateCommand: string;
+  };
+  skill: {
+    bundledVersion?: string;
+    installed: InstalledSkillStatus[];
+    updateRequired: boolean;
+    manualUpdateCommands: string[];
+    restartRequired: boolean;
+  };
 }
 
 export interface ExportProjectFileInput {
@@ -152,19 +182,28 @@ export function createProjectFromArgs(args: CreateProjectArgs): OgProject {
   return project.strategy === "pages" || project.strategy === "hybrid" ? createMultiPageProject(project) : project;
 }
 
-export async function readReusableStudioLaunch(repo: string, sessionId: string): Promise<StudioLaunchRecord | undefined> {
+export async function readReusableStudioLaunch(
+  repo: string,
+  sessionId: string,
+  options: { latestVersion?: string } = {}
+): Promise<StudioLaunchRecord | undefined> {
   const launchPath = join(getSessionPaths(repo, sessionId).sessionDir, "studio.json");
   try {
     const launch = JSON.parse(await readFile(launchPath, "utf8")) as StudioLaunchRecord;
     if (launch.sessionId !== sessionId || normalize(launch.repo) !== normalize(repo) || !launch.url) return undefined;
-    const alive = await isStudioLaunchAlive(launch, repo, sessionId);
+    const alive = await isStudioLaunchAlive(launch, repo, sessionId, options.latestVersion);
     return alive ? { ...launch, reused: true } : undefined;
   } catch {
     return undefined;
   }
 }
 
-async function isStudioLaunchAlive(launch: StudioLaunchRecord, repo: string, sessionId: string): Promise<boolean> {
+async function isStudioLaunchAlive(
+  launch: StudioLaunchRecord,
+  repo: string,
+  sessionId: string,
+  latestVersion?: string
+): Promise<boolean> {
   try {
     const healthUrl = new URL(launch.url);
     healthUrl.pathname = "/api/session";
@@ -174,7 +213,16 @@ async function isStudioLaunchAlive(launch: StudioLaunchRecord, repo: string, ses
     const response = await fetch(healthUrl, { signal: AbortSignal.timeout(900) });
     if (!response.ok) return false;
     const body = await response.json() as { session?: { id?: string; repo?: string } };
-    return body.session?.id === sessionId && (!body.session.repo || normalize(body.session.repo) === normalize(repo));
+    const sameSession = body.session?.id === sessionId && (!body.session.repo || normalize(body.session.repo) === normalize(repo));
+    if (!sameSession) return false;
+    if (!latestVersion) return true;
+    const versionUrl = new URL(launch.url);
+    versionUrl.pathname = "/api/version";
+    versionUrl.search = "";
+    const versionResponse = await fetch(versionUrl, { signal: AbortSignal.timeout(900) });
+    if (!versionResponse.ok) return false;
+    const version = await versionResponse.json() as { version?: string };
+    return Boolean(version.version && compareVersions(version.version, latestVersion) >= 0);
   } catch {
     return false;
   }
@@ -229,23 +277,76 @@ export async function applyMetadataPlanToRepo(input: ApplyMetadataInput): Promis
   return plan;
 }
 
+export async function createUpdateReport(input: UpdateReportInput = {}): Promise<UpdateReport> {
+  const home = input.home ?? process.env.USERPROFILE ?? process.env.HOME ?? process.cwd();
+  const currentVersion = input.currentRuntimeVersion ?? await readCurrentRuntimeVersion();
+  const latestVersion = input.latestRuntimeVersion ?? await fetchLatestRuntimeVersion();
+  const bundledSkillVersion = input.bundledSkillVersion ?? await readBundledSkillVersion();
+  const installed = await readInstalledSkillStatuses(home, bundledSkillVersion);
+  const updateAvailable =
+    latestVersion === undefined ? "unknown" : compareVersions(latestVersion, currentVersion) > 0;
+  const updateRequired = installed.some((skill) => skill.status !== "fresh") || installed.length === 0;
+
+  return {
+    runtime: {
+      currentVersion,
+      latestVersion,
+      updateAvailable,
+      autoUpdateCommand: "npx -y opengraph-creator@latest"
+    },
+    skill: {
+      bundledVersion: bundledSkillVersion,
+      installed,
+      updateRequired,
+      manualUpdateCommands: [
+        "npx skills check",
+        "npx skills update",
+        "npx -y opengraph-creator@latest doctor --json"
+      ],
+      restartRequired: updateRequired
+    }
+  };
+}
+
+export function shouldAutoRefreshRuntime(input: {
+  command?: string;
+  currentVersion?: string;
+  latestVersion?: string;
+  env?: Record<string, string | undefined>;
+}): boolean {
+  if (!input.command || !input.currentVersion || !input.latestVersion) return false;
+  if (input.env?.OPENGRAPH_CREATOR_AUTO_UPDATED === "1") return false;
+  if (input.env?.OPENGRAPH_CREATOR_DISABLE_AUTO_UPDATE === "1") return false;
+  if (input.command === "install-skill" || input.command === "update") return false;
+  return compareVersions(input.latestVersion, input.currentVersion) > 0;
+}
+
 export async function createDoctorReport(input: DoctorReportInput = {}): Promise<DoctorReport> {
   const home = input.home ?? process.env.USERPROFILE ?? process.env.HOME ?? process.cwd();
   const staticDir = input.staticDir ?? getDefaultStudioStaticDir();
-  const skillCandidates = [
-    join(home, ".codex", "skills", "opengraph-creator", "SKILL.md"),
-    join(home, ".claude", "skills", "opengraph-creator", "SKILL.md"),
-    join(home, ".config", "opencode", "skill", "opengraph-creator", "SKILL.md"),
-    join(home, ".config", "opencode", "skills", "opengraph-creator", "SKILL.md"),
-    join(home, ".agents", "skills", "opengraph-creator", "SKILL.md"),
-    join(home, ".opencode", "skill", "opengraph-creator", "SKILL.md")
-  ];
+  const update = await createUpdateReport({ home });
+  const skillCandidates = getSkillCandidates(home);
   const checks: DoctorCheck[] = [
     {
       id: "cli",
       label: "CLI",
       status: "pass",
       detail: "OpenGraph Creator CLI entrypoint is available."
+    },
+    {
+      id: "runtime-update",
+      label: "Runtime update",
+      status: update.runtime.updateAvailable === true ? "warn" : "pass",
+      detail:
+        update.runtime.updateAvailable === true
+          ? `A newer Studio runtime is available (${update.runtime.latestVersion}). OpenGraph Creator can relaunch through ${update.runtime.autoUpdateCommand}.`
+          : update.runtime.updateAvailable === "unknown"
+            ? "Could not check the npm registry for a newer Studio runtime."
+            : `Studio runtime is current (${update.runtime.currentVersion}).`,
+      action:
+        update.runtime.updateAvailable === true
+          ? `${update.runtime.autoUpdateCommand} doctor --json`
+          : undefined
     },
     {
       id: "renderer",
@@ -285,8 +386,11 @@ export async function createDoctorReport(input: DoctorReportInput = {}): Promise
       ? {
           id: "agent-skill-installed",
           label: "Installed agent skill",
-          status: "pass",
-          detail: "OpenGraph Creator skill is installed in a known local skills directory."
+          status: update.skill.updateRequired ? "warn" : "pass",
+          detail: update.skill.updateRequired
+            ? "OpenGraph Creator skill is installed but stale. Update skills, then start a new agent session."
+            : "OpenGraph Creator skill is installed in a known local skills directory.",
+          action: update.skill.updateRequired ? update.skill.manualUpdateCommands.join(" && ") : undefined
         }
       : {
           id: "agent-skill-installed",
@@ -315,6 +419,18 @@ export async function runCli(argv: string[]): Promise<void> {
   if (!command || command === "help" || command === "--help") {
     printHelp();
     return;
+  }
+
+  if (command === "update") {
+    const [subcommand, ...updateRest] = rest;
+    const args = parseArgs(updateRest);
+    if (subcommand === "check") {
+      const report = await createUpdateReport({ home: args.home });
+      console.log(JSON.stringify(report, null, 2));
+      if (report.skill.updateRequired) process.exitCode = 1;
+      return;
+    }
+    throw new Error("Unknown update command. Use check.");
   }
 
   if (command === "session") {
@@ -427,7 +543,10 @@ export async function runCli(argv: string[]): Promise<void> {
       const preflight = await preflightSessionDocument(repo, args.id, { repairLegacyProject: true });
       if (!preflight.ok) throw new Error(formatSessionDocumentPreflightError(preflight));
       if (args.forceNew !== "true") {
-        const reusable = await readReusableStudioLaunch(repo, args.id);
+        const update = await createUpdateReport();
+        const reusable = await readReusableStudioLaunch(repo, args.id, {
+          latestVersion: update.runtime.latestVersion
+        });
         if (reusable) {
           await appendSessionEvent(repo, args.id, {
             type: "studio.reused",
@@ -933,7 +1052,7 @@ async function readProjectDocumentForChecks(source: string): Promise<{ project: 
     const document = await readStudioDocumentFile(source);
     return { project: document.project, assets: document.assets };
   }
-  return { project: JSON.parse(await readFile(source, "utf8")) as OgProject, assets: {} };
+  return { project: normalizeProjectEffects(JSON.parse(await readFile(source, "utf8")) as OgProject).project, assets: {} };
 }
 
 async function writeGenerationControlLog(
@@ -1095,6 +1214,7 @@ export async function preflightSessionDocument(
           message: "Sanitized generated document effects before Studio launch",
           data: { documentPath: paths.documentFile, warnings: sanitized.warnings }
         });
+        await markSessionEditingAfterDocumentPreflight(repo, session, paths.documentFile, project.projectId);
         return {
           ok: true,
           sessionId,
@@ -1105,6 +1225,9 @@ export async function preflightSessionDocument(
           warnings: nextWarnings,
           recovery: []
         };
+      }
+      if (options.repairLegacyProject) {
+        await markSessionEditingAfterDocumentPreflight(repo, session, paths.documentFile, project.projectId);
       }
       return {
         ok: true,
@@ -1149,8 +1272,10 @@ export async function preflightSessionDocument(
       await writeStudioDocumentFile(paths.documentFile, sanitized.project);
       await writeOpenGraphCreatorSession({
         ...session,
+        status: "editing",
         activeProjectId: sanitized.project.projectId,
         activeDocumentPath: paths.documentFile,
+        pendingAction: "studio-editing",
         lastHeartbeatAt: new Date().toISOString()
       }, repo);
       await appendSessionEvent(repo, sessionId, {
@@ -1190,6 +1315,28 @@ export async function preflightSessionDocument(
     warnings,
     recovery
   };
+}
+
+async function markSessionEditingAfterDocumentPreflight(
+  repo: string,
+  session: Awaited<ReturnType<typeof readOpenGraphCreatorSession>>,
+  documentPath: string,
+  projectId: string
+): Promise<void> {
+  if (session.status !== "waiting-for-agent" && session.pendingAction !== "agent-generate-og-source") return;
+  await writeOpenGraphCreatorSession({
+    ...session,
+    status: "editing",
+    activeProjectId: projectId,
+    activeDocumentPath: documentPath,
+    pendingAction: "studio-editing",
+    lastHeartbeatAt: new Date().toISOString()
+  }, repo);
+  await appendSessionEvent(repo, session.id, {
+    type: "session.repaired",
+    message: "Session moved to editing because a valid Studio document exists.",
+    data: { documentPath, projectId }
+  });
 }
 
 async function getSessionHealthWarnings(repo: string, sessionId: string, session: Awaited<ReturnType<typeof readOpenGraphCreatorSession>>): Promise<string[]> {
@@ -1391,6 +1538,7 @@ Commands:
   opengraph-creator publish --confirm --session <session-id> --image public/og.png
   opengraph-creator publish --preview --session <session-id> --allPages true
   opengraph-creator publish --confirm --session <session-id> --allPages true
+  opengraph-creator update check --json
   opengraph-creator doctor
 `);
 }
@@ -1432,6 +1580,88 @@ async function hasBundledSkillSource(): Promise<boolean> {
     if (await pathExists(fileURLToPath(candidate))) return true;
   }
   return false;
+}
+
+function getSkillCandidates(home: string): string[] {
+  return [
+    join(home, ".codex", "skills", "opengraph-creator", "SKILL.md"),
+    join(home, ".claude", "skills", "opengraph-creator", "SKILL.md"),
+    join(home, ".config", "opencode", "skill", "opengraph-creator", "SKILL.md"),
+    join(home, ".config", "opencode", "skills", "opengraph-creator", "SKILL.md"),
+    join(home, ".agents", "skills", "opengraph-creator", "SKILL.md"),
+    join(home, ".opencode", "skill", "opengraph-creator", "SKILL.md")
+  ];
+}
+
+async function readInstalledSkillStatuses(home: string, bundledVersion?: string): Promise<InstalledSkillStatus[]> {
+  const statuses: InstalledSkillStatus[] = [];
+  for (const path of getSkillCandidates(home)) {
+    if (!(await pathExists(path))) continue;
+    const content = await readFile(path, "utf8");
+    const version = extractSkillVersion(content);
+    const status: InstalledSkillStatus["status"] =
+      bundledVersion && version
+        ? compareVersions(version, bundledVersion) >= 0
+          ? "fresh"
+          : "stale"
+        : "unknown";
+    statuses.push({ path, version, status });
+  }
+  return statuses;
+}
+
+async function readBundledSkillVersion(): Promise<string | undefined> {
+  const candidates = [
+    new URL("../../../skills/opengraph-creator/SKILL.md", import.meta.url),
+    new URL("../bundled-skill/SKILL.md", import.meta.url),
+    new URL("../../bundled-skill/SKILL.md", import.meta.url),
+    new URL("../codex-skill/SKILL.md", import.meta.url),
+    new URL("../../codex-skill/SKILL.md", import.meta.url)
+  ];
+  for (const candidate of candidates) {
+    try {
+      return extractSkillVersion(await readFile(fileURLToPath(candidate), "utf8"));
+    } catch {
+      // Try the next source location.
+    }
+  }
+  return undefined;
+}
+
+function extractSkillVersion(content: string): string | undefined {
+  return /opengraph_creator_skill_version:\s*["']?([0-9]+\.[0-9]+\.[0-9]+)["']?/i.exec(content)?.[1];
+}
+
+async function readCurrentRuntimeVersion(): Promise<string> {
+  try {
+    const packageJson = JSON.parse(await readFile(fileURLToPath(new URL("../package.json", import.meta.url)), "utf8")) as { version?: string };
+    return packageJson.version ?? "0.0.0";
+  } catch {
+    return "0.0.0";
+  }
+}
+
+async function fetchLatestRuntimeVersion(): Promise<string | undefined> {
+  try {
+    const response = await fetch("https://registry.npmjs.org/opengraph-creator/latest", {
+      signal: AbortSignal.timeout(1800)
+    });
+    if (!response.ok) return undefined;
+    const body = await response.json() as { version?: string };
+    return body.version;
+  } catch {
+    return undefined;
+  }
+}
+
+function compareVersions(a: string, b: string): number {
+  const left = a.split(".").map((part) => Number.parseInt(part, 10) || 0);
+  const right = b.split(".").map((part) => Number.parseInt(part, 10) || 0);
+  for (let index = 0; index < Math.max(left.length, right.length); index += 1) {
+    const diff = (left[index] ?? 0) - (right[index] ?? 0);
+    if (diff !== 0) return diff;
+  }
+  return 0;
 }
 
 async function anyPathExists(paths: string[]): Promise<boolean> {
@@ -1920,8 +2150,47 @@ function isCliEntrypoint(argvPath = process.argv[1]): boolean {
   }
 }
 
+async function runCliEntrypoint(argv: string[]): Promise<void> {
+  const [command, subcommand] = argv;
+  const update = await createUpdateReport({ home: parseEntrypointHome(argv) });
+  if (shouldAutoRefreshRuntime({
+    command,
+    currentVersion: update.runtime.currentVersion,
+    latestVersion: update.runtime.latestVersion,
+    env: process.env
+  })) {
+    const result = spawnSync("npx", ["-y", "opengraph-creator@latest", ...argv], {
+      stdio: "inherit",
+      env: { ...process.env, OPENGRAPH_CREATOR_AUTO_UPDATED: "1" },
+      shell: process.platform === "win32"
+    });
+    process.exitCode = result.status ?? 1;
+    return;
+  }
+
+  if (isGenerationBoundaryCommand(command, subcommand) && update.skill.updateRequired) {
+    console.error("OpenGraph Creator skill is missing or stale. Update the skill, then start a new agent session.");
+    for (const command of update.skill.manualUpdateCommands) console.error(command);
+    process.exitCode = 1;
+    return;
+  }
+
+  await runCli(argv);
+}
+
+function isGenerationBoundaryCommand(command?: string, subcommand?: string): boolean {
+  return command === "session" && (subcommand === "create" || subcommand === "attach");
+}
+
+function parseEntrypointHome(argv: string[]): string | undefined {
+  const index = argv.indexOf("--home");
+  if (index >= 0) return argv[index + 1];
+  const equals = argv.find((item) => item.startsWith("--home="));
+  return equals?.slice("--home=".length);
+}
+
 if (isCliEntrypoint()) {
-  runCli(process.argv.slice(2)).catch((error: unknown) => {
+  runCliEntrypoint(process.argv.slice(2)).catch((error: unknown) => {
     console.error(error instanceof Error ? error.message : String(error));
     process.exitCode = 1;
   });

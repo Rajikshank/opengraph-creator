@@ -7,6 +7,7 @@ import {
   isGlowEffectEnabled,
   normalizePerspectiveQuad,
   normalizeGlowEffect,
+  normalizeProjectEffects,
   type ImageLayer,
   type OgLayer,
   type OgProject
@@ -18,7 +19,7 @@ import {
 } from "./effects-svg.js";
 
 export function renderProjectToSvg(project: OgProject): string {
-  const renderableProject = getRenderableProject(project);
+  const renderableProject = getRenderableProject(normalizeProjectEffects(project).project);
   const visibleLayers = renderableProject.layers.filter((layer) => !layer.hidden);
   const defs = [
     ...visibleLayers.flatMap((layer) => [...renderEffectDefs(layer, renderableProject), ...renderImageDefs(layer)])

@@ -444,6 +444,12 @@ export interface GeneratedProjectEffectsSanitization {
   warnings: string[];
 }
 
+export interface ProjectEffectsNormalization {
+  project: OgProject;
+  changed: boolean;
+  warnings: string[];
+}
+
 export interface PlatformWarning {
   code: "safe-zone" | "large-file" | "low-contrast" | "empty-text" | "hidden-important-layer";
   severity: "info" | "warning" | "error";
@@ -971,6 +977,50 @@ export function sanitizeGeneratedProjectEffects(
     changed,
     warnings
   };
+}
+
+export function normalizeProjectEffects(project: OgProject): ProjectEffectsNormalization {
+  const warnings: string[] = [];
+  let changed = false;
+  const normalize = (layer: OgLayer): OgLayer => {
+    if (!("effects" in layer)) return layer;
+    const gradient = layer.effects.gradient;
+    if (!gradient) return layer;
+    const stops = gradient.stops.map((stop) => {
+      let nextPosition = stop.position;
+      let nextOpacity = stop.opacity;
+      if (Number.isFinite(nextPosition) && nextPosition > 1 && nextPosition <= 100) {
+        nextPosition = Number((nextPosition / 100).toFixed(4));
+        changed = true;
+        warnings.push(`Normalized gradient stop position on layer ${layer.name} from ${stop.position} to ${nextPosition}.`);
+      }
+      const clampedPosition = clampNumber(Number.isFinite(nextPosition) ? nextPosition : 0, 0, 1);
+      if (clampedPosition !== nextPosition) {
+        nextPosition = clampedPosition;
+        changed = true;
+        warnings.push(`Clamped gradient stop position on layer ${layer.name} to 0..1.`);
+      }
+      const clampedOpacity = clampNumber(Number.isFinite(nextOpacity) ? nextOpacity : 1, 0, 1);
+      if (clampedOpacity !== nextOpacity) {
+        nextOpacity = clampedOpacity;
+        changed = true;
+        warnings.push(`Clamped gradient stop opacity on layer ${layer.name} to 0..1.`);
+      }
+      return { ...stop, position: nextPosition, opacity: nextOpacity };
+    });
+    return changed ? { ...layer, effects: { ...layer.effects, gradient: { ...gradient, stops } } } : layer;
+  };
+  const layers = project.layers.map(normalize);
+  const pages = project.pages?.map((page) => ({ ...page, layers: page.layers.map(normalize) }));
+  return {
+    project: changed ? { ...project, layers, pages, updatedAt: new Date().toISOString() } : project,
+    changed,
+    warnings: dedupeStrings(warnings)
+  };
+}
+
+function dedupeStrings(values: string[]): string[] {
+  return [...new Set(values)];
 }
 
 function sanitizeGeneratedLayerEffects(

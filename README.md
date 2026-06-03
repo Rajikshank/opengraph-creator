@@ -156,18 +156,23 @@ Preview requests are not publish approval. Metadata is changed only after confir
 
 ## Updating
 
-Update installed skills:
+Check runtime and skill freshness:
+
+```bash
+npx -y opengraph-creator@latest update check --json
+```
+
+OpenGraph Creator can relaunch the Studio runtime through `npx -y opengraph-creator@latest` when a newer runtime is available.
+
+Skill updates are manual because the running coding agent may already have loaded the old instructions. If the update check reports a stale skill, stop the current OG task, run:
 
 ```bash
 npx skills check
 npx skills update
-```
-
-Use the latest runtime:
-
-```bash
 npx -y opengraph-creator@latest doctor --json
 ```
+
+Then start a new agent session.
 
 ## Troubleshooting
 

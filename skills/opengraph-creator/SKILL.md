@@ -1,6 +1,8 @@
 ---
 name: opengraph-creator
 description: Use when Codex, Claude Code, or OpenCode needs to create, revise, preview, export, or wire editable Open Graph images, social previews, per-page OG images, or .ogdoc Studio documents for an app, website, route, page, launch, blog post, SaaS project, or local repo.
+metadata:
+  opengraph_creator_skill_version: 0.1.8
 ---
 
 # OpenGraph Creator
@@ -15,13 +17,14 @@ This skill is installed through the skills ecosystem, for example `npx skills ad
 
 ## Update And Doctor
 
-Use the standard skills updater for the skill and npm for the Studio runtime:
+Use the standard skills updater for the skill and npm for the Studio runtime. The Studio runtime may relaunch itself through `npx -y opengraph-creator@latest` when a newer runtime exists. The skill instructions must not be silently updated inside an active task because the running agent may already have loaded the old instructions.
 
-1. Check the installed skill with `npx skills check`.
-2. Update installed skills with `npx skills update`.
-3. Check the Studio runtime with `opengraph-creator doctor --json` or `npx -y opengraph-creator@latest doctor --json`.
-4. If the doctor reports a missing agent skill, prefer reinstalling from the skill repo with `npx skills add -g Rajikshank/opengraph-creator --skill opengraph-creator --agent "*" -y`; use the fallback installer only for local repair, for example `opengraph-creator install-skill --agent opencode --scope global` or `opengraph-creator install-skill --agent all --scope global`.
-5. Do not clone or build the OpenGraph Creator source repo for normal users.
+1. Check updates with `opengraph-creator update check --json` or `npx -y opengraph-creator@latest update check --json`.
+2. If the report says the skill is stale or missing, stop the OG task and tell the user to run `npx skills check`, then `npx skills update`, then `npx -y opengraph-creator@latest doctor --json`.
+3. Tell the user to start a new agent session after updating the skill. Do not continue the current generation flow with stale skill instructions.
+4. If only the Studio runtime is outdated, it may auto-refresh through `npx -y opengraph-creator@latest`; continue after the refreshed runtime starts.
+5. If the doctor reports a missing agent skill, prefer reinstalling from the skill repo with `npx skills add -g Rajikshank/opengraph-creator --skill opengraph-creator --agent "*" -y`; use the fallback installer only for local repair, for example `opengraph-creator install-skill --agent opencode --scope global` or `opengraph-creator install-skill --agent all --scope global`.
+6. Do not clone or build the OpenGraph Creator source repo for normal users.
 
 ## Non-Negotiable Editable Master Rule
 

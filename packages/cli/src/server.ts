@@ -8,6 +8,7 @@ import {
   createAssetPath,
   getRenderableProject,
   mediaTypeFromPath,
+  normalizeProjectEffects,
   validateStudioDocument,
   type ExportFormat,
   type OgProject,
@@ -187,6 +188,14 @@ async function handleRequest(input: {
 }): Promise<void> {
   const url = new URL(input.request.url ?? "/", "http://localhost");
 
+  if (url.pathname === "/api/version" && input.request.method === "GET") {
+    sendJson(input.response, 200, {
+      name: "opengraph-creator",
+      version: await readServerPackageVersion()
+    });
+    return;
+  }
+
   if (url.pathname === "/api/projects" && input.request.method === "GET") {
     sendJson(input.response, 200, { projects: await listLibraryProjects(input.library) });
     return;
@@ -215,7 +224,7 @@ async function handleRequest(input: {
       try {
         const { getSessionPaths } = await import("./session.js");
         const projectJson = getSessionPaths(repo, id).projectJson;
-        project = JSON.parse(await readFile(projectJson, "utf8")) as OgProject;
+        project = normalizeProjectEffects(JSON.parse(await readFile(projectJson, "utf8")) as OgProject).project;
         documentRevision = await readFileRevision(projectJson);
       } catch {
         project = undefined;
@@ -474,6 +483,15 @@ async function handleRequest(input: {
   }
 
   await serveStatic(input.response, input.staticDir, url.pathname);
+}
+
+async function readServerPackageVersion(): Promise<string> {
+  try {
+    const packageJson = JSON.parse(await readFile(fileURLToPath(new URL("../package.json", import.meta.url)), "utf8")) as { version?: string };
+    return packageJson.version ?? "0.0.0";
+  } catch {
+    return "0.0.0";
+  }
 }
 
 function createConnectRecipe(repo: string, project = "<project-id-or-ogdoc>"): { repo: string; command: string; prompt: string; sessionRoot: string } {

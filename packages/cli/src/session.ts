@@ -2,6 +2,7 @@ import { copyFile, mkdir, readFile, rename, stat, unlink, writeFile } from "node
 import { dirname, join } from "node:path";
 import {
   packStudioDocument,
+  normalizeProjectEffects,
   type AgentKind,
   type ExportFormat,
   type Framework,
@@ -126,7 +127,7 @@ export async function createOpenGraphCreatorSession(input: CreateSessionInput): 
   await atomicWriteJson(paths.sessionJson, session);
   if (project) {
     project.sessionId = id;
-    await writeFile(paths.documentFile, await packStudioDocument({ project }));
+    await writeFile(paths.documentFile, await packStudioDocument({ project: normalizeProjectEffects(project).project }));
   }
   await writeFile(paths.eventsJsonl, `${JSON.stringify(createSessionEvent(id, "session.created", "Session created"))}\n`, "utf8");
   return session;
@@ -163,7 +164,7 @@ export async function attachOpenGraphCreatorSession(input: AttachSessionInput): 
   await mkdir(paths.incomingDir, { recursive: true });
   await atomicWriteJson(paths.sessionJson, session);
   await writeFile(paths.documentFile, await packStudioDocument({
-    project,
+    project: normalizeProjectEffects(project).project,
     assets: input.assets ?? {},
     previews: input.previews ?? {}
   }));

@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import {
   createAssetPath,
+  normalizeProjectEffects,
   packStudioDocument,
   unpackStudioDocument,
   validateStudioDocument,
@@ -10,7 +11,9 @@ import {
 } from "@opengraph-creator/core";
 
 export async function readStudioDocumentFile(path: string): Promise<StudioDocumentPackage> {
-  return unpackStudioDocument(await readFile(path));
+  const document = await unpackStudioDocument(await readFile(path));
+  const normalized = normalizeProjectEffects(document.project);
+  return normalized.changed ? { ...document, project: normalized.project } : document;
 }
 
 export async function writeStudioDocumentFile(
@@ -19,10 +22,11 @@ export async function writeStudioDocumentFile(
   assets: Record<string, Uint8Array> = {},
   previews: Record<string, Uint8Array> = {}
 ): Promise<void> {
-  const validation = validateStudioDocument(project, assets);
+  const normalized = normalizeProjectEffects(project);
+  const validation = validateStudioDocument(normalized.project, assets);
   if (!validation.ok) throw new Error(`Invalid Studio document: ${validation.errors.join(" ")}`);
   await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, await packStudioDocument({ project, assets, previews }));
+  await writeFile(path, await packStudioDocument({ project: normalized.project, assets, previews }));
 }
 
 export function getNextAssetPath(fileName: string, assets: Record<string, Uint8Array>): string {

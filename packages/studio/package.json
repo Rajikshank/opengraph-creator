@@ -1,6 +1,6 @@
 {
   "name": "@opengraph-creator/studio",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "React Studio interface for OpenGraph Creator.",
   "license": "MIT",
   "repository": {
@@ -21,8 +21,8 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@fontsource-variable/geist": "^5.2.9",
     "@fontsource/poppins": "^5.2.7",
-    "@opengraph-creator/core": "0.1.7",
-    "@opengraph-creator/render": "0.1.7",
+    "@opengraph-creator/core": "0.1.8",
+    "@opengraph-creator/render": "0.1.8",
     "@radix-ui/react-scroll-area": "^1.2.10",
     "@radix-ui/react-select": "^2.2.6",
     "@radix-ui/react-slider": "^1.2.2",

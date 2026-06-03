@@ -41,7 +41,7 @@ await runCommand(["export", "--project", cliOnlyProjectPath, "--format", "png", 
 await runNpm(["install", coreTarball, renderTarball, cliTarball, "--no-audit", "--no-fund"], { cwd: appDir });
 await runCommand(["doctor", "--json"]);
 await runCommand(["install-skill", "--agent", "all", "--home", homeDir]);
-await runCommand(["session", "create", "--repo", appDir, "--id", sessionId, "--agent", "codex"]);
+await runCommand(["session", "create", "--repo", appDir, "--id", sessionId, "--agent", "codex", "--home", homeDir]);
 await runCommand(["new", "--name", "PackedApp", "--strategy", "hybrid", "--mode", "template", "--out", projectPath]);
 await runCommand(["document", "pack", "--project", projectPath, "--out", documentPath]);
 await runCommand(["document", "validate", "--source", documentPath]);
