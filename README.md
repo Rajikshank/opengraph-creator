@@ -1,32 +1,60 @@
 # OpenGraph Creator
 
-OpenGraph Creator is an agent-first Open Graph image studio for app repositories.
+Agent-first Open Graph image creation for real app repositories.
 
-Your coding agent, such as Codex, Claude Code, or OpenCode, inspects the app and creates an editable `.ogdoc` document. OpenGraph Creator Studio opens that document, lets you edit the OG image visually, previews platform crops, exports optimized `1200x630` assets, and writes handoff files so the agent can wire the final image into the app.
+[![npm version](https://img.shields.io/npm/v/opengraph-creator.svg)](https://www.npmjs.com/package/opengraph-creator)
+[![license](https://img.shields.io/badge/license-MIT-111827.svg)](LICENSE)
 
-OpenGraph Creator does not call OpenAI, Anthropic, or image-generation providers directly. Generation belongs to the coding agent. Studio owns editing, preview, export, compression, recovery, and handoff.
+OpenGraph Creator pairs a coding agent with a local visual Studio. The agent understands your app, creates an editable `.ogdoc` Open Graph document, launches Studio, waits while you edit, then wires the confirmed export back into your project.
+
+OpenGraph Creator does not call OpenAI, Anthropic, or image-generation providers directly. Generation belongs to the coding agent. Studio handles editing, preview, export, compression, recovery, and publish handoff.
 
 ![OpenGraph Creator Studio preview](assets/studio-preview.png)
 
-## Install Skill
+## Why It Exists
 
-Install the skill from GitHub for all supported local agents:
+Most OG generators create a flat image. That is fast, but it is hard to revise: text gets baked in, page variants drift, and the final metadata step still has to be wired by hand.
+
+OpenGraph Creator keeps the source editable:
+
+- Agents create layered `.ogdoc` documents instead of one-off flat images.
+- Studio gives users a visual editor for text, images, shapes, effects, previews, and export.
+- The file bridge lets Codex, Claude Code, or OpenCode resume after the user edits.
+- Final metadata changes happen only after an explicit publish handoff.
+
+## Quick Start
+
+Install the public skill for all supported local coding agents:
 
 ```bash
 npx skills add -g Rajikshank/opengraph-creator --skill opengraph-creator --agent "*" -y
 ```
 
-Check the Studio runtime:
+Check that the runtime is available:
 
 ```bash
 npx -y opengraph-creator@latest doctor --json
 ```
 
-Then open your app in Codex, Claude Code, or OpenCode and ask for an editable Open Graph image. The installed skill should inspect the app, ask the required design questions, create a `.ogdoc`, launch Studio, and wait for your publish decision.
+Open your app in Codex, Claude Code, or OpenCode and ask for an editable Open Graph image. The installed skill should inspect the repo, ask the relevant design questions, generate a layered `.ogdoc`, open Studio, and wait for your publish decision.
 
-## Run Studio
+## Install For One Agent
 
-You can also open Studio directly from any app repo:
+```bash
+npx skills add -g Rajikshank/opengraph-creator --skill opengraph-creator --agent codex -y
+npx skills add -g Rajikshank/opengraph-creator --skill opengraph-creator --agent claude-code -y
+npx skills add -g Rajikshank/opengraph-creator --skill opengraph-creator --agent opencode -y
+```
+
+For selected agents, repeat the agent flag:
+
+```bash
+npx skills add -g Rajikshank/opengraph-creator --skill opengraph-creator -a codex -a opencode -y
+```
+
+## Run Studio Directly
+
+Studio can also be opened without an active agent session:
 
 ```bash
 npx -y opengraph-creator@latest studio --repo .
@@ -34,18 +62,15 @@ npx -y opengraph-creator@latest studio --repo .
 
 Manual launch opens the Project Hub. Agent launch opens the generated session document directly.
 
-## Agent Workflow
+## Workflow
 
-After the skill is installed, open your app in Codex, Claude Code, or OpenCode and ask for an editable Open Graph image. The agent should inspect the app, ask the relevant design questions, create the `.ogdoc` session, launch Studio, and wait for your publish decision.
-
-## How It Works
-
-OpenGraph Creator uses a file-based bridge so different coding agents can cooperate with Studio safely:
+OpenGraph Creator uses a durable local session:
 
 ```text
 .opengraph-creator/sessions/<id>/
   session.json
   events.jsonl
+  generation-brief.json
   document.ogdoc
   incoming/
   export.json
@@ -54,88 +79,128 @@ OpenGraph Creator uses a file-based bridge so different coding agents can cooper
   studio.json
 ```
 
-The protected workflow is:
+Typical flow:
 
-1. The installed skill inspects the app.
+1. The skill inspects framework, routes, metadata, brand assets, screenshots, and copy.
 2. The agent asks only relevant designer-style questions.
-3. The agent creates an editable `.ogdoc` master document.
-4. Studio opens automatically with that document.
-5. You edit layers, preview platform crops, and export.
-6. Studio writes publish handoff files.
-7. The agent resumes and wires metadata only after confirmation.
+3. The agent writes a controlled generation brief and creates an editable `.ogdoc`.
+4. Quality gates reject baked text, missing layers, weak asset routing, or broken renderer output.
+5. Studio opens with the generated document.
+6. The user edits, previews platform crops, exports, or requests an agent revision.
+7. Studio writes a confirmed publish request.
+8. The agent wires the final image paths into the target app after confirmation.
 
 ## The `.ogdoc` Format
 
-`.ogdoc` is the editable source of truth. It stores project JSON, packaged assets, recovery metadata, and layered composition data.
+`.ogdoc` is the editable source of truth. It packages:
 
-Flat PNG, WebP, JPEG, SVG, HTML, and JSON files can be imported as assets or exported as final outputs, but they do not replace `.ogdoc` unless the user explicitly chooses a pure-image fallback.
+- project JSON
+- layers and page variants
+- source assets
+- previews
+- recovery metadata
 
-## Studio Features
+Flat PNG, WebP, JPEG, SVG, HTML, and JSON files can be imported as assets or exported as final output, but they do not replace `.ogdoc` unless the user explicitly chooses a pure-image fallback.
 
-- Editable text, image, logo, screenshot, shape, badge, and background layers.
+## Studio Capabilities
+
+- Text, image, logo, screenshot, shape, badge, and background layers.
 - Image upload, replacement, crop, focal point, fit mode, and asset packaging.
-- Typography controls for font, size, weight, style, color, line height, letter spacing, stroke, and stroke width.
-- Shape controls for fill, border, radius, opacity, rotation, skew, perspective, snap, and transform.
-- Effects for supported layer types: blur, shadow, glow, gradient, noise/grain, lighting, vignette, and blend mode.
-- Layer controls for select, reorder, hide, lock, duplicate, delete, align, and distribute.
-- Undo/redo with bounded history and keyboard shortcuts.
+- Font family, weight, style, size, color, line height, letter spacing, stroke, and stroke width.
+- Fill, border, radius, opacity, rotation, skew, perspective, snapping, and transforms.
+- Blur, shadow, glow, gradient, noise/grain, lighting, vignette, blend modes, and advanced effect stacks where supported.
+- Layer select, reorder, hide, lock, duplicate, delete, align, and distribute.
+- Undo and redo with bounded history.
 - Platform previews for X/Twitter, LinkedIn, Facebook, Discord, Slack, WhatsApp, iMessage, and browser/search.
-- Export to exact `1200x630` PNG, WebP, JPEG, or SVG source.
+- Export to exact `1200x630` PNG, WebP, JPEG, SVG, and layered PSD source export.
 
-Unsupported layer/effect combinations are hidden or disabled. The UI should not show fake-functional controls.
+Unsupported layer/effect combinations are disabled or hidden instead of shown as fake controls.
 
-## Agent Commands
+## Generation Quality Gates
 
-These are the core commands the skill uses behind the scenes:
+The skill and CLI use validation steps before Studio launch:
 
 ```bash
-opengraph-creator session create --repo . --agent codex --strategy hybrid --mode template
 opengraph-creator brief lint --source ".opengraph-creator/sessions/<id>/generation-brief.json" --repo . --id "<id>"
 opengraph-creator assets lint --brief ".opengraph-creator/sessions/<id>/generation-brief.json" --repo . --id "<id>"
 opengraph-creator document validate --source ".opengraph-creator/sessions/<id>/document.ogdoc"
 opengraph-creator design lint --source ".opengraph-creator/sessions/<id>/document.ogdoc" --repo . --id "<id>"
 opengraph-creator render check --source ".opengraph-creator/sessions/<id>/document.ogdoc" --repo . --id "<id>"
-opengraph-creator session launch --repo . --id "<id>" --open true --waitReady true --json
+```
+
+When run inside a session, failed checks append recovery details to `generation-errors.jsonl` so the agent can repair the brief or document and continue.
+
+## Agent Handoff
+
+After Studio opens, the agent should keep waiting:
+
+```bash
 opengraph-creator session wait --repo . --id "<id>" --until next-action --timeout 0
 ```
 
-The lint commands prevent weak generated output before Studio opens: they check the capability gate, structured asset plan, no-baked-text rules, `.ogdoc` editability, renderer output, and write recoverable `generation-errors.jsonl` entries when run inside a session.
+Possible next actions:
 
-When `next-action` returns:
+- `agent-requested`: Studio asks the agent to revise the editable `.ogdoc`.
+- `published`: Studio has exported and confirmed publish handoff files.
+- `cancelled` or `terminal`: no metadata changes should be made.
 
-- `agent-requested`: the agent reads `agent-request.json`, revises `document.ogdoc`, validates, relaunches Studio, and waits again.
-- `published`: the agent reads confirmed `publish-request.json`, previews the metadata change, then wires it into the app.
-- `cancelled` or `terminal`: the agent stops without metadata mutation.
+Preview requests are not publish approval. Metadata is changed only after confirmed handoff.
+
+## Privacy And Boundaries
+
+- No provider API keys are required by Studio.
+- Studio does not call AI providers.
+- Metadata is never changed by Studio alone.
+- Session files stay local in the target repo.
+- Platform previews are local simulations; deployed URLs should still be checked with live social validators before launch.
 
 ## Updating
 
-Update the installed skill:
+Update installed skills:
 
 ```bash
-npx skills update opengraph-creator
+npx skills check
+npx skills update
 ```
 
-Use the latest Studio runtime:
+Use the latest runtime:
 
 ```bash
 npx -y opengraph-creator@latest doctor --json
 ```
 
-To target only one agent:
+## Troubleshooting
+
+If the runtime is missing, run:
 
 ```bash
-npx skills add -g Rajikshank/opengraph-creator --skill opengraph-creator --agent codex -y
-npx skills add -g Rajikshank/opengraph-creator --skill opengraph-creator --agent claude-code -y
+npx -y opengraph-creator@latest doctor --json
+```
+
+If one agent cannot see the skill, reinstall for that agent:
+
+```bash
 npx skills add -g Rajikshank/opengraph-creator --skill opengraph-creator --agent opencode -y
 ```
 
-For local repair only, use:
+The runtime also includes a fallback repair installer for local recovery:
 
 ```bash
-opengraph-creator install-skill --agent codex --scope global
+opengraph-creator install-skill --agent all --scope global
 ```
 
-Normal users should install through `npx skills add`, not by cloning this repository.
+Normal setup should use `npx skills add`.
+
+## Repository Layout
+
+- `skills/opengraph-creator`: public skill source for Codex, Claude Code, and OpenCode.
+- `packages/cli`: runtime CLI, Studio server, sessions, validation gates, packaging, and publish handoff.
+- `packages/studio`: React/Vite Studio interface.
+- `packages/core`: `.ogdoc` schema, document validation, effects, and project helpers.
+- `packages/render`: SVG renderer and raster export pipeline.
+- `scripts`: workflow, package, handoff, agent, and Studio smoke tests.
+
+Generated package outputs such as `packages/cli/bundled-skill` and `packages/cli/studio-dist` are build artifacts and are not committed source.
 
 ## Development
 
@@ -150,60 +215,8 @@ npm run smoke:agent-handoff
 npm run smoke:agent-next-action
 npm run smoke:package
 npm run smoke:studio
-npm pack -w opengraph-creator --dry-run
 ```
 
-Run Studio locally:
+## License
 
-```bash
-npm run opengraph-creator -- studio --repo .
-```
-
-## Package Layout
-
-- `packages/core`: schema, validation, platform warnings, effect capabilities, and `.ogdoc` package support.
-- `packages/render`: SVG renderer and PNG/WebP/JPEG export pipeline.
-- `packages/studio`: React/Vite creative-tool interface.
-- `packages/cli`: CLI, local Studio server, sessions, packaging, skill install, and publish helpers.
-- `skills/opengraph-creator`: the single authored public skill package for Codex, Claude Code, and OpenCode.
-- `packages/cli/bundled-skill` and `packages/cli/studio-dist`: generated during `npm run build` for the packed npm runtime; they are not committed source.
-- `scripts`: workflow, package, handoff, agent, and Studio smoke tests.
-
-## Release
-
-1. Confirm the release gate passes:
-
-```bash
-npm run build
-npm test
-npm run typecheck
-npm run lint
-npm run smoke:workflow
-npm run smoke:agent-handoff
-npm run smoke:agent-next-action
-npm run smoke:package
-npm run smoke:studio
-npm pack -w opengraph-creator --dry-run
-```
-
-2. Push `main` to GitHub.
-3. Log in to npm with `npm login`.
-4. Publish the runtime:
-
-```bash
-npm publish -w opengraph-creator --access public
-```
-
-5. Test a real install from a separate app:
-
-```bash
-npx skills add -g Rajikshank/opengraph-creator --skill opengraph-creator --agent "*" -y
-npx -y opengraph-creator@latest doctor --json
-```
-
-## Boundaries
-
-- Studio does not call provider APIs or require provider API keys.
-- Metadata is never changed by Studio alone.
-- Platform previews are local simulations. Deployed URLs should still be checked with live social validators before launch.
-- Dynamic framework metadata can still require human review after OpenGraph Creator writes a confirmed handoff.
+MIT
