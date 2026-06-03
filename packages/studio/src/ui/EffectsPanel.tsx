@@ -1,9 +1,13 @@
 import { Lightbulb } from "lucide-react";
-import { getLayerEffectCapabilities, normalizeGlowEffect, type GlowEffect, type GradientEffect, type GradientStop, type NoiseEffect } from "@opengraph-creator/core";
+import { useEffect, useState } from "react";
+import { getLayerEffectCapabilities, normalizeGlowEffect, normalizeLayerStyleEffects, type GlowEffect, type GradientEffect, type GradientStop, type LayerStyleEffect, type LightingEffect, type NoiseEffect } from "@opengraph-creator/core";
 import { StudioField } from "../design-system/StudioField";
 import { StudioSelect } from "../design-system/StudioSelect";
 import { StudioSlider } from "../design-system/StudioSlider";
 import { StudioSwitch } from "../design-system/StudioSwitch";
+import { EffectGallery, createDefaultStudioEffect } from "./EffectGallery";
+import { EffectStack } from "./EffectStack";
+import { LightPositionPad } from "./LightPositionPad";
 import { useStudio } from "./studio-store";
 
 export function EffectsPanel() {
@@ -12,8 +16,13 @@ export function EffectsPanel() {
   const setLayerEffects = useStudio((state) => state.setLayerEffects);
   const setLayerEffectsTransient = useStudio((state) => state.setLayerEffectsTransient);
   const commitTransientHistory = useStudio((state) => state.commitTransientHistory);
+  const [selectedEffectId, setSelectedEffectId] = useState<string | undefined>();
   const layer = project?.layers.find((item) => item.id === selectedLayerId);
   const effects = layer && "effects" in layer ? layer.effects : undefined;
+  const stack = effects ? normalizeLayerStyleEffects(effects) : [];
+  useEffect(() => {
+    setSelectedEffectId((current) => current && stack.some((effect) => effect.id === current) ? current : stack[0]?.id);
+  }, [layer?.id, stack.length]);
   if (!layer || !effects) return null;
   const capabilities = getLayerEffectCapabilities(layer.kind);
   const gradient = effects.gradient;
@@ -28,6 +37,9 @@ export function EffectsPanel() {
       }
     });
   };
+  const updateStack = (nextStack: LayerStyleEffect[]) => setLayerEffects(layer.id, { stack: nextStack });
+  const updateStackTransient = (nextStack: LayerStyleEffect[], key: string) => setLayerEffectsTransient(layer.id, { stack: nextStack }, key);
+  const lighting = normalizeLighting(effects.lighting);
 
   return (
     <section className="studio-section" data-selected-layer={layer.name}>
@@ -35,6 +47,28 @@ export function EffectsPanel() {
         <Lightbulb size={15} />
         <span>Effects</span>
       </h2>
+      <div className="effect-control-section effect-gallery-section">
+        <h3>Effect Gallery</h3>
+        <EffectGallery
+          layerKind={layer.kind}
+          onAdd={(kind) => {
+            const next = createDefaultStudioEffect(kind);
+            updateStack([...stack, next]);
+            setSelectedEffectId(next.id);
+          }}
+        />
+      </div>
+      <div className="effect-control-section">
+        <h3>Active Stack</h3>
+        <EffectStack
+          effects={stack}
+          selectedEffectId={selectedEffectId}
+          onSelect={setSelectedEffectId}
+          onChange={updateStack}
+          onChangeTransient={updateStackTransient}
+          onCommit={commitTransientHistory}
+        />
+      </div>
       <div className="effect-control-grid">
         {capabilities.gradient === "supported" ? (
           <div className="effect-control-section">
@@ -90,7 +124,19 @@ export function EffectsPanel() {
         {capabilities.lighting === "supported" || capabilities.vignette === "supported" ? (
           <div className="effect-control-section">
             <h3>Light</h3>
-            {capabilities.lighting === "supported" ? <StudioSlider label="Lighting" min={0} max={1} step={0.05} value={effects.lighting?.intensity ?? 0} onValueChange={(value) => setLayerEffectsTransient(layer.id, { lighting: { type: "spotlight", x: 0.55, y: 0.35, intensity: value, color: "#ffffff" } }, `${layer.id}:lighting`)} onValueCommit={commitTransientHistory} /> : null}
+            {capabilities.lighting === "supported" ? (
+              <>
+                <LightPositionPad
+                  value={lighting}
+                  onChange={(value) => setLayerEffectsTransient(layer.id, { lighting: value }, `${layer.id}:lightingPosition`)}
+                  onCommit={commitTransientHistory}
+                />
+                <StudioSlider label="Lighting" min={0} max={1} step={0.05} value={lighting.intensity} onValueChange={(value) => setLayerEffectsTransient(layer.id, { lighting: { ...lighting, intensity: value } }, `${layer.id}:lighting`)} onValueCommit={commitTransientHistory} />
+                <StudioSlider label="Radius" min={0.1} max={1.5} step={0.05} value={lighting.radius ?? 0.7} onValueChange={(value) => setLayerEffectsTransient(layer.id, { lighting: { ...lighting, radius: value } }, `${layer.id}:lightingRadius`)} onValueCommit={commitTransientHistory} />
+                <StudioSlider label="Softness" min={0} max={1} step={0.05} value={lighting.softness ?? 0.65} onValueChange={(value) => setLayerEffectsTransient(layer.id, { lighting: { ...lighting, softness: value } }, `${layer.id}:lightingSoftness`)} onValueCommit={commitTransientHistory} />
+                <ColorSwatchField label="Light color" value={lighting.color} onChange={(value) => setLayerEffects(layer.id, { lighting: { ...lighting, color: value } })} />
+              </>
+            ) : null}
             {capabilities.vignette === "supported" ? <StudioSlider label="Vignette" min={0} max={0.4} step={0.02} value={effects.vignette ?? 0} onValueChange={(value) => setLayerEffectsTransient(layer.id, { vignette: value }, `${layer.id}:vignette`)} onValueCommit={commitTransientHistory} /> : null}
           </div>
         ) : null}
@@ -107,6 +153,21 @@ export function EffectsPanel() {
       </div>
     </section>
   );
+}
+
+function normalizeLighting(lighting?: LightingEffect): LightingEffect {
+  return {
+    type: lighting?.type ?? "spotlight",
+    x: lighting?.x ?? 0.55,
+    y: lighting?.y ?? 0.35,
+    intensity: lighting?.intensity ?? 0,
+    color: lighting?.color ?? "#ffffff",
+    radius: lighting?.radius ?? 0.7,
+    softness: lighting?.softness ?? 0.65,
+    falloff: lighting?.falloff ?? 0.5,
+    blendMode: lighting?.blendMode ?? "screen",
+    scope: lighting?.scope ?? "layer"
+  };
 }
 
 function ColorSwatchField({ label, value, disabled, onChange }: { label: string; value: string; disabled?: boolean; onChange: (value: string) => void }) {

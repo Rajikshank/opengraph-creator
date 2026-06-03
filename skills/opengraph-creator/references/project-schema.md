@@ -32,14 +32,20 @@ When generating editable JSON:
 `generation-brief.json` should record:
 
 - `coverage`: `common`, `pages`, or `hybrid`
-- `visualBuildStyle`: editable vector/layout layers, generated image assets under editable layers, SVG/HTML source assets inside `.ogdoc`, or a flexible mix
+- `capabilities`: image generation, web reference research, SVG, HTML, repo access, and Studio runtime availability
+- `assetStrategy`: editable text/shapes/effects, SVG/vector assets, repo screenshots/assets, generated non-text image assets if available, or a flexible per-asset mix
 - `assetPermission`: whether available image generation tools may be used for non-text assets
 - `visualDirection`: mood and style words from the user
 - `references`: paths, URLs, or notes for reference images/assets
 - `referenceResearch`: local and optional web/reference notes used for mood and composition, never copied assets
+- `conceptThesis`: the domain-specific visual metaphor and why large objects exist
 - `styleThesis`: concise visual point of view for the OG system
+- `semanticPalette`: named color roles, not random colors
 - `compositionPlan`: hierarchy, safe-zone, focal asset, text zones, and page rhythm
-- `assetPlan`: which screenshots, generated art, SVG/HTML captures, textures, or logos become editable asset layers
+- `assetPlan`: structured per-asset route with role, medium, fallbacks, reason, textPolicy, editableOverlayLayers, validation, and requiredEvidence
+- `recipeSelection`: selected recipe id, reason, requiredEvidence, and antiSlopRules
+- `libraryPlan`: authoring/reference libraries allowed as adapters, plus forbidden runtime changes
+- `noisePolicy` and `texturePolicy`: `allowed`, `disallowed`, or `unknown`; generated noise defaults to disallowed
 - `negativeDirection`: explicit design and safety constraints to avoid generic, copied, flattened, or unreadable output
 - `routeVariantRules`: how page-specific or hybrid variants preserve one shared system while changing route context
 - `targetPages`: user-selected or inferred routes

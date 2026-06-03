@@ -5,6 +5,7 @@ import { StudioSelect } from "../design-system/StudioSelect";
 import { StudioSegmentedControl } from "../design-system/StudioControls";
 import { StudioSlider } from "../design-system/StudioSlider";
 import { getStudioFontOptions, getStudioFontValue, preloadFontFamily } from "../typography/fonts";
+import { PerspectiveControl } from "./PerspectiveControl";
 import { useStudio } from "./studio-store";
 
 const FONT_WEIGHT_OPTIONS: Array<{ value: string; label: string }> = [
@@ -52,10 +53,13 @@ export function InspectorPanel() {
         onValueChange={(value) => updateLayerTransient(layer.id, { opacity: value } as Partial<OgLayer>, `${layer.id}:opacity`)}
         onValueCommit={commitTransientHistory}
       />
-      <label>
-        Skew/tilt
-        <input type="number" value={layer.skewX ?? 0} onChange={(event) => updateLayer(layer.id, { skewX: Number(event.target.value) } as Partial<OgLayer>)} />
-      </label>
+      <details className="advanced-transform-panel">
+        <summary>Advanced 2D Transform</summary>
+        <div className="grid-two">
+          <label>Skew X<input type="number" value={layer.skewX ?? 0} onChange={(event) => updateLayer(layer.id, { skewX: Number(event.target.value) } as Partial<OgLayer>)} /></label>
+          <label>Skew Y<input type="number" value={layer.skewY ?? 0} onChange={(event) => updateLayer(layer.id, { skewY: Number(event.target.value) } as Partial<OgLayer>)} /></label>
+        </div>
+      </details>
       <div className="arrange-tools" aria-label="Snap selected layer">
         <button type="button" title="Snap to safe zone" onClick={() => snapLayer(layer.id, "safe-zone")}>
           <Scan size={14} />
@@ -188,38 +192,10 @@ function ImageControls({ layer }: { layer: ImageLayer }) {
   const setImageCrop = useStudio((state) => state.setImageCrop);
   const setImageFocalPoint = useStudio((state) => state.setImageFocalPoint);
   const setImagePerspective = useStudio((state) => state.setImagePerspective);
+  const commitTransientHistory = useStudio((state) => state.commitTransientHistory);
   const crop = layer.crop ?? { x: 0, y: 0, width: 1, height: 1 };
   const focalPoint = layer.focalPoint ?? { x: 0.5, y: 0.5 };
   const perspective = normalizePerspective(layer.perspective);
-  const setPerspectivePreset = (preset: "reset" | "subtle" | "medium" | "dramatic") => {
-    const presets = {
-      reset: [
-        { x: 0, y: 0 },
-        { x: 1, y: 0 },
-        { x: 1, y: 1 },
-        { x: 0, y: 1 }
-      ],
-      subtle: [
-        { x: 0.04, y: 0.02 },
-        { x: 0.96, y: 0.08 },
-        { x: 1, y: 0.96 },
-        { x: 0, y: 1 }
-      ],
-      medium: [
-        { x: 0.08, y: 0.04 },
-        { x: 0.94, y: 0.16 },
-        { x: 1, y: 0.9 },
-        { x: 0, y: 1 }
-      ],
-      dramatic: [
-        { x: 0.16, y: 0.02 },
-        { x: 0.9, y: 0.22 },
-        { x: 1, y: 0.82 },
-        { x: 0.04, y: 1 }
-      ]
-    } satisfies Record<string, NonNullable<ImageLayer["perspective"]>>;
-    setImagePerspective(layer.id, presets[preset]);
-  };
   return (
     <>
       <label>Source<input value={layer.src} onChange={(event) => updateLayer(layer.id, { src: event.target.value } as Partial<OgLayer>)} /></label>
@@ -257,35 +233,7 @@ function ImageControls({ layer }: { layer: ImageLayer }) {
         <label>Crop W<input type="number" min="0" max="1" step="0.05" value={crop.width} onChange={(event) => setImageCrop(layer.id, { ...crop, width: Number(event.target.value) })} /></label>
         <label>Crop H<input type="number" min="0" max="1" step="0.05" value={crop.height} onChange={(event) => setImageCrop(layer.id, { ...crop, height: Number(event.target.value) })} /></label>
       </div>
-      <div className="perspective-grid">
-        <div className="perspective-actions">
-          <button type="button" onClick={() => setPerspectivePreset("reset")}>Reset perspective</button>
-          <button type="button" onClick={() => setPerspectivePreset("subtle")}>Subtle</button>
-          <button type="button" onClick={() => setPerspectivePreset("medium")}>Medium</button>
-          <button type="button" onClick={() => setPerspectivePreset("dramatic")}>Dramatic</button>
-        </div>
-        {perspective.map((point, index) => (
-          <fieldset key={index}>
-            <legend>{["TL", "TR", "BR", "BL"][index]}</legend>
-            <input
-              type="number"
-              min="0"
-              max="1"
-              step="0.05"
-              value={point.x}
-              onChange={(event) => setImagePerspective(layer.id, perspective.map((item, itemIndex) => itemIndex === index ? { ...item, x: Number(event.target.value) } : item))}
-            />
-            <input
-              type="number"
-              min="0"
-              max="1"
-              step="0.05"
-              value={point.y}
-              onChange={(event) => setImagePerspective(layer.id, perspective.map((item, itemIndex) => itemIndex === index ? { ...item, y: Number(event.target.value) } : item))}
-            />
-          </fieldset>
-        ))}
-      </div>
+      <PerspectiveControl perspective={perspective} onChange={(next) => setImagePerspective(layer.id, next)} onCommit={commitTransientHistory} />
     </>
   );
 }

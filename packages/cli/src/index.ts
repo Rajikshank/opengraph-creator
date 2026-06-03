@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { realpathSync } from "node:fs";
-import { copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { appendFile, copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, normalize, relative } from "node:path";
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
@@ -28,9 +28,11 @@ import {
   type AgentImageOutputFormat
 } from "./ai-image.js";
 import { createGenerationBrief } from "./brief.js";
+import { checkRender, lintDesignDocument, lintGenerationBrief, type GenerationControlLintResult } from "./generation-control.js";
 import { createImportedSourceDocument, createImportedSourceProject } from "./import-source.js";
 import { readStudioDocumentFile, writeStudioDocumentFile } from "./document-io.js";
 import { createLibrary, listLibraryProjects, readLibraryProject, saveLibraryProject } from "./library.js";
+import { exportProjectToPsd } from "./psd-export.js";
 import { scanRepo } from "./scan.js";
 import { createStudioServer, getDefaultStudioStaticDir } from "./server.js";
 import {
@@ -564,6 +566,16 @@ export async function runCli(argv: string[]): Promise<void> {
   }
 
   if (command === "brief") {
+    if (rest[0] === "lint") {
+      const args = parseArgs(rest.slice(1));
+      if (!args.source) throw new Error("--source is required");
+      const brief = JSON.parse(await readFile(args.source, "utf8")) as Record<string, unknown>;
+      const result = lintGenerationBrief(brief);
+      await writeGenerationControlLog(args, "brief.lint", result);
+      console.log(JSON.stringify(result, null, 2));
+      if (!result.ok) process.exitCode = 1;
+      return;
+    }
     const args = parseArgs(rest);
     const brief = await createGenerationBrief({
       repo: args.repo ?? process.cwd(),
@@ -577,6 +589,38 @@ export async function runCli(argv: string[]): Promise<void> {
     await writeFile(target, `${JSON.stringify(brief, null, 2)}\n`, "utf8");
     console.log(`Created ${target}`);
     return;
+  }
+
+  if (command === "assets") {
+    const [subcommand, ...assetsRest] = rest;
+    const args = parseArgs(assetsRest);
+    if (subcommand === "lint") {
+      const source = args.brief ?? args.source;
+      if (!source) throw new Error("--brief or --source is required");
+      const brief = JSON.parse(await readFile(source, "utf8")) as Record<string, unknown>;
+      const result = lintGenerationBrief(brief);
+      await writeGenerationControlLog(args, "assets.lint", result);
+      console.log(JSON.stringify(result, null, 2));
+      if (!result.ok) process.exitCode = 1;
+      return;
+    }
+    throw new Error("Unknown assets command. Use lint.");
+  }
+
+  if (command === "design") {
+    const [subcommand, ...designRest] = rest;
+    const args = parseArgs(designRest);
+    if (subcommand === "lint") {
+      const source = args.source ?? args.project;
+      if (!source) throw new Error("--source or --project is required");
+      const document = await readProjectDocumentForChecks(source);
+      const result = lintDesignDocument(document.project, document.assets);
+      await writeGenerationControlLog(args, "design.lint", result);
+      console.log(JSON.stringify(result, null, 2));
+      if (!result.ok) process.exitCode = 1;
+      return;
+    }
+    throw new Error("Unknown design command. Use lint.");
   }
 
   if (command === "import") {
@@ -658,6 +702,17 @@ export async function runCli(argv: string[]): Promise<void> {
   }
 
   if (command === "render") {
+    if (rest[0] === "check") {
+      const args = parseArgs(rest.slice(1));
+      const source = args.source ?? args.project;
+      if (!source) throw new Error("--source or --project is required");
+      const document = await readProjectDocumentForChecks(source);
+      const result = checkRender(document.project);
+      await writeGenerationControlLog(args, "render.check", result);
+      console.log(JSON.stringify(result, null, 2));
+      if (!result.ok) process.exitCode = 1;
+      return;
+    }
     const args = parseArgs(rest);
     const project = args.project
       ? (JSON.parse(await readFile(args.project, "utf8")) as OgProject)
@@ -721,6 +776,19 @@ export async function runCli(argv: string[]): Promise<void> {
       });
     }
     console.log(`Exported ${result.target} (${result.width}x${result.height}, ${result.fileSizeBytes} bytes)`);
+    return;
+  }
+
+  if (command === "export-source") {
+    const args = parseArgs(rest);
+    if (args.format !== "psd") throw new Error("Only --format psd is supported by export-source for now.");
+    if (!args.source && !args.project) throw new Error("--source or --project is required");
+    const source = args.source ?? args.project;
+    if (!source) throw new Error("--source is required");
+    const project = await readProjectForSourceExport(source);
+    const target = args.out ?? "open-graph.psd";
+    const result = await exportProjectToPsd(project, target);
+    console.log(JSON.stringify(result, null, 2));
     return;
   }
 
@@ -858,6 +926,39 @@ export async function runCli(argv: string[]): Promise<void> {
   }
 
   throw new Error(`Unknown command: ${command}`);
+}
+
+async function readProjectDocumentForChecks(source: string): Promise<{ project: OgProject; assets: Record<string, Uint8Array> }> {
+  if (source.toLowerCase().endsWith(".ogdoc")) {
+    const document = await readStudioDocumentFile(source);
+    return { project: document.project, assets: document.assets };
+  }
+  return { project: JSON.parse(await readFile(source, "utf8")) as OgProject, assets: {} };
+}
+
+async function writeGenerationControlLog(
+  args: Record<string, string>,
+  kind: string,
+  result: GenerationControlLintResult
+): Promise<void> {
+  const explicitLog = args.log;
+  const sessionId = args.id ?? args.session;
+  const repo = args.repo ?? (sessionId ? process.cwd() : undefined);
+  const logPath = explicitLog ?? (repo && sessionId ? join(getSessionPaths(repo, sessionId).sessionDir, "generation-errors.jsonl") : undefined);
+  if (!logPath) return;
+  await mkdir(dirname(logPath), { recursive: true });
+  await appendFile(
+    logPath,
+    `${JSON.stringify({
+      at: new Date().toISOString(),
+      kind,
+      ok: result.ok,
+      errors: result.errors,
+      warnings: result.warnings,
+      recovery: result.recovery
+    })}\n`,
+    "utf8"
+  );
 }
 
 function parseArgs(args: string[]): Record<string, string> {
@@ -1257,6 +1358,9 @@ Commands:
   opengraph-creator list
   opengraph-creator scan --repo <path>
   opengraph-creator brief --repo <path> --name <app> --strategy common|pages|hybrid --mode template|pure-image --reference image.png --out .opengraph-creator/brief.json
+  opengraph-creator brief lint --source .opengraph-creator/sessions/<id>/generation-brief.json --repo <path> --id <session-id>
+  opengraph-creator assets lint --brief .opengraph-creator/sessions/<id>/generation-brief.json --repo <path> --id <session-id>
+  opengraph-creator design lint --source .opengraph-creator/sessions/<id>/document.ogdoc --repo <path> --id <session-id>
   opengraph-creator import --source generated.svg --kind svg --name <app> --out project.og.json
   opengraph-creator install-skill --agent codex --scope global|project  (fallback only; valid agents: codex, claude-code, opencode, all)
   opengraph-creator document new --name <app> --out project.ogdoc
@@ -1272,8 +1376,10 @@ Commands:
   opengraph-creator session status --id <session-id>
   opengraph-creator studio --port 5123 --repo <path>
   opengraph-creator render --name <name> --out og.svg
+  opengraph-creator render check --source .opengraph-creator/sessions/<id>/document.ogdoc --repo <path> --id <session-id>
   opengraph-creator export --project project.og.json --format png|webp|jpg|svg --out public/og.png --session <session-id>
   opengraph-creator export --project project.og.json --format png|webp|jpg|svg --allPages true --outDir public/og --session <session-id>
+  opengraph-creator export-source --format psd --source project.ogdoc --out public/og/open-graph.psd
   opengraph-creator variants --project project.og.json --outDir og-projects
   opengraph-creator agent-handoff --project project.og.json --prompt "art direction" --out public/og-agent.png --plan .opengraph-creator/agent-handoff.json
   opengraph-creator agent-image --project project.og.json --out public/og-agent.png
@@ -1287,6 +1393,13 @@ Commands:
   opengraph-creator publish --confirm --session <session-id> --allPages true
   opengraph-creator doctor
 `);
+}
+
+async function readProjectForSourceExport(source: string): Promise<OgProject> {
+  if (source.toLowerCase().endsWith(".ogdoc")) {
+    return (await readStudioDocumentFile(source)).project;
+  }
+  return JSON.parse(await readFile(source, "utf8")) as OgProject;
 }
 
 async function sessionExists(repo: string, sessionId: string): Promise<boolean> {
@@ -1310,6 +1423,8 @@ function printDoctorReport(report: DoctorReport): void {
 async function hasBundledSkillSource(): Promise<boolean> {
   const candidates = [
     new URL("../../../skills/opengraph-creator/SKILL.md", import.meta.url),
+    new URL("../bundled-skill/SKILL.md", import.meta.url),
+    new URL("../../bundled-skill/SKILL.md", import.meta.url),
     new URL("../codex-skill/SKILL.md", import.meta.url),
     new URL("../../codex-skill/SKILL.md", import.meta.url)
   ];

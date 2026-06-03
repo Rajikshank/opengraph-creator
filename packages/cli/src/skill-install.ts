@@ -82,6 +82,8 @@ async function getBundledSkillDir(): Promise<string> {
   const current = dirname(fileURLToPath(import.meta.url));
   const candidates = [
     resolve(current, "..", "..", "..", "skills", OPEN_GRAPH_CREATOR_SKILL_SLUG),
+    resolve(current, "..", "..", "bundled-skill"),
+    resolve(current, "..", "bundled-skill"),
     resolve(current, "..", "..", "codex-skill"),
     resolve(current, "..", "codex-skill")
   ];

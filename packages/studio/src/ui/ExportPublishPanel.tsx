@@ -6,6 +6,7 @@ import {
   createPublishRequestViaApi,
   exportProjectPagesViaApi,
   exportProjectViaApi,
+  exportSourceViaApi,
   recordSessionExportViaApi,
   restartSessionViaApi,
   saveProjectViaApi,
@@ -29,7 +30,7 @@ export function ExportPublishPanel() {
   const [hasExported, setHasExported] = useState(false);
   const [hasConfirmedPublish, setHasConfirmedPublish] = useState(false);
   const [restartConfirmOpen, setRestartConfirmOpen] = useState(false);
-  const [busyAction, setBusyAction] = useState<"export" | "publish" | "restart" | null>(null);
+  const [busyAction, setBusyAction] = useState<"export" | "source-export" | "publish" | "restart" | null>(null);
   const isBusy = busyAction !== null;
   const publishUnavailableReason = getPublishUnavailableReason({
     busyAction,
@@ -129,6 +130,29 @@ export function ExportPublishPanel() {
           kind: "export",
           title: "Page export failed",
           recovery: "Your editable page variants are still safe. Retry export after checking the target path and local Studio service."
+        })
+      );
+    }
+  };
+
+  const exportLayeredPsd = async () => {
+    if (!project) return;
+    try {
+      if (session) await saveSessionDocumentViaApi(fetch, { repo: session.repo, sessionId: session.id, project });
+      await saveProjectViaApi(fetch, project);
+      const result = await exportSourceViaApi(fetch, {
+        projectId: project.projectId,
+        format: "psd",
+        target: target.replace(/\.(png|webp|jpe?g|svg)$/i, ".psd"),
+        repo: session?.repo
+      });
+      notifyStudioSuccess(`Exported layered PSD: ${result.target}`, `${result.layerCount} visual layer${result.layerCount === 1 ? "" : "s"}`);
+    } catch (error) {
+      notifyStudioError(
+        normalizeStudioError(error, {
+          kind: "export",
+          title: "PSD export failed",
+          recovery: "Your editable .ogdoc remains safe. Retry after saving the document or choose a writable PSD path."
         })
       );
     }
@@ -247,6 +271,9 @@ export function ExportPublishPanel() {
           <Download size={15} /> {busyAction === "export" ? "Exporting..." : "Export all pages"}
         </button>
       ) : null}
+      <button type="button" className="secondary-action" disabled={isBusy} onClick={() => void runGuardedOperation("source-export", exportLayeredPsd)}>
+        <Download size={15} /> {busyAction === "source-export" ? "Exporting PSD..." : "Export layered PSD"}
+      </button>
       <button
         type="button"
         className="secondary-action"
@@ -303,7 +330,7 @@ export function ExportPublishPanel() {
 }
 
 function getPublishUnavailableReason(input: {
-  busyAction: "export" | "publish" | "restart" | null;
+  busyAction: "export" | "source-export" | "publish" | "restart" | null;
   hasConfirmedPublish: boolean;
   hasExported: boolean;
 }): string | undefined {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createDefaultProject, createMultiPageProject, getNoiseDisplayOpacity, type ImageLayer } from "@opengraph-creator/core";
+import { createDefaultProject, createLayerStyleEffect, createMultiPageProject, getNoiseDisplayOpacity, type ImageLayer } from "@opengraph-creator/core";
 import { renderProjectToSvg } from "./index";
 
 describe("OpenGraphCreator renderer", () => {
@@ -163,6 +163,42 @@ describe("OpenGraphCreator renderer", () => {
     expect(svg).toContain("gf-vignette-background");
     expect(svg).toContain("mix-blend-mode:soft-light");
     expect(svg).toContain(`opacity="${getNoiseDisplayOpacity(0.05)}"`);
+  });
+
+  it("renders the full advanced effect stack through the shared SVG renderer", () => {
+    const project = createDefaultProject({ name: "Advanced Effect Stack", strategy: "common" });
+    project.layers = project.layers.map((layer) =>
+      layer.id === "background" && "effects" in layer
+        ? {
+            ...layer,
+            effects: {
+              ...layer.effects,
+              stack: [
+                createLayerStyleEffect("color-grade", { id: "grade", intensity: 0.7 }),
+                createLayerStyleEffect("duotone", { id: "duo", intensity: 0.48 }),
+                createLayerStyleEffect("bloom", { id: "bloom", intensity: 0.52 }),
+                createLayerStyleEffect("rgb-split", { id: "rgb", intensity: 0.5 }),
+                createLayerStyleEffect("halftone", { id: "half", intensity: 0.45 }),
+                createLayerStyleEffect("ordered-dither", { id: "dither", intensity: 0.42 }),
+                createLayerStyleEffect("ascii", { id: "ascii", intensity: 0.35 }),
+                createLayerStyleEffect("displacement", { id: "warp", intensity: 0.4 })
+              ]
+            }
+          }
+        : layer
+    );
+
+    const svg = renderProjectToSvg(project);
+
+    expect(svg).toContain("gf-advanced-background-grade-grade");
+    expect(svg).toContain("gf-advanced-background-duotone-duo");
+    expect(svg).toContain("gf-advanced-background-bloom-bloom");
+    expect(svg).toContain("gf-advanced-background-rgb-red-rgb");
+    expect(svg).toContain("ogc-halftone-background-half");
+    expect(svg).toContain("ogc-dither-background-dither");
+    expect(svg).toContain("ogc-ascii-background-ascii");
+    expect(svg).toContain("gf-advanced-background-warp-warp");
+    expect(svg).toContain("<feDisplacementMap");
   });
 
   it("uses the same visible noise opacity as the Studio canvas for platform preview parity", () => {

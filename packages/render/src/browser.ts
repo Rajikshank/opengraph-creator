@@ -11,6 +11,11 @@ import {
   type OgLayer,
   type OgProject
 } from "@opengraph-creator/core";
+import {
+  renderAdvancedEffectOverlays,
+  renderAdvancedEffectPatternDefs,
+  renderAdvancedFilterNodes
+} from "./effects-svg.js";
 
 export function renderProjectToSvg(project: OgProject): string {
   const renderableProject = getRenderableProject(project);
@@ -189,6 +194,7 @@ function renderEffectDefs(layer: OgLayer, project: OgProject): string[] {
   if (!("effects" in layer)) return [];
   const defs: string[] = [];
   const id = safeId(layer.id);
+  defs.push(...renderAdvancedEffectPatternDefs(layer));
   const composedFilter = renderComposedFilter(layer, project);
   if (composedFilter) defs.push(composedFilter);
   const gradient = layer.effects.gradient;
@@ -260,10 +266,14 @@ function renderComposedFilter(layer: OgLayer, project: OgProject): string {
     nodes.push(`<feColorMatrix in="SourceGraphic" type="matrix" values="1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 1 0" result="${sourceResult}"/>`);
   }
 
+  const advanced = renderAdvancedFilterNodes(layer, sourceResult, `gf-advanced-${id}`);
+  nodes.push(...advanced.nodes);
+
   const mergeNodes = [
     effects.shadow ? `<feMergeNode in="gf-shadow-${id}"/>` : "",
     glowEnabled ? `<feMergeNode in="gf-glow-${id}"/>` : "",
-    `<feMergeNode in="${sourceResult}"/>`
+    ...advanced.mergeBeforeSource.map((result) => `<feMergeNode in="${result}"/>`),
+    `<feMergeNode in="${advanced.result}"/>`
   ].filter(Boolean).join("");
 
   return `<filter id="gf-filter-${id}" x="-45%" y="-45%" width="190%" height="190%">${nodes.join("")}<feMerge>${mergeNodes}</feMerge></filter>`;
@@ -317,6 +327,7 @@ function renderEffectOverlays(
       `<rect x="${layer.x}" y="${layer.y}" width="${layer.width}" height="${layer.height}" rx="${radius}" fill="url(#gf-vignette-${id})"${mask}/>`
     );
   }
+  overlays.push(renderAdvancedEffectOverlays(layer, { mask: mask.trim() }));
   return overlays.join("");
 }
 

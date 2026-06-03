@@ -69,6 +69,8 @@ When allowed, keep it subtle, clipped to the intended layer, and low enough to r
 
 ## Capability-Based Creative Paths
 
+Before picking one of these paths, read `asset-strategy-router.md` and route each asset separately. A card can combine editable `.ogdoc` text, shape layers, SVG motifs, screenshots, repo assets, and generated non-text art. The master is still `.ogdoc`; React/Satori/Playwright/Tailwind/shadcn-style work is only an authoring adapter when it produces a packaged asset that passes validation.
+
 ### With image generation
 
 Use image generation only for non-text assets:
@@ -203,5 +205,6 @@ Before packing the `.ogdoc`, check:
 8. Does the platform preview crop preserve the focal idea?
 9. Is every layer named clearly enough for a user to edit?
 10. Does `opengraph-creator document validate` pass?
+11. Do `opengraph-creator brief lint`, `assets lint`, `design lint`, and `render check` pass when available?
 
 If any answer is no, revise the `.ogdoc` before launching Studio.

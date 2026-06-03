@@ -10,6 +10,9 @@ import {
   getCanvasShadowVisual,
   getExportPath,
   getLayerEffectCapabilities,
+  createLayerStyleEffect,
+  getLayerStyleEffectCapabilities,
+  normalizeLayerStyleEffects,
   getNoiseDisplayOpacity,
   getPerspectiveBounds,
   getRenderableProject,
@@ -190,6 +193,53 @@ describe("OpenGraphCreator core", () => {
     });
     expect(getLayerEffectCapabilities("badge").lighting).toBe("disabled");
     expect(getLayerEffectCapabilities("group").glow).toBe("disabled");
+  });
+
+  it("adds a compatible advanced effect stack without breaking legacy effects", () => {
+    const project = createDefaultProject({ name: "Advanced Effects", strategy: "common" });
+    const layer = project.layers.find((item) => item.id === "background");
+    if (!layer || !("effects" in layer)) throw new Error("background layer is missing effects");
+
+    layer.effects.stack = [
+      createLayerStyleEffect("color-grade", { id: "grade", intensity: 0.64, params: { brightness: 0.05 } }),
+      createLayerStyleEffect("ascii", { id: "ascii", intensity: 0.42, params: { cellSize: 22 } }),
+      { id: "broken", kind: "missing-effect", enabled: true, intensity: 8, params: {} } as never
+    ];
+
+    const normalized = normalizeLayerStyleEffects(layer.effects);
+
+    expect(normalized.map((effect) => effect.kind)).toEqual(["color-grade", "ascii"]);
+    expect(normalized[0]).toMatchObject({
+      id: "grade",
+      enabled: true,
+      intensity: 0.64,
+      params: expect.objectContaining({ brightness: 0.05, contrast: 0.12 })
+    });
+    expect(normalized[1]).toMatchObject({
+      id: "ascii",
+      intensity: 0.42,
+      params: expect.objectContaining({ cellSize: 22, charset: "@#%+=-:. " })
+    });
+  });
+
+  it("reports advanced effect capabilities per layer kind", () => {
+    expect(getLayerStyleEffectCapabilities("image")).toMatchObject({
+      "color-grade": "supported",
+      "ordered-dither": "supported",
+      ascii: "supported",
+      displacement: "supported"
+    });
+    expect(getLayerStyleEffectCapabilities("text")).toMatchObject({
+      bloom: "supported",
+      "rgb-split": "supported",
+      ascii: "disabled",
+      halftone: "disabled"
+    });
+    expect(getLayerEffectCapabilities("text")).toMatchObject({
+      bloom: "supported",
+      "rgb-split": "supported",
+      "color-grade": "disabled"
+    });
   });
 
   it("normalizes noise opacity for canvas and platform preview parity", () => {

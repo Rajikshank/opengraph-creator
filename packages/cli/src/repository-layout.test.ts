@@ -16,6 +16,7 @@ describe("repository layout", () => {
     expect(readFileSync(join(process.cwd(), "skills", "opengraph-creator", "SKILL.md"), "utf8")).toContain("name: opengraph-creator");
     expect(trackedFiles("packages/codex-skill")).toEqual([]);
     expect(trackedFiles("packages/cli/codex-skill")).toEqual([]);
+    expect(trackedFiles("packages/cli/bundled-skill")).toEqual([]);
   });
 
   it("keeps generated Studio bundle assets out of source control", () => {

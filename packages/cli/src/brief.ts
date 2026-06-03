@@ -1,4 +1,14 @@
 import type { Framework, GenerationStrategy } from "@opengraph-creator/core";
+import {
+  createDefaultAssetPlan,
+  createDefaultLibraryPlan,
+  createRecipeSelection,
+  defaultGenerationCapabilities,
+  type AssetPlanItem,
+  type GenerationCapabilities,
+  type LibraryPlan,
+  type RecipeSelection
+} from "./generation-control.js";
 import { scanRepo, type RepoScanResult } from "./scan.js";
 import type { RouteContext } from "./scan.js";
 
@@ -23,13 +33,20 @@ export interface GenerationBrief {
   metadataFiles: string[];
   brandAssets: string[];
   referenceImage?: string;
+  capabilities: GenerationCapabilities;
   referenceResearch: string[];
+  conceptThesis: string;
   styleThesis: string;
+  semanticPalette: string[];
   visualTasteProfile: string[];
   compositionPlan: string[];
-  assetPlan: string[];
+  assetPlan: AssetPlanItem[];
+  recipeSelection: RecipeSelection;
+  libraryPlan: LibraryPlan;
   negativeDirection: string[];
   designQualityChecklist: string[];
+  noisePolicy: "allowed" | "disallowed" | "unknown";
+  texturePolicy: "allowed" | "disallowed" | "unknown";
   outputContract: string[];
   codexPrompt: string;
 }
@@ -42,13 +59,26 @@ export async function createGenerationBrief(input: GenerationBriefInput): Promis
 function createGenerationBriefFromScan(input: GenerationBriefInput, scan: RepoScanResult): GenerationBrief {
   const routes = scan.routes.length ? scan.routes : ["/"];
   const generationMode = input.generationMode ?? "template";
+  const capabilities = defaultGenerationCapabilities;
   const referenceResearch = buildReferenceResearch(input, scan);
+  const conceptThesis = buildConceptThesis(input, routes, scan);
   const styleThesis = buildStyleThesis(input, routes, scan);
+  const semanticPalette = buildSemanticPalette(input, scan);
   const visualTasteProfile = buildVisualTasteProfile(input, scan);
   const compositionPlan = buildCompositionPlan(input, routes);
-  const assetPlan = buildAssetPlan(input);
+  const recipeSelection = createRecipeSelection({
+    appName: input.name,
+    framework: scan.framework,
+    routes,
+    routeContexts: scan.routeContexts,
+    brandAssets: scan.brandAssets
+  });
+  const assetPlan = buildAssetPlan(input, recipeSelection);
+  const libraryPlan = createDefaultLibraryPlan();
   const negativeDirection = buildNegativeDirection(input);
   const designQualityChecklist = buildDesignQualityChecklist(input);
+  const noisePolicy = "disallowed";
+  const texturePolicy = "unknown";
   const outputContract =
     generationMode === "pure-image"
       ? [
@@ -78,13 +108,20 @@ function createGenerationBriefFromScan(input: GenerationBriefInput, scan: RepoSc
     metadataFiles: scan.metadataFiles,
     brandAssets: scan.brandAssets,
     referenceImage: input.referenceImage,
+    capabilities,
     referenceResearch,
+    conceptThesis,
     styleThesis,
+    semanticPalette,
     visualTasteProfile,
     compositionPlan,
     assetPlan,
+    recipeSelection,
+    libraryPlan,
     negativeDirection,
     designQualityChecklist,
+    noisePolicy,
+    texturePolicy,
     outputContract,
     codexPrompt: buildCodexPrompt({
       ...input,
@@ -93,13 +130,20 @@ function createGenerationBriefFromScan(input: GenerationBriefInput, scan: RepoSc
       routeContexts: scan.routeContexts,
       metadataFiles: scan.metadataFiles,
       brandAssets: scan.brandAssets,
+      capabilities,
       referenceResearch,
+      conceptThesis,
       styleThesis,
+      semanticPalette,
       visualTasteProfile,
       compositionPlan,
       assetPlan,
+      recipeSelection,
+      libraryPlan,
       negativeDirection,
-      designQualityChecklist
+      designQualityChecklist,
+      noisePolicy,
+      texturePolicy
     })
   };
 }
@@ -110,13 +154,20 @@ function buildCodexPrompt(input: GenerationBriefInput & {
   routeContexts: RouteContext[];
   metadataFiles: string[];
   brandAssets: string[];
+  capabilities: GenerationCapabilities;
   referenceResearch: string[];
+  conceptThesis: string;
   styleThesis: string;
+  semanticPalette: string[];
   visualTasteProfile: string[];
   compositionPlan: string[];
-  assetPlan: string[];
+  assetPlan: AssetPlanItem[];
+  recipeSelection: RecipeSelection;
+  libraryPlan: LibraryPlan;
   negativeDirection: string[];
   designQualityChecklist: string[];
+  noisePolicy: "allowed" | "disallowed" | "unknown";
+  texturePolicy: "allowed" | "disallowed" | "unknown";
 }): string {
   const intent =
     input.strategy === "common"
@@ -153,11 +204,17 @@ function buildCodexPrompt(input: GenerationBriefInput & {
     `Brand assets: ${input.brandAssets.length ? input.brandAssets.join(", ") : "none detected"}`,
     `Metadata files: ${input.metadataFiles.length ? input.metadataFiles.join(", ") : "none detected"}`,
     reference.trim(),
+    `Capability gate: ${formatCapabilities(input.capabilities)}`,
     `Reference research phase: ${input.referenceResearch.join(" ")}`,
+    `Concept thesis: ${input.conceptThesis}`,
     `Style thesis: ${input.styleThesis}`,
+    `Semantic palette: ${input.semanticPalette.join(" ")}`,
     `Visual taste profile: ${input.visualTasteProfile.join(" ")}`,
     `Composition plan: ${input.compositionPlan.join(" ")}`,
-    `Asset plan: ${input.assetPlan.join(" ")}`,
+    `Recipe selection: ${input.recipeSelection.id}. ${input.recipeSelection.reason} Anti-slop rules: ${input.recipeSelection.antiSlopRules.join(" ")}`,
+    `Asset plan: ${formatAssetPlan(input.assetPlan)}`,
+    `Library plan: ${input.libraryPlan.primaryReferences.join(" ")}`,
+    `Noise policy: ${input.noisePolicy}. Texture policy: ${input.texturePolicy}.`,
     `Negative direction: ${input.negativeDirection.join(" ")}`,
     `Design quality checklist: ${input.designQualityChecklist.join(" ")}`,
     "Design requirements: premium, minimal, readable at social-card size, not generic AI dashboard styling.",
@@ -168,6 +225,7 @@ function buildCodexPrompt(input: GenerationBriefInput & {
       ? "Generate one .ogdoc with internal page variants. Each page variant must preserve the shared visual system while changing route-specific text, badges, imagery, and exportPath."
       : "Generate a common .ogdoc document with no internal page variants unless the user changes strategy.",
     "If image generation tools are available, use them only for background/art/texture/product-scene asset layers unless pure-image mode was selected.",
+    "Use the structured asset plan as the contract. If an asset cannot pass validation, choose its fallback medium instead of baking text or flattening the card.",
     "Use strategy common/pages/hybrid exactly as requested and preserve the route list.",
     "Do not copy protected internet references or use third-party images unless the user supplied them or license/permission is clear."
   ]
@@ -213,15 +271,33 @@ function buildCompositionPlan(input: GenerationBriefInput, routes: string[]): st
   ];
 }
 
-function buildAssetPlan(input: GenerationBriefInput): string[] {
+function buildConceptThesis(input: GenerationBriefInput, routes: string[], scan: RepoScanResult): string {
+  const routeScope = input.strategy === "common" ? "the app as a whole" : `${routes.length} page context${routes.length === 1 ? "" : "s"}`;
+  const evidence = scan.routeContexts
+    .map((page) => page.detectedTitle ?? page.detectedDescription ?? page.route)
+    .filter(Boolean)
+    .slice(0, 3)
+    .join(", ");
+  return `${input.name} should use one concrete visual metaphor derived from ${routeScope}${evidence ? ` (${evidence})` : ""}. Large shapes, images, and effects must express that metaphor instead of acting as filler.`;
+}
+
+function buildSemanticPalette(input: GenerationBriefInput, scan: RepoScanResult): string[] {
   return [
-    "Keep generated imagery as editable asset layers beneath editable text and layout controls.",
-    input.generationMode === "pure-image"
-      ? "Pure-image output is a fallback path; still record what text would need to remain editable if converted back to .ogdoc."
-      : "Pack screenshots, generated backgrounds, SVG/HTML captures, logos, textures, and references into the .ogdoc package or incoming assets.",
-    "Use generated image tools only for non-text art, texture, environment, product-scene, lighting, or background assets unless the user explicitly chose pure-image fallback.",
-    "Noise, grain, and texture are opt-in: set noisePolicy or texturePolicy to allowed only when the user/reference explicitly asks for it, otherwise leave noise effects out of generated layers."
+    `${input.name} brand anchor: choose from detected assets or route vocabulary.`,
+    "Depth shadow: use only to separate meaningful layers from the background.",
+    "Action highlight: reserve one warm or bright accent for the focal route idea.",
+    scan.brandAssets.length ? "Brand asset color influence: present but restrained." : "Derived palette: document the assumption because no brand asset was detected."
   ];
+}
+
+function buildAssetPlan(input: GenerationBriefInput, recipeSelection: RecipeSelection): AssetPlanItem[] {
+  return createDefaultAssetPlan({
+    generationMode: input.generationMode ?? "template",
+    strategy: input.strategy,
+    recipeId: recipeSelection.id,
+    imageGeneration: defaultGenerationCapabilities.imageGeneration,
+    referenceImage: input.referenceImage
+  });
 }
 
 function buildNegativeDirection(input: GenerationBriefInput): string[] {
@@ -232,6 +308,18 @@ function buildNegativeDirection(input: GenerationBriefInput): string[] {
     "Do not repeat the same left-text/right-art structure, badge stack, or background treatment across fresh generations unless the user asks to preserve it.",
     input.generationMode === "pure-image" ? "Do not pretend a pure bitmap is fully editable in Studio." : "Do not use pure bitmap output when an editable .ogdoc can represent the design."
   ];
+}
+
+function formatCapabilities(capabilities: GenerationCapabilities): string {
+  return Object.entries(capabilities)
+    .map(([key, value]) => `${key}=${value}`)
+    .join(", ");
+}
+
+function formatAssetPlan(assetPlan: AssetPlanItem[]): string {
+  return assetPlan
+    .map((item) => `${item.id}: role=${item.role}; medium=${item.medium}; fallbacks=${item.fallbacks.join("/")}; textPolicy=${item.textPolicy}; reason=${item.reason}`)
+    .join(" ");
 }
 
 function buildDesignQualityChecklist(input: GenerationBriefInput): string[] {

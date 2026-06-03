@@ -5,8 +5,8 @@ docs/
 .tmp-smoke/
 .tmp-*/
 packages/cli/codex-skill/
+packages/cli/bundled-skill/
 packages/cli/studio-dist/
-.graphforge/
 public/og.*
 *.tsbuildinfo
 *.log

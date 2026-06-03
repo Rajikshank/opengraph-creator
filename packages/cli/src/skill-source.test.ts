@@ -36,12 +36,16 @@ describe("OpenGraph Creator public skill source", () => {
     expect(skill).toContain("Stop and wait for answers");
     expect(skill).toContain("Do not create a session, document, image, SVG, HTML, or launch Studio before the Question Gate is complete");
     expect(skill).toContain("Coverage: one common OG for the whole app, page-specific OG images, or a hybrid");
-    expect(skill).toContain("Visual build style: mostly editable vector/layout layers");
+    expect(skill).toContain("Asset strategy: which visual parts should be editable text/shapes/effects");
     expect(skill).toContain("Pure-image fallback is allowed only when the user explicitly asks");
     expect(skill).toContain("generation-brief.json");
-    expect(skill).toContain("visualBuildStyle");
+    expect(skill).toContain("assetStrategy");
     expect(skill).toContain("referenceResearch");
+    expect(skill).toContain("conceptThesis");
     expect(skill).toContain("styleThesis");
+    expect(skill).toContain("recipeSelection");
+    expect(skill).toContain("opengraph-creator brief lint");
+    expect(skill).toContain("opengraph-creator render check");
     expect(skill).toContain("routeVariantRules");
   });
 
@@ -56,6 +60,8 @@ describe("OpenGraph Creator public skill source", () => {
       ogdocReference,
       recoveryReference,
       visualReference,
+      routerReference,
+      recipeReference,
       ensureScript
     ] = await Promise.all([
       readFile(`${skillRoot}/agents/openai.yaml`, "utf8"),
@@ -67,6 +73,8 @@ describe("OpenGraph Creator public skill source", () => {
       readFile(`${skillRoot}/references/ogdoc-schema.md`, "utf8"),
       readFile(`${skillRoot}/references/recovery.md`, "utf8"),
       readFile(`${skillRoot}/references/visual-generation-guide.md`, "utf8"),
+      readFile(`${skillRoot}/references/asset-strategy-router.md`, "utf8"),
+      readFile(`${skillRoot}/references/recipes/route-map.md`, "utf8"),
       readFile(`${skillRoot}/scripts/ensure-opengraph-creator.mjs`, "utf8")
     ]);
 
@@ -84,8 +92,12 @@ describe("OpenGraph Creator public skill source", () => {
     expect(visualReference).toContain("Without image generation");
     expect(visualReference).toContain("Do not use invented `ogcreator://` URLs");
     expect(visualReference).toContain("Composition Archetype Router");
+    expect(routerReference).toContain("Asset Strategy Router");
+    expect(routerReference).toContain("opengraph-creator design lint");
+    expect(recipeReference).toContain("Route Map");
     expect(ensureScript).toContain("opengraph-creator doctor --json");
     await expect(stat(`${skillRoot}/scripts/ensure-opengraph-creator.mjs`)).resolves.toMatchObject({ size: expect.any(Number) });
     await expect(stat(`${skillRoot}/references/visual-generation-guide.md`)).resolves.toMatchObject({ size: expect.any(Number) });
+    await expect(stat(`${skillRoot}/references/asset-strategy-router.md`)).resolves.toMatchObject({ size: expect.any(Number) });
   });
 });

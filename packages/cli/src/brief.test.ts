@@ -28,13 +28,23 @@ describe("generation brief", () => {
     expect(brief.brandAssets).toEqual(["public/logo.svg"]);
     expect(brief.referenceImage).toBe("references/inspiration.png");
     expect(brief.referenceResearch).toContain("Inspect local brand assets, screenshots, existing metadata, and route copy before selecting a visual direction.");
+    expect(brief.capabilities.studioRuntime).toBe("available");
+    expect(brief.conceptThesis).toContain("BillingKit");
+    expect(brief.semanticPalette.join("\n")).toContain("brand anchor");
     expect(brief.styleThesis).toContain("BillingKit");
     expect(brief.visualTasteProfile.join("\n")).toContain("premium but specific");
     expect(brief.compositionPlan.join("\n")).toContain("composition archetype");
     expect(brief.compositionPlan.join("\n")).toContain("Do not reuse the last OpenGraph Creator document structure");
     expect(brief.compositionPlan.join("\n")).not.toContain("Use a shared 1200x630 composition with headline, subtitle, badge, logo/screenshot/art");
-    expect(brief.assetPlan.join("\n")).toContain("Keep generated imagery as editable asset layers");
-    expect(brief.assetPlan.join("\n")).toContain("Noise, grain, and texture are opt-in");
+    expect(brief.recipeSelection.id).toBe("route-map");
+    expect(brief.assetPlan).toEqual([
+      expect.objectContaining({ id: "editable-headline-system", medium: "ogdoc-text", textPolicy: "editable-required" }),
+      expect.objectContaining({ id: "editable-layout-geometry", medium: "ogdoc-shape" }),
+      expect.objectContaining({ id: "supporting-visual-asset", textPolicy: "no-important-text-baked" }),
+      expect.objectContaining({ id: "controlled-effects", medium: "ogdoc-effect" })
+    ]);
+    expect(brief.libraryPlan.forbiddenRuntimeChanges.join("\n")).toContain("Do not make React components the master document format");
+    expect(brief.noisePolicy).toBe("disallowed");
     expect(brief.negativeDirection.join("\n")).toContain("Do not bake important text");
     expect(brief.negativeDirection.join("\n")).toContain("Do not repeat the same left-text/right-art structure");
     expect(brief.designQualityChecklist.join("\n")).toContain("Each route variant has route-specific reason");
@@ -42,14 +52,17 @@ describe("generation brief", () => {
     expect(brief.codexPrompt).toContain("Create page-specific Open Graph images");
     expect(brief.codexPrompt).toContain("Generate a .ogdoc document");
     expect(brief.codexPrompt).toContain("Reference research phase:");
+    expect(brief.codexPrompt).toContain("Concept thesis:");
     expect(brief.codexPrompt).toContain("Style thesis:");
+    expect(brief.codexPrompt).toContain("Asset plan:");
+    expect(brief.codexPrompt).toContain("editable-headline-system");
     expect(brief.codexPrompt).toContain("Negative direction:");
     expect(brief.codexPrompt).toContain("Do not copy protected internet references");
     expect(brief.codexPrompt).toContain("Route context:");
     expect(brief.codexPrompt).toContain("Pricing Plans");
     expect(brief.codexPrompt).toContain("one .ogdoc with internal page variants");
     expect(brief.codexPrompt).toContain("composition archetype");
-    expect(brief.codexPrompt).toContain("Noise, grain, and texture are opt-in");
+    expect(brief.codexPrompt).toContain("Noise policy: disallowed");
     expect(brief.codexPrompt).toContain("/pricing");
   });
 
@@ -84,6 +97,19 @@ describe("generation brief", () => {
     expect(brief.generationMode).toBe("pure-image");
     expect(brief.routes).toEqual(["/", "/pricing"]);
     expect(brief.codexPrompt).toContain("common base design");
+  });
+
+  it("lints a generated brief through the CLI", async () => {
+    const repo = await createNextRepo();
+    const target = join(repo, ".opengraph-creator", "brief.json");
+    const log = join(repo, ".opengraph-creator", "generation-checks.jsonl");
+
+    await runCli(["brief", "--repo", repo, "--name", "BillingKit", "--strategy", "pages", "--out", target]);
+    await runCli(["brief", "lint", "--source", target, "--log", log]);
+
+    const logText = await readFile(log, "utf8");
+    expect(logText).toContain("brief.lint");
+    expect(logText).toContain('"ok":true');
   });
 });
 

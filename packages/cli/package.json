@@ -29,7 +29,7 @@
   },
   "files": [
     "dist",
-    "codex-skill",
+    "bundled-skill",
     "studio-dist"
   ],
   "scripts": {
@@ -38,6 +38,7 @@
   "dependencies": {
     "@opengraph-creator/core": "0.1.7",
     "@opengraph-creator/render": "0.1.7",
+    "ag-psd": "^30.1.1",
     "fflate": "^0.8.3",
     "sharp": "^0.33.5"
   },

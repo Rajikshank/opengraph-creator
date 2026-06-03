@@ -4,13 +4,17 @@ import { Ellipse, Group, Image as KonvaImage, Layer as KonvaLayer, Line, Rect, S
 import {
   getCanvasEffectCachePadding,
   getCanvasShadowVisual,
+  getEffectNumberParam,
+  getEffectStringParam,
   getNoiseDisplayOpacity,
   hasComposedLayerEffect,
   isDefaultPerspectiveQuad,
   isGlowEffectEnabled,
+  normalizeLayerStyleEffects,
   normalizePerspectiveQuad,
   type ImageLayer,
   type LayerEffects,
+  type LayerStyleEffect,
   type NoiseEffect,
   type OgLayer,
   type ShapeLayer,
@@ -634,7 +638,7 @@ function EffectfulNode({
   const hasBlur = blur > 0;
   const hasCanvasEffect = hasComposedLayerEffect(effects);
   const shadowProps = getKonvaShadowProps(effects, accent);
-  const effectCacheKey = `${cacheKey}:${blur}:${effects.shadow}:${JSON.stringify(effects.glow)}:${JSON.stringify(effects.noise)}:${JSON.stringify(effects.lighting)}:${effects.vignette ?? 0}`;
+  const effectCacheKey = `${cacheKey}:${blur}:${effects.shadow}:${JSON.stringify(effects.glow)}:${JSON.stringify(effects.noise)}:${JSON.stringify(effects.lighting)}:${effects.vignette ?? 0}:${JSON.stringify(effects.stack ?? [])}`;
 
   useEffect(() => {
     const node = groupRef.current;
@@ -685,11 +689,15 @@ function EffectOverlays({ x = 0, y = 0, width, height, radius = 0, effects }: { 
           fillRadialGradientStartPoint={{ x: width * effects.lighting.x, y: height * effects.lighting.y }}
           fillRadialGradientStartRadius={0}
           fillRadialGradientEndPoint={{ x: width * effects.lighting.x, y: height * effects.lighting.y }}
-          fillRadialGradientEndRadius={Math.max(width, height) * 0.8}
+          fillRadialGradientEndRadius={Math.max(width, height) * (effects.lighting.radius ?? 0.8)}
           fillRadialGradientColorStops={[0, effects.lighting.color, 1, "rgba(255,255,255,0)"]}
+          globalCompositeOperation={effects.lighting.blendMode ?? "screen"}
         />
       ) : null}
       {effects.noise && effects.noise.amount > 0 ? <NoiseOverlay x={x} y={y} width={width} height={height} radius={radius} noise={effects.noise} /> : null}
+      {normalizeLayerStyleEffects(effects).map((effect) => (
+        <AdvancedEffectOverlay key={effect.id} x={x} y={y} width={width} height={height} radius={radius} effect={effect} />
+      ))}
       {effects.vignette && effects.vignette > 0 ? (
         <Rect
           x={x}
@@ -707,6 +715,24 @@ function EffectOverlays({ x = 0, y = 0, width, height, radius = 0, effects }: { 
         />
       ) : null}
     </Fragment>
+  );
+}
+
+function AdvancedEffectOverlay({ x, y, width, height, radius, effect }: { x: number; y: number; width: number; height: number; radius: number; effect: LayerStyleEffect }) {
+  const pattern = useMemo(() => createAdvancedEffectPattern(width, height, effect), [width, height, effect]);
+  if (!effect.enabled || effect.intensity <= 0 || !pattern) return null;
+  return (
+    <KonvaImage
+      image={pattern as unknown as HTMLImageElement}
+      x={x}
+      y={y}
+      width={width}
+      height={height}
+      cornerRadius={radius}
+      listening={false}
+      opacity={Math.min(0.72, effect.intensity)}
+      globalCompositeOperation={getStackCompositeOperation(effect.blendMode)}
+    />
   );
 }
 
@@ -770,6 +796,109 @@ function getCompositeOperation(blendMode: NoiseEffect["blendMode"]): Konva.NodeC
   if (blendMode === "multiply") return "multiply";
   if (blendMode === "overlay") return "overlay";
   return "source-over";
+}
+
+function getStackCompositeOperation(blendMode: LayerStyleEffect["blendMode"]): Konva.NodeConfig["globalCompositeOperation"] {
+  if (blendMode === "multiply") return "multiply";
+  if (blendMode === "screen") return "screen";
+  if (blendMode === "overlay") return "overlay";
+  if (blendMode === "soft-light") return "soft-light";
+  return "source-over";
+}
+
+function createAdvancedEffectPattern(width: number, height: number, effect: LayerStyleEffect): HTMLCanvasElement | null {
+  if (typeof document === "undefined") return null;
+  if (!["halftone", "ordered-dither", "ascii", "color-grade", "duotone", "rgb-split", "bloom", "displacement"].includes(effect.kind)) return null;
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(width));
+  canvas.height = Math.max(1, Math.round(height));
+  const context = canvas.getContext("2d");
+  if (!context) return null;
+  if (effect.kind === "color-grade") {
+    context.fillStyle = getEffectStringParam(effect, "tint", "#e6aa54");
+    context.globalAlpha = 0.22 + getEffectNumberParam(effect, "warmth", 0.08, -1, 1) * 0.18;
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    return canvas;
+  }
+  if (effect.kind === "duotone") {
+    const shadow = getEffectStringParam(effect, "shadow", "#12110f");
+    const highlight = getEffectStringParam(effect, "highlight", "#f5d189");
+    const gradient = context.createLinearGradient(0, canvas.height, canvas.width, 0);
+    gradient.addColorStop(0, shadow);
+    gradient.addColorStop(1, highlight);
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    return canvas;
+  }
+  if (effect.kind === "bloom") {
+    const radius = getEffectNumberParam(effect, "radius", 28, 0, 120);
+    const gradient = context.createRadialGradient(canvas.width * 0.52, canvas.height * 0.38, 0, canvas.width * 0.52, canvas.height * 0.38, Math.max(canvas.width, canvas.height) * 0.42);
+    gradient.addColorStop(0, getEffectStringParam(effect, "tint", "#f0b85d"));
+    gradient.addColorStop(1, "rgba(240,184,93,0)");
+    context.filter = `blur(${Math.max(0, radius / 5)}px)`;
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    return canvas;
+  }
+  if (effect.kind === "rgb-split") {
+    const amount = getEffectNumberParam(effect, "amount", 6, 0, 80);
+    context.globalAlpha = 0.5;
+    context.fillStyle = "#ff3b30";
+    context.fillRect(amount, 0, canvas.width, canvas.height);
+    context.globalCompositeOperation = "screen";
+    context.fillStyle = "#00c2ff";
+    context.fillRect(-amount, 0, canvas.width, canvas.height);
+    return canvas;
+  }
+  if (effect.kind === "halftone") {
+    const scale = getEffectNumberParam(effect, "scale", 18, 6, 80);
+    context.fillStyle = getEffectStringParam(effect, "ink", "#d8a24f");
+    for (let yy = scale / 2; yy < canvas.height; yy += scale) {
+      for (let xx = scale / 2; xx < canvas.width; xx += scale) {
+        context.beginPath();
+        context.arc(xx, yy, scale * 0.2, 0, Math.PI * 2);
+        context.fill();
+      }
+    }
+    return canvas;
+  }
+  if (effect.kind === "ordered-dither") {
+    const cell = getEffectNumberParam(effect, "cellSize", 8, 3, 32);
+    context.fillStyle = getEffectStringParam(effect, "light", "#f2c36f");
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = "#12110f";
+    for (let yy = 0; yy < canvas.height; yy += cell) {
+      for (let xx = 0; xx < canvas.width; xx += cell) {
+        if (((xx / cell) + (yy / cell) * 2) % 4 < 1.5) context.fillRect(xx, yy, cell, cell);
+      }
+    }
+    return canvas;
+  }
+  if (effect.kind === "ascii") {
+    const cell = getEffectNumberParam(effect, "cellSize", 26, 10, 80);
+    const charset = getEffectStringParam(effect, "charset", "@#%+=-:. ");
+    context.fillStyle = getEffectStringParam(effect, "color", "#f0bd68");
+    context.font = `${Math.round(cell * 0.58)}px ui-monospace, Consolas, monospace`;
+    for (let yy = cell; yy < canvas.height; yy += cell) {
+      for (let xx = 0; xx < canvas.width; xx += cell * 0.9) {
+        const index = Math.abs(Math.round((xx + yy + (effect.seed ?? 0)) / cell)) % charset.length;
+        context.fillText(charset[index] ?? "#", xx, yy);
+      }
+    }
+    return canvas;
+  }
+  const imageData = context.createImageData(canvas.width, canvas.height);
+  let seed = effect.seed ?? 7;
+  for (let index = 0; index < imageData.data.length; index += 4) {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    const value = (seed >>> 24) & 255;
+    imageData.data[index] = value;
+    imageData.data[index + 1] = value;
+    imageData.data[index + 2] = value;
+    imageData.data[index + 3] = 96;
+  }
+  context.putImageData(imageData, 0, 0);
+  return canvas;
 }
 
 function getImagePlacement(layer: ImageLayer, image: HTMLImageElement) {

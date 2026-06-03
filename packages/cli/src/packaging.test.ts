@@ -23,7 +23,8 @@ describe("CLI package layout", () => {
     expect(Object.keys(cliPackage.bin)).toEqual(["opengraph-creator"]);
     expect(cliPackage.files).toContain("dist");
     expect(cliPackage.files).toContain("studio-dist");
-    expect(cliPackage.files).toContain("codex-skill");
+    expect(cliPackage.files).toContain("bundled-skill");
+    expect(cliPackage.files).not.toContain("codex-skill");
     expect(cliPackage.bundledDependencies).toEqual(expect.arrayContaining(["@opengraph-creator/core", "@opengraph-creator/render"]));
     expect(cliPackage.bundleDependencies).toEqual(expect.arrayContaining(["@opengraph-creator/core", "@opengraph-creator/render"]));
     expect(cliPackage.dependencies.sharp).toBeTruthy();

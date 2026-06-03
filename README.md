@@ -90,10 +90,16 @@ These are the core commands the skill uses behind the scenes:
 
 ```bash
 opengraph-creator session create --repo . --agent codex --strategy hybrid --mode template
+opengraph-creator brief lint --source ".opengraph-creator/sessions/<id>/generation-brief.json" --repo . --id "<id>"
+opengraph-creator assets lint --brief ".opengraph-creator/sessions/<id>/generation-brief.json" --repo . --id "<id>"
 opengraph-creator document validate --source ".opengraph-creator/sessions/<id>/document.ogdoc"
+opengraph-creator design lint --source ".opengraph-creator/sessions/<id>/document.ogdoc" --repo . --id "<id>"
+opengraph-creator render check --source ".opengraph-creator/sessions/<id>/document.ogdoc" --repo . --id "<id>"
 opengraph-creator session launch --repo . --id "<id>" --open true --waitReady true --json
 opengraph-creator session wait --repo . --id "<id>" --until next-action --timeout 0
 ```
+
+The lint commands prevent weak generated output before Studio opens: they check the capability gate, structured asset plan, no-baked-text rules, `.ogdoc` editability, renderer output, and write recoverable `generation-errors.jsonl` entries when run inside a session.
 
 When `next-action` returns:
 
@@ -160,7 +166,7 @@ npm run opengraph-creator -- studio --repo .
 - `packages/studio`: React/Vite creative-tool interface.
 - `packages/cli`: CLI, local Studio server, sessions, packaging, skill install, and publish helpers.
 - `skills/opengraph-creator`: the single authored public skill package for Codex, Claude Code, and OpenCode.
-- `packages/cli/codex-skill` and `packages/cli/studio-dist`: generated during `npm run build` for the packed npm runtime; they are not committed source.
+- `packages/cli/bundled-skill` and `packages/cli/studio-dist`: generated during `npm run build` for the packed npm runtime; they are not committed source.
 - `scripts`: workflow, package, handoff, agent, and Studio smoke tests.
 
 ## Release

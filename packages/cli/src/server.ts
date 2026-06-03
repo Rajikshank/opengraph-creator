@@ -18,6 +18,7 @@ import { exportProject } from "@opengraph-creator/render";
 import { createAiImagePlan, type AgentImageOutputFormat } from "./ai-image.js";
 import { createImportedSourceProject } from "./import-source.js";
 import { readStudioDocumentFile, writeStudioDocumentFile } from "./document-io.js";
+import { exportProjectToPsd } from "./psd-export.js";
 import {
   createLibrary,
   ensureLibrary,
@@ -56,6 +57,13 @@ interface ExportBody {
   format: ExportFormat;
   target: string;
   quality?: number;
+  repo?: string;
+}
+
+interface SourceExportBody {
+  projectId: string;
+  format: "psd";
+  target: string;
   repo?: string;
 }
 
@@ -376,6 +384,20 @@ async function handleRequest(input: {
     const body = (await readJson(input.request)) as ExportBody;
     const result = await exportLibraryProject(input.library, body);
     sendJson(input.response, 200, { result });
+    return;
+  }
+
+  if (url.pathname === "/api/export-source" && input.request.method === "POST") {
+    const body = (await readJson(input.request)) as SourceExportBody;
+    if (body.format !== "psd") {
+      sendJson(input.response, 400, { error: "Only PSD source export is supported." });
+      return;
+    }
+    const project = await readLibraryProject(input.library, body.projectId);
+    const baseDir = body.repo ?? input.library.root;
+    const target = isAbsolute(body.target) ? body.target : join(baseDir, body.target);
+    const result = await exportProjectToPsd(project, target);
+    sendJson(input.response, 200, { result: { ...result, target: normalizePath(isAbsolute(body.target) ? result.target : body.target) } });
     return;
   }
 

@@ -56,6 +56,21 @@ export interface ExportProjectResponse {
   };
 }
 
+export interface ExportSourceRequest {
+  projectId: string;
+  format: "psd";
+  target: string;
+  repo?: string;
+}
+
+export interface ExportSourceResponse {
+  target: string;
+  width: number;
+  height: number;
+  layerCount: number;
+  fileSizeBytes: number;
+}
+
 export interface AgentHandoffRequest {
   project: OgProject;
   prompt?: string;
@@ -207,6 +222,22 @@ export async function exportProjectViaApi(
   const body = await requestJson<{ result: ExportProjectResponse }>(fetcher, {
     url: "/api/export",
     label: "Could not export project",
+    init: {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(request)
+    }
+  });
+  return body.result;
+}
+
+export async function exportSourceViaApi(
+  fetcher: FetchLike = fetch,
+  request: ExportSourceRequest
+): Promise<ExportSourceResponse> {
+  const body = await requestJson<{ result: ExportSourceResponse }>(fetcher, {
+    url: "/api/export-source",
+    label: "Could not export layered source",
     init: {
       method: "POST",
       headers: { "content-type": "application/json" },

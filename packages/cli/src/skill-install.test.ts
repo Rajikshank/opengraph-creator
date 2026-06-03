@@ -16,7 +16,8 @@ describe("skill installer", () => {
     expect(installed).toContain(".ogdoc");
     expect(installed).toContain("Non-Negotiable Editable Master Rule");
     expect(installed).toContain("A vague prompt such as \"create me an electrifying OG image\" is not permission to generate immediately");
-    expect(installed).toContain("visualBuildStyle");
+    expect(installed).toContain("assetStrategy");
+    expect(installed).toContain("opengraph-creator brief lint");
     expect(installed).toContain("session launch");
     expect(installed).toContain("--until next-action");
     expect(installed).toContain("agent-request.json");

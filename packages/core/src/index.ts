@@ -18,7 +18,16 @@ export type SessionStatus =
   | "terminal"
   | "stale";
 export type EffectCapability = "supported" | "disabled";
-export type EffectName = "gradient" | "noise" | "lighting" | "vignette" | "blur" | "shadow" | "glow";
+import {
+  getLayerStyleEffectCapabilities,
+  getEffectNumberParam,
+  hasEnabledLayerStyleEffect,
+  normalizeLayerStyleEffects
+} from "./effect-registry.js";
+import type { LayerStyleEffect, LayerStyleEffectKind } from "./effect-registry.js";
+
+export type BasicEffectName = "gradient" | "noise" | "lighting" | "vignette" | "blur" | "shadow" | "glow";
+export type EffectName = BasicEffectName | LayerStyleEffectKind;
 export {
   clampPerspectivePoint,
   getPerspectiveBounds,
@@ -28,6 +37,7 @@ export {
   type PerspectiveQuad
 } from "./perspective.js";
 
+export * from "./effect-registry.js";
 export * from "./document-package.js";
 
 export interface OpenGraphCreatorSourceArtifact {
@@ -68,11 +78,18 @@ export interface NoiseEffect {
 }
 
 export interface LightingEffect {
-  type: "spotlight" | "edge";
+  type: "spotlight" | "edge" | "linear" | "ambient" | "rim";
   x: number;
   y: number;
   intensity: number;
   color: string;
+  radius?: number;
+  softness?: number;
+  falloff?: number;
+  angle?: number;
+  spread?: number;
+  blendMode?: "screen" | "overlay" | "soft-light";
+  scope?: "layer" | "canvas";
 }
 
 export interface GlowEffect {
@@ -91,6 +108,7 @@ export interface LayerEffects {
   noise?: NoiseEffect;
   lighting?: LightingEffect;
   vignette?: number;
+  stack?: LayerStyleEffect[];
 }
 
 export function getNoiseDisplayOpacity(amount: number): number {
@@ -124,7 +142,12 @@ const shadowVisual = {
 } as const;
 
 export function hasComposedLayerEffect(effects: LayerEffects): boolean {
-  return Boolean(effects.shadow || isGlowEffectEnabled(effects.glow) || Math.max(0, effects.blur ?? 0) > 0);
+  return Boolean(
+    effects.shadow ||
+      isGlowEffectEnabled(effects.glow) ||
+      Math.max(0, effects.blur ?? 0) > 0 ||
+      hasEnabledLayerStyleEffect(effects, ["bloom", "rgb-split", "color-grade", "duotone", "displacement"])
+  );
 }
 
 export function getCanvasShadowVisual(effects: LayerEffects, fallbackColor: string): CanvasShadowVisual {
@@ -163,11 +186,17 @@ export function getCanvasEffectCachePadding(effects: LayerEffects, fallbackColor
   const shadow = getCanvasShadowVisual(effects, fallbackColor);
   const glow = normalizeGlowEffect(effects.glow, fallbackColor);
   const glowSpread = isGlowEffectEnabled(effects.glow) ? glow.radius + (glow.spread ?? 0) : 0;
-  return Math.ceil(Math.max(blur * 3, shadow.blur * 2 + Math.abs(shadow.offsetY), glowSpread * 2, 0) + 8);
+  const bloomSpread = normalizeLayerStyleEffects(effects)
+    .filter((effect) => effect.enabled && effect.kind === "bloom")
+    .reduce((max, effect) => Math.max(max, getEffectNumberParam(effect, "radius", 28, 0, 120) * effect.intensity), 0);
+  const rgbSpread = normalizeLayerStyleEffects(effects)
+    .filter((effect) => effect.enabled && effect.kind === "rgb-split")
+    .reduce((max, effect) => Math.max(max, getEffectNumberParam(effect, "amount", 6, 0, 80) * effect.intensity), 0);
+  return Math.ceil(Math.max(blur * 3, shadow.blur * 2 + Math.abs(shadow.offsetY), glowSpread * 2, bloomSpread * 2, rgbSpread * 2, 0) + 8);
 }
 
 export function getLayerEffectCapabilities(kind: LayerKind): Record<EffectName, EffectCapability> {
-  const supportedSurfaceEffects: Record<EffectName, EffectCapability> = {
+  const supportedSurfaceEffects: Record<BasicEffectName, EffectCapability> = {
     gradient: "supported",
     noise: "supported",
     lighting: "supported",
@@ -178,7 +207,7 @@ export function getLayerEffectCapabilities(kind: LayerKind): Record<EffectName, 
   };
 
   if (kind === "background" || kind === "shape" || kind === "image" || kind === "logo" || kind === "screenshot") {
-    return supportedSurfaceEffects;
+    return { ...supportedSurfaceEffects, ...getLayerStyleEffectCapabilities(kind) };
   }
 
   if (kind === "text" || kind === "badge") {
@@ -189,7 +218,8 @@ export function getLayerEffectCapabilities(kind: LayerKind): Record<EffectName, 
       vignette: "disabled",
       blur: "supported",
       shadow: "supported",
-      glow: "supported"
+      glow: "supported",
+      ...getLayerStyleEffectCapabilities(kind)
     };
   }
 
@@ -200,7 +230,8 @@ export function getLayerEffectCapabilities(kind: LayerKind): Record<EffectName, 
     vignette: "disabled",
     blur: "disabled",
     shadow: "disabled",
-    glow: "disabled"
+    glow: "disabled",
+    ...getLayerStyleEffectCapabilities(kind)
   };
 }
 

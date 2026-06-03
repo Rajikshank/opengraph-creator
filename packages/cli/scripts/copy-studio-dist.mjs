@@ -7,7 +7,8 @@ const repoRoot = resolve(cliRoot, "..", "..");
 const source = resolve(repoRoot, "packages", "studio", "dist");
 const target = resolve(cliRoot, "studio-dist");
 const skillSource = resolve(repoRoot, "skills", "opengraph-creator");
-const skillTarget = resolve(cliRoot, "codex-skill");
+const skillTarget = resolve(cliRoot, "bundled-skill");
+const legacySkillTarget = resolve(cliRoot, "codex-skill");
 
 try {
   const info = await stat(source);
@@ -21,5 +22,6 @@ await mkdir(target, { recursive: true });
 await cp(source, target, { recursive: true });
 
 await rm(skillTarget, { recursive: true, force: true });
+await rm(legacySkillTarget, { recursive: true, force: true });
 await mkdir(skillTarget, { recursive: true });
 await cp(skillSource, skillTarget, { recursive: true });

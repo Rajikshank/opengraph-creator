@@ -66,11 +66,14 @@ The installed skill should:
 
 1. Inspect the app routes, brand assets, copy, screenshots, and existing metadata.
 2. Ask only the relevant design questions.
-3. Create a durable `.opengraph-creator/sessions/<id>/` session.
-4. Generate an editable layered `.ogdoc` document.
-5. Launch Studio with that document.
-6. Wait for Studio to request a revision, publish, cancel, or restart.
-7. Wire metadata only after the user confirms publish.
+3. Write a structured generation brief with capability, concept, recipe, and asset-plan decisions.
+4. Run `brief lint` and `assets lint` before document generation.
+5. Create a durable `.opengraph-creator/sessions/<id>/` session.
+6. Generate an editable layered `.ogdoc` document.
+7. Run `document validate`, `design lint`, and `render check`.
+8. Launch Studio with that document.
+9. Wait for Studio to request a revision, publish, cancel, or restart.
+10. Wire metadata only after the user confirms publish.
 
 ## Session Handoff Files
 
@@ -89,6 +92,19 @@ OpenGraph Creator uses a local file bridge so agents and Studio can resume safel
 ```
 
 Treat these files as recovery state. Preview requests are review state only; metadata should be changed only after a confirmed publish request.
+
+## Generation Quality Gates
+
+The runtime includes agent-facing checks that prevent weak or flattened generated output before Studio opens:
+
+```bash
+opengraph-creator brief lint --source ".opengraph-creator/sessions/<id>/generation-brief.json" --repo . --id "<id>"
+opengraph-creator assets lint --brief ".opengraph-creator/sessions/<id>/generation-brief.json" --repo . --id "<id>"
+opengraph-creator design lint --source ".opengraph-creator/sessions/<id>/document.ogdoc" --repo . --id "<id>"
+opengraph-creator render check --source ".opengraph-creator/sessions/<id>/document.ogdoc" --repo . --id "<id>"
+```
+
+When run with `--repo` and `--id`, failed checks append recoverable entries to `.opengraph-creator/sessions/<id>/generation-errors.jsonl` so the agent can repair the brief or `.ogdoc` and continue the wait loop.
 
 ## Update Skill And Runtime
 

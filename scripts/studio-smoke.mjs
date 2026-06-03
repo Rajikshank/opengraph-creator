@@ -148,9 +148,12 @@ async function verifyStudioViewport(page, url, viewport, screenshotPath, options
     await page.getByRole("switch", { name: "Glow" }).click();
     await setRangeValue(page, "Glow intensity", "0.75");
     await setRangeValue(page, "Glow radius", "36");
+    await exerciseAdvancedEffectStack(page);
     await page.getByRole("tab", { name: /Export/i }).click();
     await page.getByRole("button", { name: /Export images/i }).click();
     await page.getByText(/Exported /).waitFor({ timeout: 10_000 });
+    await page.getByRole("button", { name: /Export layered PSD/i }).click();
+    await page.getByText(/Exported layered PSD:/).waitFor({ timeout: 10_000 });
     await page.getByRole("button", { name: /Publish with agent/i }).click();
     await page.getByText(/Agent publish handoff saved:/).waitFor({ timeout: 10_000 });
   }
@@ -304,6 +307,41 @@ async function assertPlatformPreviewHasLayerShadow(page, layerId) {
   }, layerId);
   if (!previewState.hasShadow || !previewState.hasFilter || !previewState.hasSharedOpacity) {
     throw new Error(`Platform preview is missing current shadow filter: ${JSON.stringify(previewState)}`);
+  }
+  await page.getByRole("radio", { name: /^Canvas$/i }).click();
+  await page.locator("canvas").waitFor({ timeout: 5_000 });
+}
+
+async function exerciseAdvancedEffectStack(page) {
+  await page.getByRole("tab", { name: /Effects/i }).click();
+  await page.locator(".effect-gallery").getByRole("button", { name: /Color Grade/i }).click();
+  await page.locator(".effect-stack-list").getByText("Color Grade").waitFor({ timeout: 5_000 });
+  const gradeBefore = await readCanvasPixelHash(page);
+  await setRangeValue(page, "Intensity", "0.38");
+  await page.waitForTimeout(220);
+  const gradeAfter = await readCanvasPixelHash(page);
+  if (gradeBefore === gradeAfter) {
+    throw new Error("Advanced color-grade effect did not update the editing canvas in real time.");
+  }
+
+  await page.locator(".effect-gallery").getByRole("button", { name: /Ordered Dither/i }).click();
+  await page.locator(".effect-stack-list").getByText("Ordered Dither").waitFor({ timeout: 5_000 });
+  await setRangeValue(page, "Cell size", "10");
+  await page.waitForTimeout(220);
+  await assertPlatformPreviewHasAdvancedEffect(page, "ogc-dither-");
+}
+
+async function assertPlatformPreviewHasAdvancedEffect(page, marker) {
+  await page.getByRole("radio", { name: /Platform Preview/i }).click();
+  await page.locator(".preview-image-large svg").waitFor({ timeout: 5_000 });
+  const previewState = await page.evaluate((expectedMarker) => {
+    const svg = document.querySelector(".preview-image-large svg");
+    if (!svg) throw new Error("Platform preview SVG missing.");
+    const markup = svg.outerHTML;
+    return { hasMarker: markup.includes(expectedMarker), marker: expectedMarker };
+  }, marker);
+  if (!previewState.hasMarker) {
+    throw new Error(`Platform preview is missing advanced effect output: ${JSON.stringify(previewState)}`);
   }
   await page.getByRole("radio", { name: /^Canvas$/i }).click();
   await page.locator("canvas").waitFor({ timeout: 5_000 });
@@ -632,6 +670,26 @@ async function readCanvasFingerprint(page) {
   });
 }
 
+async function readCanvasPixelHash(page) {
+  return page.evaluate(() => {
+    const canvas = document.querySelector("canvas");
+    if (!(canvas instanceof HTMLCanvasElement)) throw new Error("Konva canvas was not found.");
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Canvas context was not available.");
+    const { width, height } = canvas;
+    const data = context.getImageData(0, 0, width, height).data;
+    let hash = 2166136261;
+    for (let y = 0; y < height; y += Math.max(1, Math.floor(height / 24))) {
+      for (let x = 0; x < width; x += Math.max(1, Math.floor(width / 32))) {
+        const index = (y * width + x) * 4;
+        hash ^= data[index] + data[index + 1] * 3 + data[index + 2] * 5 + data[index + 3] * 7;
+        hash = Math.imul(hash, 16777619);
+      }
+    }
+    return hash >>> 0;
+  });
+}
+
 async function readCanvasNoiseMetrics(page) {
   return page.evaluate(() => {
     const canvas = document.querySelector("canvas");
@@ -689,7 +747,7 @@ async function readEffectDebugState(page) {
 }
 
 async function setRangeValue(page, label, value) {
-  await page.getByRole("slider", { name: label }).evaluate((input, nextValue) => {
+  await page.getByRole("slider", { name: label, exact: true }).evaluate((input, nextValue) => {
     if (!(input instanceof HTMLInputElement)) throw new Error(`${input} is not an input.`);
     const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
     if (!valueSetter) throw new Error("HTMLInputElement value setter was not available.");
