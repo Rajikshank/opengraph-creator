@@ -1113,8 +1113,8 @@ describe("OpenGraphCreator CLI helpers", () => {
     expect(report.skill).toMatchObject({
       updateRequired: true,
       manualUpdateCommands: [
-        "npx skills check",
-        "npx skills update",
+        "npx skills check -g opengraph-creator",
+        "npx skills add -g Rajikshank/opengraph-creator --skill opengraph-creator --agent \"*\" -y",
         "npx -y opengraph-creator@latest doctor --json"
       ],
       restartRequired: true
@@ -1159,7 +1159,7 @@ describe("OpenGraphCreator CLI helpers", () => {
 
     expect(report.checks.find((check) => check.id === "agent-skill-installed")).toMatchObject({
       status: "warn",
-      action: expect.stringContaining("npx skills update")
+      action: expect.stringContaining("npx skills add -g Rajikshank/opengraph-creator")
     });
   });
 });

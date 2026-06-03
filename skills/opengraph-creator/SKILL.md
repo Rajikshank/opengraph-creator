@@ -17,10 +17,10 @@ This skill is installed through the skills ecosystem, for example `npx skills ad
 
 ## Update And Doctor
 
-Use the standard skills updater for the skill and npm for the Studio runtime. The Studio runtime may relaunch itself through `npx -y opengraph-creator@latest` when a newer runtime exists. The skill instructions must not be silently updated inside an active task because the running agent may already have loaded the old instructions.
+Use the skills CLI for the skill and npm for the Studio runtime. The Studio runtime may relaunch itself through `npx -y opengraph-creator@latest` when a newer runtime exists. The skill instructions must not be silently updated inside an active task because the running agent may already have loaded the old instructions.
 
 1. Check updates with `opengraph-creator update check --json` or `npx -y opengraph-creator@latest update check --json`.
-2. If the report says the skill is stale or missing, stop the OG task and tell the user to run `npx skills check`, then `npx skills update`, then `npx -y opengraph-creator@latest doctor --json`.
+2. If the report says the skill is stale or missing, stop the OG task and tell the user to run `npx skills check -g opengraph-creator`, then `npx skills add -g Rajikshank/opengraph-creator --skill opengraph-creator --agent "*" -y`, then `npx -y opengraph-creator@latest doctor --json`.
 3. Tell the user to start a new agent session after updating the skill. Do not continue the current generation flow with stale skill instructions.
 4. If only the Studio runtime is outdated, it may auto-refresh through `npx -y opengraph-creator@latest`; continue after the refreshed runtime starts.
 5. If the doctor reports a missing agent skill, prefer reinstalling from the skill repo with `npx skills add -g Rajikshank/opengraph-creator --skill opengraph-creator --agent "*" -y`; use the fallback installer only for local repair, for example `opengraph-creator install-skill --agent opencode --scope global` or `opengraph-creator install-skill --agent all --scope global`.

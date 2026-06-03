@@ -19,8 +19,7 @@ describe("OpenGraph Creator public skill source", () => {
     expect(skill).toContain("Mandatory State Machine");
     expect(skill).toContain("Do not end the chat after launch");
     expect(skill).toContain("agent-restart-from-question-gate");
-    expect(skill).toContain("npx skills check");
-    expect(skill).toContain("npx skills update");
+    expect(skill).toContain("npx skills check -g opengraph-creator");
     expect(skill).toContain('npx skills add -g Rajikshank/opengraph-creator --skill opengraph-creator --agent "*" -y');
     expect(skill).not.toContain("OPENAI_API_KEY");
     expect(skill).not.toContain("Image API");

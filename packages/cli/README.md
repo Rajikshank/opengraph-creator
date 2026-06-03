@@ -119,8 +119,8 @@ The Studio runtime can relaunch itself through the latest npm package when a new
 Skill updates are manual because the running agent may already have loaded the old skill instructions. If the update check reports a stale or missing skill, stop the current OG task, run:
 
 ```bash
-npx skills check
-npx skills update
+npx skills check -g opengraph-creator
+npx skills add -g Rajikshank/opengraph-creator --skill opengraph-creator --agent "*" -y
 npx -y opengraph-creator@latest doctor --json
 ```
 

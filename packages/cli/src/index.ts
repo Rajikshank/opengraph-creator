@@ -299,8 +299,8 @@ export async function createUpdateReport(input: UpdateReportInput = {}): Promise
       installed,
       updateRequired,
       manualUpdateCommands: [
-        "npx skills check",
-        "npx skills update",
+        "npx skills check -g opengraph-creator",
+        "npx skills add -g Rajikshank/opengraph-creator --skill opengraph-creator --agent \"*\" -y",
         "npx -y opengraph-creator@latest doctor --json"
       ],
       restartRequired: updateRequired
@@ -398,7 +398,7 @@ export async function createDoctorReport(input: DoctorReportInput = {}): Promise
           status: "warn",
           detail: "OpenGraph Creator skill is not installed in a known Codex, Claude Code, or OpenCode skills directory.",
           action:
-            "Preferred: npx skills check && npx skills update, then npx skills add -g Rajikshank/opengraph-creator --skill opengraph-creator --agent \"*\" -y if missing. Fallback: opengraph-creator install-skill --agent codex --scope global."
+            "Preferred: npx skills add -g Rajikshank/opengraph-creator --skill opengraph-creator --agent \"*\" -y. Fallback: opengraph-creator install-skill --agent codex --scope global."
         },
     {
       id: "agent-handoff",

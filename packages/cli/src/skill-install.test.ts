@@ -23,8 +23,8 @@ describe("skill installer", () => {
     expect(installed).toContain("agent-request.json");
     expect(installed).toContain("publish-request.json");
     expect(installed).toContain("preview before applying metadata");
-    expect(installed).toContain("npx skills check");
-    expect(installed).toContain("npx skills update");
+    expect(installed).toContain("npx skills check -g opengraph-creator");
+    expect(installed).toContain('npx skills add -g Rajikshank/opengraph-creator --skill opengraph-creator --agent "*" -y');
     await expect(stat(join(target, "opengraph-creator", "agents", "openai.yaml"))).resolves.toMatchObject({ size: expect.any(Number) });
     await expect(stat(join(target, "opengraph-creator", "references", "agent-handoff.md"))).resolves.toMatchObject({ size: expect.any(Number) });
     await expect(stat(join(target, "opengraph-creator", "references", "workflow.md"))).resolves.toMatchObject({ size: expect.any(Number) });

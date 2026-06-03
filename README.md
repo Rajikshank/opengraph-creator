@@ -167,8 +167,8 @@ OpenGraph Creator can relaunch the Studio runtime through `npx -y opengraph-crea
 Skill updates are manual because the running coding agent may already have loaded the old instructions. If the update check reports a stale skill, stop the current OG task, run:
 
 ```bash
-npx skills check
-npx skills update
+npx skills check -g opengraph-creator
+npx skills add -g Rajikshank/opengraph-creator --skill opengraph-creator --agent "*" -y
 npx -y opengraph-creator@latest doctor --json
 ```
 
