@@ -1,4 +1,4 @@
-import type { Framework, GenerationStrategy } from "@opengraph-creator/core";
+import type { CompositionPlan, Framework, GenerationStrategy } from "@opengraph-creator/core";
 import {
   createDefaultAssetPlan,
   createDefaultLibraryPlan,
@@ -40,6 +40,7 @@ export interface GenerationBrief {
   semanticPalette: string[];
   visualTasteProfile: string[];
   compositionPlan: string[];
+  compositionPlanV2: CompositionPlan;
   assetPlan: AssetPlanItem[];
   recipeSelection: RecipeSelection;
   libraryPlan: LibraryPlan;
@@ -74,6 +75,7 @@ function createGenerationBriefFromScan(input: GenerationBriefInput, scan: RepoSc
     brandAssets: scan.brandAssets
   });
   const assetPlan = buildAssetPlan(input, recipeSelection);
+  const compositionPlanV2 = buildCompositionPlanV2(input, scan, routes, recipeSelection, assetPlan);
   const libraryPlan = createDefaultLibraryPlan();
   const negativeDirection = buildNegativeDirection(input);
   const designQualityChecklist = buildDesignQualityChecklist(input);
@@ -115,6 +117,7 @@ function createGenerationBriefFromScan(input: GenerationBriefInput, scan: RepoSc
     semanticPalette,
     visualTasteProfile,
     compositionPlan,
+    compositionPlanV2,
     assetPlan,
     recipeSelection,
     libraryPlan,
@@ -137,6 +140,7 @@ function createGenerationBriefFromScan(input: GenerationBriefInput, scan: RepoSc
       semanticPalette,
       visualTasteProfile,
       compositionPlan,
+      compositionPlanV2,
       assetPlan,
       recipeSelection,
       libraryPlan,
@@ -161,6 +165,7 @@ function buildCodexPrompt(input: GenerationBriefInput & {
   semanticPalette: string[];
   visualTasteProfile: string[];
   compositionPlan: string[];
+  compositionPlanV2: CompositionPlan;
   assetPlan: AssetPlanItem[];
   recipeSelection: RecipeSelection;
   libraryPlan: LibraryPlan;
@@ -211,6 +216,7 @@ function buildCodexPrompt(input: GenerationBriefInput & {
     `Semantic palette: ${input.semanticPalette.join(" ")}`,
     `Visual taste profile: ${input.visualTasteProfile.join(" ")}`,
     `Composition plan: ${input.compositionPlan.join(" ")}`,
+    `Composition plan v2: ${JSON.stringify(input.compositionPlanV2)}`,
     `Recipe selection: ${input.recipeSelection.id}. ${input.recipeSelection.reason} Anti-slop rules: ${input.recipeSelection.antiSlopRules.join(" ")}`,
     `Asset plan: ${formatAssetPlan(input.assetPlan)}`,
     `Library plan: ${input.libraryPlan.primaryReferences.join(" ")}`,
@@ -269,6 +275,75 @@ function buildCompositionPlan(input: GenerationBriefInput, routes: string[]): st
     "Keep all text, badges, shapes, and key layout objects separately editable in the Studio document.",
     "Do not reuse the last OpenGraph Creator document structure unless this is an explicit recovery task."
   ];
+}
+
+function buildCompositionPlanV2(
+  input: GenerationBriefInput,
+  scan: RepoScanResult,
+  routes: string[],
+  recipeSelection: RecipeSelection,
+  assetPlan: AssetPlanItem[]
+): CompositionPlan {
+  const conceptThesis = buildConceptThesis(input, routes, scan);
+  const styleThesis = buildStyleThesis(input, routes, scan);
+  const semanticPalette = buildSemanticPalette(input, scan);
+  const brandEvidence = [
+    ...(scan.brandAssets.length ? scan.brandAssets.map((asset) => `Detected brand asset: ${asset}.`) : ["No brand asset detected; derive brand from route copy and app category."]),
+    ...(scan.routeContexts.length
+      ? scan.routeContexts.slice(0, 4).map((route) => `Route ${route.route}: ${route.detectedTitle ?? route.detectedDescription ?? "content detected"}.`)
+      : ["No route metadata detected; use documented assumptions from the question gate."])
+  ];
+
+  return {
+    version: 1,
+    appName: input.name,
+    strategy: input.strategy,
+    capabilityGate: {
+      imageGeneration: defaultGenerationCapabilities.imageGeneration,
+      svgGeneration: defaultGenerationCapabilities.svgGeneration,
+      htmlGeneration: defaultGenerationCapabilities.htmlGeneration,
+      webReferenceResearch: defaultGenerationCapabilities.webReferenceResearch
+    },
+    brandEvidence,
+    referenceResearch: buildReferenceResearch(input, scan),
+    conceptThesis,
+    styleThesis,
+    semanticPalette: semanticPalette.slice(0, 3).map((item, index) => ({
+      role: index === 0 ? "brand-anchor" : index === 1 ? "depth-shadow" : "action-highlight",
+      color: index === 0 ? "#111316" : index === 1 ? "#27211a" : "#d9a441",
+      reason: item
+    })),
+    compositionArchetype: {
+      id: recipeSelection.id,
+      reason: recipeSelection.reason,
+      avoidRepeating: ["left-text-right-image", "generic-dashboard-card", "same badge stack and background treatment"]
+    },
+    focalHierarchy: [
+      { role: "headline", layerId: "headline", priority: 1 },
+      { role: input.strategy === "common" ? "app visual motif" : "route-specific visual motif", layerId: "supporting-visual-asset", priority: 2 },
+      { role: "brand mark or route badge", layerId: "brand-or-badge", priority: 3 }
+    ],
+    assetStrategy: assetPlan.map((item) => ({
+      role: item.role,
+      medium: toCompositionAssetMedium(item.medium),
+      textPolicy: item.textPolicy,
+      reason: item.reason
+    })),
+    effectsPlan: [
+      { kind: "shadow", scope: "layer", reason: "Separate readable foreground layers from the background without flattening them." },
+      { kind: "lighting", scope: "canvas", reason: "Create a deliberate focal path tied to the composition thesis." },
+      { kind: "vignette", scope: "canvas", reason: "Control edge contrast for platform crops when the concept needs depth." }
+    ],
+    negativeDirection: buildNegativeDirection(input),
+    qualityChecklist: buildDesignQualityChecklist(input)
+  };
+}
+
+function toCompositionAssetMedium(medium: AssetPlanItem["medium"]): CompositionPlan["assetStrategy"][number]["medium"] {
+  if (medium === "react-satori-svg" || medium === "d3-svg") return "svg";
+  if (medium === "react-playwright-capture") return "html";
+  if (medium === "repo-screenshot") return "repo-asset";
+  return medium;
 }
 
 function buildConceptThesis(input: GenerationBriefInput, routes: string[], scan: RepoScanResult): string {

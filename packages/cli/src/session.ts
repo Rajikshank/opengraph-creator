@@ -287,6 +287,55 @@ export async function createAgentRequest(input: CreateAgentRequestInput): Promis
   return request;
 }
 
+export async function resolveActiveAgentRequestAfterDocumentReady(input: {
+  repo: string;
+  sessionId: string;
+  documentPath: string;
+  projectId: string;
+}): Promise<OpenGraphCreatorSession> {
+  const paths = getSessionPaths(input.repo, input.sessionId);
+  const session = await readOpenGraphCreatorSession(input.repo, input.sessionId);
+  const requests = [...(session.agentRequests ?? [])];
+  const activeRequestIndex = findActiveAgentRequestIndex(requests);
+  const nextRequests =
+    activeRequestIndex >= 0
+      ? requests.map((request, index) =>
+          index === activeRequestIndex
+            ? {
+                ...request,
+                documentPath: input.documentPath,
+                expectedOutput: request.expectedOutput ?? input.documentPath,
+                status: "resolved" as const,
+                resolvedAt: new Date().toISOString()
+              }
+            : request
+        )
+      : requests;
+  const next: OpenGraphCreatorSession = {
+    ...session,
+    status: "editing",
+    activeProjectId: input.projectId,
+    activeDocumentPath: input.documentPath,
+    agentRequests: nextRequests,
+    pendingAction: "studio-editing",
+    lastHeartbeatAt: new Date().toISOString()
+  };
+  await writeOpenGraphCreatorSession(next, input.repo);
+  const latest = nextRequests.at(-1);
+  if (latest?.path === paths.agentRequestJson) {
+    await atomicWriteJson(paths.agentRequestJson, latest);
+  }
+  await appendSessionEvent(input.repo, input.sessionId, {
+    type: activeRequestIndex >= 0 ? "agent.request.resolved" : "session.document.ready",
+    message:
+      activeRequestIndex >= 0
+        ? "Agent revision request resolved by a valid Studio document."
+        : "Session moved to editing because a valid Studio document exists.",
+    data: { documentPath: input.documentPath, projectId: input.projectId }
+  });
+  return next;
+}
+
 export async function cancelOpenGraphCreatorSession(repo: string, sessionId: string, reason: string): Promise<OpenGraphCreatorSession> {
   const session = await readOpenGraphCreatorSession(repo, sessionId);
   const next: OpenGraphCreatorSession = {
@@ -393,6 +442,13 @@ function normalizeSession(session: OpenGraphCreatorSession): OpenGraphCreatorSes
     agentRequests: session.agentRequests ?? [],
     recoverInstructions: session.recoverInstructions ?? []
   };
+}
+
+function findActiveAgentRequestIndex(requests: OpenGraphCreatorAgentRequest[]): number {
+  for (let index = requests.length - 1; index >= 0; index -= 1) {
+    if (requests[index].status === "requested") return index;
+  }
+  return -1;
 }
 
 export async function fileExists(path: string): Promise<boolean> {

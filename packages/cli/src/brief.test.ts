@@ -36,6 +36,14 @@ describe("generation brief", () => {
     expect(brief.compositionPlan.join("\n")).toContain("composition archetype");
     expect(brief.compositionPlan.join("\n")).toContain("Do not reuse the last OpenGraph Creator document structure");
     expect(brief.compositionPlan.join("\n")).not.toContain("Use a shared 1200x630 composition with headline, subtitle, badge, logo/screenshot/art");
+    expect(brief.compositionPlanV2).toMatchObject({
+      version: 1,
+      appName: "BillingKit",
+      strategy: "pages",
+      compositionArchetype: expect.objectContaining({ id: "route-map" })
+    });
+    expect(brief.compositionPlanV2.brandEvidence.join("\n")).toContain("public/logo.svg");
+    expect(brief.compositionPlanV2.assetStrategy.some((item) => item.role.includes("headline") && item.medium === "ogdoc-text")).toBe(true);
     expect(brief.recipeSelection.id).toBe("route-map");
     expect(brief.assetPlan).toEqual([
       expect.objectContaining({ id: "editable-headline-system", medium: "ogdoc-text", textPolicy: "editable-required" }),
@@ -54,6 +62,7 @@ describe("generation brief", () => {
     expect(brief.codexPrompt).toContain("Reference research phase:");
     expect(brief.codexPrompt).toContain("Concept thesis:");
     expect(brief.codexPrompt).toContain("Style thesis:");
+    expect(brief.codexPrompt).toContain("Composition plan v2:");
     expect(brief.codexPrompt).toContain("Asset plan:");
     expect(brief.codexPrompt).toContain("editable-headline-system");
     expect(brief.codexPrompt).toContain("Negative direction:");

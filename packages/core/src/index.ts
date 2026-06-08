@@ -39,6 +39,7 @@ export {
 
 export * from "./effect-registry.js";
 export * from "./document-package.js";
+export * from "./composition-plan.js";
 
 export interface OpenGraphCreatorSourceArtifact {
   kind: SourceArtifactKind;
@@ -374,8 +375,10 @@ export interface OpenGraphCreatorAgentRequest {
   prompt: string;
   documentPath: string;
   expectedOutput: string;
-  status: "requested" | "resolved";
+  status: "requested" | "acknowledged" | "resolved" | "cancelled";
   createdAt: string;
+  resolvedAt?: string;
+  cancelledAt?: string;
 }
 
 export interface OpenGraphCreatorSession {

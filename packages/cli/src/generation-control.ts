@@ -1,5 +1,5 @@
-import type { Framework, OgLayer, OgProject } from "@opengraph-creator/core";
-import { getRenderableProject, validateStudioDocument } from "@opengraph-creator/core";
+import type { CompositionPlan, Framework, OgLayer, OgProject } from "@opengraph-creator/core";
+import { getRenderableProject, lintCompositionPlan, validateStudioDocument } from "@opengraph-creator/core";
 import { renderProjectToSvg } from "@opengraph-creator/render";
 import type { RouteContext } from "./scan.js";
 
@@ -87,6 +87,7 @@ export interface GenerationBriefLike {
   styleThesis?: unknown;
   semanticPalette?: unknown;
   compositionPlan?: unknown;
+  compositionPlanV2?: unknown;
   assetPlan?: unknown;
   recipeSelection?: unknown;
   libraryPlan?: unknown;
@@ -276,6 +277,13 @@ export function lintGenerationBrief(brief: GenerationBriefLike): GenerationContr
   assertNonEmpty(brief.semanticPalette, "semanticPalette", errors);
   assertNonEmpty(brief.compositionPlan, "compositionPlan", errors);
   assertNonEmpty(brief.negativeDirection, "negativeDirection", errors);
+  if (!brief.compositionPlanV2 || typeof brief.compositionPlanV2 !== "object") {
+    errors.push("Generation brief must include compositionPlanV2.");
+  } else {
+    const compositionResult = lintCompositionPlan(brief.compositionPlanV2 as CompositionPlan);
+    errors.push(...compositionResult.errors);
+    warnings.push(...compositionResult.warnings);
+  }
 
   const assetPlan = normalizeAssetPlan(brief.assetPlan);
   if (!assetPlan.length) {

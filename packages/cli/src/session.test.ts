@@ -14,6 +14,7 @@ import {
   getSessionPaths,
   readOpenGraphCreatorSession,
   recordSessionExport,
+  resolveActiveAgentRequestAfterDocumentReady,
   restartOpenGraphCreatorSession
 } from "./session";
 
@@ -212,6 +213,38 @@ describe("OpenGraphCreator durable sessions", () => {
     expect(session.publishRequests.some((request) => request.status === "confirmed")).toBe(true);
     expect(session.agentRequests?.[0]).toMatchObject({ prompt: "Revise the lighting and keep editable text." });
     expect(await readFile(paths.agentRequestJson, "utf8")).toContain("Revise the lighting");
+  });
+
+  it("resolves the active agent request when a valid revised document is ready", async () => {
+    const repo = await mkdtemp(join(tmpdir(), "OpenGraphCreator-session-resolve-request-"));
+    const project = createDefaultProject({ name: "Resolve Request", strategy: "common" });
+    await createOpenGraphCreatorSession({ repo, id: "session-resolve", project });
+    const paths = getSessionPaths(repo, "session-resolve");
+    await createAgentRequest({
+      repo,
+      sessionId: "session-resolve",
+      prompt: "Improve hierarchy and keep text editable.",
+      documentPath: paths.documentFile
+    });
+
+    const resolved = await resolveActiveAgentRequestAfterDocumentReady({
+      repo,
+      sessionId: "session-resolve",
+      documentPath: paths.documentFile,
+      projectId: project.projectId
+    });
+    const agentRequestJson = JSON.parse(await readFile(paths.agentRequestJson, "utf8"));
+    const eventLog = await readFile(paths.eventsJsonl, "utf8");
+
+    expect(resolved).toMatchObject({
+      status: "editing",
+      pendingAction: "studio-editing",
+      activeDocumentPath: paths.documentFile,
+      activeProjectId: project.projectId
+    });
+    expect(resolved.agentRequests?.at(-1)).toMatchObject({ status: "resolved", resolvedAt: expect.any(String) });
+    expect(agentRequestJson).toMatchObject({ status: "resolved", resolvedAt: expect.any(String) });
+    expect(eventLog).toContain("agent.request.resolved");
   });
 
   it("records cancelled sessions as terminal user decisions", async () => {

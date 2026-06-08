@@ -45,6 +45,7 @@ import {
   getSessionPaths,
   readOpenGraphCreatorSession,
   recordSessionExport,
+  resolveActiveAgentRequestAfterDocumentReady,
   writeOpenGraphCreatorSession
 } from "./session.js";
 import { installCodexSkill } from "./skill-install.js";
@@ -1323,19 +1324,21 @@ async function markSessionEditingAfterDocumentPreflight(
   documentPath: string,
   projectId: string
 ): Promise<void> {
-  if (session.status !== "waiting-for-agent" && session.pendingAction !== "agent-generate-og-source") return;
-  await writeOpenGraphCreatorSession({
-    ...session,
-    status: "editing",
-    activeProjectId: projectId,
-    activeDocumentPath: documentPath,
-    pendingAction: "studio-editing",
-    lastHeartbeatAt: new Date().toISOString()
-  }, repo);
-  await appendSessionEvent(repo, session.id, {
-    type: "session.repaired",
-    message: "Session moved to editing because a valid Studio document exists.",
-    data: { documentPath, projectId }
+  const hasActiveAgentRequest = (session.agentRequests ?? []).some((request) => request.status === "requested");
+  if (
+    session.status !== "waiting-for-agent" &&
+    session.pendingAction !== "agent-generate-og-source" &&
+    session.pendingAction !== "agent-revise-document" &&
+    session.pendingAction !== "agent-restart-from-question-gate" &&
+    !hasActiveAgentRequest
+  ) {
+    return;
+  }
+  await resolveActiveAgentRequestAfterDocumentReady({
+    repo,
+    sessionId: session.id,
+    documentPath,
+    projectId
   });
 }
 
@@ -1423,7 +1426,7 @@ function sessionMatchesWaitTarget(session: Awaited<ReturnType<typeof readOpenGra
     return (
       hasAgentRequest ||
       hasConfirmed ||
-      session.status === "agent-requested" ||
+      (session.status === "agent-requested" && hasAgentRequest) ||
       session.status === "published" ||
       session.status === "cancelled" ||
       session.status === "terminal"

@@ -42,6 +42,7 @@ When generating editable JSON:
 - `styleThesis`: concise visual point of view for the OG system
 - `semanticPalette`: named color roles, not random colors
 - `compositionPlan`: hierarchy, safe-zone, focal asset, text zones, and page rhythm
+- `compositionPlanV2`: strict design contract with `version`, `appName`, `strategy`, `capabilityGate`, `brandEvidence`, `referenceResearch`, `conceptThesis`, `styleThesis`, role-based `semanticPalette`, `compositionArchetype`, `focalHierarchy`, `assetStrategy`, `effectsPlan`, `negativeDirection`, and `qualityChecklist`
 - `assetPlan`: structured per-asset route with role, medium, fallbacks, reason, textPolicy, editableOverlayLayers, validation, and requiredEvidence
 - `recipeSelection`: selected recipe id, reason, requiredEvidence, and antiSlopRules
 - `libraryPlan`: authoring/reference libraries allowed as adapters, plus forbidden runtime changes

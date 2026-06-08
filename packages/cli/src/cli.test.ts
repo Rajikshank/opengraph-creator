@@ -17,7 +17,7 @@ import {
   shouldAutoRefreshRuntime,
   runCli
 } from "./index";
-import { createOpenGraphCreatorSession, getSessionPaths, recordSessionExport } from "./session";
+import { createAgentRequest, createOpenGraphCreatorSession, getSessionPaths, recordSessionExport } from "./session";
 
 describe("OpenGraphCreator CLI helpers", () => {
   it("creates a project from CLI-like args without touching app files", () => {
@@ -901,6 +901,42 @@ describe("OpenGraphCreator CLI helpers", () => {
 
     expect(confirmedSession).toContain('"status": "published"');
     expect(confirmedSession).toContain('"status": "confirmed"');
+  });
+
+  it("does not treat a resolved revision request as the next Studio decision", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-cli-next-action-resolved-"));
+    const project = createDefaultProject({ name: "Resolved Revision", strategy: "common" });
+
+    await createOpenGraphCreatorSession({ repo: dir, id: "resolved-next-action", agent: "codex", project });
+    const paths = getSessionPaths(dir, "resolved-next-action");
+    await createAgentRequest({
+      repo: dir,
+      sessionId: "resolved-next-action",
+      prompt: "Revise the composition, then wait again.",
+      documentPath: paths.documentFile
+    });
+
+    await preflightSessionDocument(dir, "resolved-next-action", { repairLegacyProject: true });
+    const started = Date.now();
+    await runCli([
+      "session",
+      "wait",
+      "--repo",
+      dir,
+      "--id",
+      "resolved-next-action",
+      "--until",
+      "next-action",
+      "--timeout",
+      "100"
+    ]);
+    const elapsed = Date.now() - started;
+    const session = await readFile(paths.sessionJson, "utf8");
+
+    expect(elapsed).toBeGreaterThanOrEqual(75);
+    expect(session).toContain('"status": "editing"');
+    expect(session).toContain('"status": "resolved"');
+    expect(session).not.toContain('"status": "agent-requested"');
   });
 
   it("imports generated SVG, HTML, and image assets into editable project wrappers", async () => {

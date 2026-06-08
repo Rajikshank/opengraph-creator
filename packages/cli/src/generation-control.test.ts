@@ -27,6 +27,7 @@ describe("generation control", () => {
       styleThesis: "Matte editorial newsroom surface with one warm signal accent.",
       semanticPalette: ["brand anchor", "depth shadow", "signal accent"],
       compositionPlan: ["Use a route-map system for page variants."],
+      compositionPlanV2: createValidCompositionPlan(recipeSelection.id),
       assetPlan: createDefaultAssetPlan({
         generationMode: "template",
         strategy: "hybrid",
@@ -64,6 +65,7 @@ describe("generation control", () => {
       styleThesis: "domain-specific style",
       semanticPalette: ["roles"],
       compositionPlan: ["plan"],
+      compositionPlanV2: createValidCompositionPlan("editorial-split"),
       assetPlan: badAssetPlan,
       recipeSelection: {
         id: "editorial-split",
@@ -116,3 +118,46 @@ describe("generation control", () => {
     expect(checkRender(project)).toMatchObject({ ok: true, errors: [] });
   });
 });
+
+function createValidCompositionPlan(recipeId: string) {
+  return {
+    version: 1,
+    appName: "Signal Desk",
+    strategy: "hybrid",
+    capabilityGate: {
+      imageGeneration: "unknown",
+      svgGeneration: "available",
+      htmlGeneration: "available",
+      webReferenceResearch: "unknown"
+    },
+    brandEvidence: ["Detected route copy for a reporting workspace."],
+    referenceResearch: ["Use repo evidence and user references without copying protected assets."],
+    conceptThesis: "A signal room metaphor tied to reporting workflows and route-specific insight cards.",
+    styleThesis: "Matte editorial newsroom surface with warm signal accents and restrained depth.",
+    semanticPalette: [
+      { role: "brand-anchor", color: "#101214", reason: "Dark app chrome and newsroom tone." },
+      { role: "depth-shadow", color: "#27211a", reason: "Separates foreground layers." },
+      { role: "signal-accent", color: "#d9a441", reason: "Marks the focal route signal." }
+    ],
+    compositionArchetype: {
+      id: recipeId,
+      reason: "The app content needs a readable, evidence-backed editorial hierarchy.",
+      avoidRepeating: ["left-text-right-image", "generic-dashboard-card"]
+    },
+    focalHierarchy: [
+      { role: "headline", layerId: "headline", priority: 1 },
+      { role: "route motif", layerId: "motif", priority: 2 }
+    ],
+    assetStrategy: [
+      {
+        role: "headline",
+        medium: "ogdoc-text",
+        textPolicy: "editable-required",
+        reason: "Primary social copy must stay editable in Studio."
+      }
+    ],
+    effectsPlan: [{ kind: "lighting", scope: "canvas", reason: "Guide attention to the route motif." }],
+    negativeDirection: ["No baked headline text.", "No meaningless blobs.", "No repeated old structure."],
+    qualityChecklist: ["Readable at 1200x630.", "Text remains editable.", "Preview and export match."]
+  };
+}

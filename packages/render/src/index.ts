@@ -2,6 +2,7 @@ import { getRenderableProject, type ExportFormat, type OgProject } from "@opengr
 import { renderProjectToSvg } from "./browser.js";
 
 export { renderProjectToSvg } from "./browser.js";
+export { createRenderPlan, type RenderPlan, type RenderPlanNode } from "./render-plan.js";
 
 export interface ExportOptions {
   format: ExportFormat;

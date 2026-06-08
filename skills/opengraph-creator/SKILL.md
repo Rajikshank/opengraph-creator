@@ -71,7 +71,7 @@ Ask these decisions before generation:
 
 Only treat the Question Gate as complete when the user explicitly answers these decisions in the current task or directly relevant earlier answers. If the user says "you decide", choose conservatively from repo evidence and record that decision in the brief.
 
-Write the resolved answers into `.opengraph-creator/sessions/<id>/generation-brief.json` after session creation. The brief must record `capabilities`, `coverage`, `assetStrategy`, `assetPermission`, `visualDirection`, `references`, `targetPages`, `exportFormats`, `referenceResearch`, `conceptThesis`, `styleThesis`, `semanticPalette`, `compositionPlan`, `compositionArchetype`, structured `assetPlan`, `recipeSelection`, `libraryPlan`, `noisePolicy`, `texturePolicy`, `negativeDirection`, `routeVariantRules`, and any assumptions.
+Write the resolved answers into `.opengraph-creator/sessions/<id>/generation-brief.json` after session creation. The brief must record `capabilities`, `coverage`, `assetStrategy`, `assetPermission`, `visualDirection`, `references`, `targetPages`, `exportFormats`, `referenceResearch`, `conceptThesis`, `styleThesis`, `semanticPalette`, `compositionPlan`, `compositionPlanV2`, `compositionArchetype`, structured `assetPlan`, `recipeSelection`, `libraryPlan`, `noisePolicy`, `texturePolicy`, `negativeDirection`, `routeVariantRules`, and any assumptions.
 
 ## Reference Research, Concept Thesis, And Style Thesis
 
@@ -93,6 +93,8 @@ Then write a Style Thesis:
 
 - State the intended visual character in one or two concrete sentences.
 - Define the composition plan and composition archetype: hierarchy, focal asset, text zones, safe-zone behavior, and page-variant rhythm. Choose the archetype from the app/page evidence rather than reusing a default OpenGraph Creator layout.
+- Define `compositionPlanV2` as the strict design contract before generating `.ogdoc`: include capability gate, brand evidence, reference research, concept thesis, style thesis, semantic palette with role-based colors, fresh composition archetype, focal hierarchy, asset strategy, effects plan, negative direction, and quality checklist.
+- `compositionPlanV2.assetStrategy` must route headline, subtitle, title, badge, CTA, route label, wordmark, and logo text to editable `.ogdoc` text or badge layers. Generated images, SVG, HTML, screenshots, and repo assets may support the design but must not carry important baked text.
 - Read `references/asset-strategy-router.md`, choose a recipe from `references/recipes/`, and define the structured asset plan: which generated images, SVG/HTML captures, screenshots, textures, lighting, or references become editable asset layers.
 - Noise, grain, and texture are opt-in. Set `noisePolicy` or `texturePolicy` to `allowed` only if the user explicitly requests it or a provided reference clearly depends on it; otherwise do not add `effects.noise` to generated layers.
 - Define the negative direction: what the design must avoid, including generic AI dashboard styling, flat baked text, copied references, unreadable detail, or disconnected variants.
@@ -141,7 +143,7 @@ Use `--agent codex` in Codex, `--agent claude` in Claude Code, and `--agent open
 1. Run `opengraph-creator doctor --json`. If `opengraph-creator` is not available, use `npx -y opengraph-creator@latest doctor --json`, or run `node scripts/ensure-opengraph-creator.mjs` for local install guidance. Do not clone or build the Studio repo for normal user runtime.
 2. Inspect the repo for framework, routes, metadata files, brand assets, screenshots, copy, product tone, and existing OG metadata.
 3. Complete the Hard Stop Capability And Question Gate and wait for missing answers.
-4. Run the Reference Research, Concept Thesis, and Style Thesis phases. Read `references/asset-strategy-router.md`, select the nearest recipe in `references/recipes/`, and record `referenceResearch`, `conceptThesis`, `styleThesis`, `semanticPalette`, `compositionPlan`, structured `assetPlan`, `recipeSelection`, `libraryPlan`, `negativeDirection`, and `routeVariantRules`.
+4. Run the Reference Research, Concept Thesis, and Style Thesis phases. Read `references/asset-strategy-router.md`, select the nearest recipe in `references/recipes/`, and record `referenceResearch`, `conceptThesis`, `styleThesis`, `semanticPalette`, `compositionPlan`, `compositionPlanV2`, structured `assetPlan`, `recipeSelection`, `libraryPlan`, `negativeDirection`, and `routeVariantRules`.
 5. Create a durable session with the current agent name, for example `opengraph-creator session create --repo "<repo>" --agent opencode --strategy hybrid --mode template`. Use `--agent codex` in Codex, `--agent claude` in Claude Code, and `--agent opencode` in OpenCode.
 6. Run `opengraph-creator brief --repo "<repo>" --name "<app>" --strategy common|pages|hybrid --mode template --out ".opengraph-creator/brief.json"` and write the resolved question gate answers plus research/thesis fields into `.opengraph-creator/sessions/<id>/generation-brief.json`.
    - Validate the brief before asset generation: `opengraph-creator brief lint --source ".opengraph-creator/sessions/<id>/generation-brief.json" --repo "<repo>" --id "<id>"`.
