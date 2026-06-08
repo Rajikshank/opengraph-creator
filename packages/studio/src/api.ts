@@ -53,6 +53,18 @@ export interface ExportProjectResponse {
     nonblank: boolean;
     socialReady: boolean;
     warnings: string[];
+    renderPlan?: {
+      targetSurface: "social-og";
+      sourceProjectId: string;
+      activePageId?: string;
+      canvas: {
+        width: number;
+        height: number;
+      };
+      nodeCount: number;
+      visibleNodeCount: number;
+      effectScopes: string[];
+    };
   };
 }
 

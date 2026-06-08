@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
-import { createDefaultProject } from "@opengraph-creator/core";
+import { createDefaultProject, createMultiPageProject } from "@opengraph-creator/core";
 import { exportProject, renderProjectToSvg } from "./index";
 
 describe("OpenGraph Creator export pipeline", () => {
@@ -24,7 +24,13 @@ describe("OpenGraph Creator export pipeline", () => {
       width: 1200,
       height: 630,
       nonblank: true,
-      socialReady: true
+      socialReady: true,
+      renderPlan: {
+        targetSurface: "social-og",
+        nodeCount: project.layers.length,
+        visibleNodeCount: project.layers.filter((layer) => !layer.hidden).length,
+        effectScopes: expect.any(Array)
+      }
     });
   });
 
@@ -38,6 +44,7 @@ describe("OpenGraph Creator export pipeline", () => {
 
     expect(result.qualityReport.nonblank).toBe(false);
     expect(result.qualityReport.socialReady).toBe(false);
+    expect(result.qualityReport.renderPlan.visibleNodeCount).toBe(0);
     expect(result.qualityReport.warnings).toContain("Export appears blank.");
   });
 
@@ -57,7 +64,27 @@ describe("OpenGraph Creator export pipeline", () => {
       width: 1200,
       height: 630,
       nonblank: true,
-      socialReady: true
+      socialReady: true,
+      renderPlan: expect.objectContaining({
+        canvas: { width: 1200, height: 630 },
+        targetSurface: "social-og"
+      })
+    });
+  });
+
+  it("reports active page render-plan evidence for page exports", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-"));
+    const target = join(dir, "pricing.svg");
+    const project = createMultiPageProject(createDefaultProject({ name: "Page Export", strategy: "pages", pages: ["/", "/pricing"] }));
+    const pricingPage = project.pages?.find((page) => page.route === "/pricing");
+    if (!pricingPage) throw new Error("missing pricing page");
+
+    const result = await exportProject({ ...project, activePageId: pricingPage.id }, { format: "svg", target });
+
+    expect(result.qualityReport.renderPlan).toMatchObject({
+      activePageId: pricingPage.id,
+      nodeCount: pricingPage.layers.length,
+      visibleNodeCount: pricingPage.layers.filter((layer) => !layer.hidden).length
     });
   });
 

@@ -1,5 +1,6 @@
 import { getRenderableProject, type ExportFormat, type OgProject } from "@opengraph-creator/core";
 import { renderProjectToSvg } from "./browser.js";
+import { createRenderPlan, type RenderPlan } from "./render-plan.js";
 
 export { renderProjectToSvg } from "./browser.js";
 export { createRenderPlan, type RenderPlan, type RenderPlanNode } from "./render-plan.js";
@@ -28,6 +29,20 @@ export interface ExportQualityReport {
   nonblank: boolean;
   socialReady: boolean;
   warnings: string[];
+  renderPlan: ExportRenderPlanQuality;
+}
+
+export interface ExportRenderPlanQuality {
+  targetSurface: RenderPlan["targetSurface"];
+  sourceProjectId: string;
+  activePageId?: string;
+  canvas: {
+    width: number;
+    height: number;
+  };
+  nodeCount: number;
+  visibleNodeCount: number;
+  effectScopes: string[];
 }
 
 type SharpQualityReader = (input: string | Buffer) => {
@@ -43,6 +58,7 @@ export async function exportProject(project: OgProject, options: ExportOptions):
   ]);
   const sharp = sharpModule.default;
   const renderableProject = getRenderableProject(project);
+  const renderPlan = createRenderPlan(project);
   const svg = renderProjectToSvg(renderableProject);
   await mkdir(dirname(options.target), { recursive: true });
 
@@ -64,7 +80,8 @@ export async function exportProject(project: OgProject, options: ExportOptions):
     width: renderableProject.canvas.width,
     height: renderableProject.canvas.height,
     fileSizeBytes: info.size,
-    svg
+    svg,
+    renderPlan
   });
 
   return {
@@ -85,6 +102,7 @@ async function createExportQualityReport(input: {
   height: number;
   fileSizeBytes: number;
   svg: string;
+  renderPlan: RenderPlan;
 }): Promise<ExportQualityReport> {
   const mimeType = getMimeType(input.format);
   const warnings: string[] = [];
@@ -115,7 +133,20 @@ async function createExportQualityReport(input: {
     fileSizeBytes: input.fileSizeBytes,
     nonblank,
     socialReady: width === 1200 && height === 630 && nonblank && input.fileSizeBytes <= 5_000_000,
-    warnings
+    warnings,
+    renderPlan: summarizeRenderPlan(input.renderPlan)
+  };
+}
+
+function summarizeRenderPlan(renderPlan: RenderPlan): ExportRenderPlanQuality {
+  return {
+    targetSurface: renderPlan.targetSurface,
+    sourceProjectId: renderPlan.sourceProjectId,
+    activePageId: renderPlan.activePageId,
+    canvas: renderPlan.canvas,
+    nodeCount: renderPlan.nodes.length,
+    visibleNodeCount: renderPlan.nodes.filter((node) => !node.hidden).length,
+    effectScopes: [...new Set(renderPlan.nodes.flatMap((node) => node.effectScopes))].sort()
   };
 }
 
