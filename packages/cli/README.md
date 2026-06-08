@@ -99,7 +99,7 @@ The runtime includes agent-facing checks that prevent weak or flattened generate
 
 ```bash
 opengraph-creator brief lint --source ".opengraph-creator/sessions/<id>/generation-brief.json" --repo . --id "<id>"
-opengraph-creator assets lint --brief ".opengraph-creator/sessions/<id>/generation-brief.json" --repo . --id "<id>"
+opengraph-creator assets lint --brief ".opengraph-creator/sessions/<id>/generation-brief.json" --document ".opengraph-creator/sessions/<id>/document.ogdoc" --repo . --id "<id>"
 opengraph-creator design lint --source ".opengraph-creator/sessions/<id>/document.ogdoc" --repo . --id "<id>"
 opengraph-creator render check --source ".opengraph-creator/sessions/<id>/document.ogdoc" --repo . --id "<id>"
 ```

@@ -746,7 +746,11 @@ export async function runCli(argv: string[]): Promise<void> {
       const source = args.brief ?? args.source;
       if (!source) throw new Error("--brief or --source is required");
       const brief = JSON.parse(await readFile(source, "utf8")) as Record<string, unknown>;
-      const result = lintGenerationBrief(brief);
+      let result = lintGenerationBrief(brief);
+      if (args.document) {
+        const document = await readProjectDocumentForChecks(args.document);
+        result = mergeGenerationControlResults(result, lintDesignDocument(document.project, document.assets));
+      }
       await writeGenerationControlLog(args, "assets.lint", result);
       console.log(JSON.stringify(result, null, 2));
       if (!result.ok) process.exitCode = 1;
@@ -1108,6 +1112,17 @@ async function writeGenerationControlLog(
     })}\n`,
     "utf8"
   );
+}
+
+function mergeGenerationControlResults(...results: GenerationControlLintResult[]): GenerationControlLintResult {
+  const dataEntries = results.flatMap((result, index) => (result.data ? [[`result${index}`, result.data] as const] : []));
+  return {
+    ok: results.every((result) => result.ok),
+    errors: results.flatMap((result) => result.errors),
+    warnings: results.flatMap((result) => result.warnings),
+    recovery: [...new Set(results.flatMap((result) => result.recovery))],
+    data: dataEntries.length ? Object.fromEntries(dataEntries) : undefined
+  };
 }
 
 function parseArgs(args: string[]): Record<string, string> {
@@ -1540,7 +1555,7 @@ Commands:
   opengraph-creator brand record-composition --repo <path> --session <id> --archetype <recipe-id> --concept "brief concept"
   opengraph-creator brief --repo <path> --name <app> --strategy common|pages|hybrid --mode template|pure-image --reference image.png --out .opengraph-creator/brief.json
   opengraph-creator brief lint --source .opengraph-creator/sessions/<id>/generation-brief.json --repo <path> --id <session-id>
-  opengraph-creator assets lint --brief .opengraph-creator/sessions/<id>/generation-brief.json --repo <path> --id <session-id>
+  opengraph-creator assets lint --brief .opengraph-creator/sessions/<id>/generation-brief.json --document .opengraph-creator/sessions/<id>/document.ogdoc --repo <path> --id <session-id>
   opengraph-creator design lint --source .opengraph-creator/sessions/<id>/document.ogdoc --repo <path> --id <session-id>
   opengraph-creator import --source generated.svg --kind svg --name <app> --out project.og.json
   opengraph-creator install-skill --agent codex --scope global|project  (fallback only; valid agents: codex, claude-code, opencode, all)

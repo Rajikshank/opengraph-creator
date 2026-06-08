@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, readdir, stat, writeFile } from "node:fs/prom
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createDefaultProject, createMultiPageProject, unpackStudioDocument } from "@opengraph-creator/core";
+import { createDefaultProject, createMultiPageProject, packStudioDocument, unpackStudioDocument, type ImageLayer } from "@opengraph-creator/core";
 import {
   applyMetadataPlanToRepo,
   createDoctorReport,
@@ -17,6 +17,7 @@ import {
   shouldAutoRefreshRuntime,
   runCli
 } from "./index";
+import { createDefaultAssetPlan, createRecipeSelection, defaultGenerationCapabilities } from "./generation-control";
 import { createAgentRequest, createOpenGraphCreatorSession, getSessionPaths, recordSessionExport } from "./session";
 
 describe("OpenGraphCreator CLI helpers", () => {
@@ -189,6 +190,47 @@ describe("OpenGraphCreator CLI helpers", () => {
       }
     });
     expect(log.errors.join("\n")).toContain("/pricing");
+  });
+
+  it("assets lint can validate generated document assets against the brief", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-assets-lint-"));
+    const briefPath = join(dir, "generation-brief.json");
+    const documentPath = join(dir, "document.ogdoc");
+    const sessionId = "asset-lint";
+    const project = createDefaultProject({ name: "Asset Lint", strategy: "common" });
+    const bakedHeadlineLayer: ImageLayer = {
+      id: "generated-headline-art",
+      kind: "image",
+      name: "Generated headline image",
+      x: 0,
+      y: 0,
+      width: 1200,
+      height: 630,
+      rotation: 0,
+      opacity: 1,
+      locked: false,
+      hidden: false,
+      src: "assets/generated-headline.svg",
+      assetPath: "assets/generated-headline.svg",
+      fit: "cover",
+      borderRadius: 0,
+      effects: { shadow: false, glow: false, blur: 0 }
+    };
+    project.layers = [bakedHeadlineLayer, ...project.layers.filter((layer) => layer.kind !== "text" && layer.kind !== "badge")];
+    await writeFile(documentPath, await packStudioDocument({ project, assets: { "assets/generated-headline.svg": new TextEncoder().encode("<svg/>") } }));
+    await writeFile(briefPath, JSON.stringify(createValidBrief()));
+
+    const previousExitCode = process.exitCode;
+    process.exitCode = undefined;
+    await runCli(["assets", "lint", "--brief", briefPath, "--document", documentPath, "--repo", dir, "--id", sessionId]);
+    process.exitCode = previousExitCode;
+
+    const log = JSON.parse(await readFile(join(dir, ".opengraph-creator", "sessions", sessionId, "generation-errors.jsonl"), "utf8"));
+    expect(log).toMatchObject({
+      kind: "assets.lint",
+      ok: false,
+      errors: expect.arrayContaining([expect.stringContaining("Generated headline image")])
+    });
   });
 
   it("applies confirmed Next.js metadata by creating the smallest metadata file", async () => {
@@ -1228,3 +1270,73 @@ describe("OpenGraphCreator CLI helpers", () => {
     });
   });
 });
+
+function createValidBrief(): Record<string, unknown> {
+  const recipeSelection = createRecipeSelection({
+    appName: "Asset Lint",
+    framework: "next",
+    routes: ["/"],
+    routeContexts: [],
+    brandAssets: ["public/logo.svg"]
+  });
+
+  return {
+    appName: "Asset Lint",
+    capabilities: defaultGenerationCapabilities,
+    referenceResearch: ["Use local route copy, brand assets, and user references as evidence."],
+    conceptThesis: "A concrete editorial object system based on the app brand and route purpose.",
+    styleThesis: "Matte dark interface depth with warm editorial accents and restrained contrast.",
+    semanticPalette: ["brand anchor", "editorial surface", "warm accent"],
+    compositionPlan: ["Use an editable text hierarchy over packaged support assets."],
+    compositionPlanV2: {
+      version: 1,
+      appName: "Asset Lint",
+      strategy: "common",
+      capabilityGate: {
+        imageGeneration: "unknown",
+        svgGeneration: "available",
+        htmlGeneration: "available",
+        webReferenceResearch: "unknown"
+      },
+      brandEvidence: ["Detected brand asset public/logo.svg."],
+      referenceResearch: ["Use repo evidence and user references without copying protected assets."],
+      conceptThesis: "A concrete editorial object system based on the app brand and route purpose.",
+      styleThesis: "Matte dark interface depth with warm editorial accents and restrained contrast.",
+      semanticPalette: [
+        { role: "brand-anchor", color: "#101214", reason: "Anchors the app identity." },
+        { role: "editorial-surface", color: "#f6f0e7", reason: "Keeps the OG card readable." },
+        { role: "warm-accent", color: "#d9a441", reason: "Marks the route focal point." }
+      ],
+      compositionArchetype: {
+        id: recipeSelection.id,
+        reason: "The detected app evidence needs a readable editable hierarchy.",
+        avoidRepeating: ["generic-dashboard-card", "left-text-right-image"]
+      },
+      focalHierarchy: [
+        { role: "headline", layerId: "headline", priority: 1 },
+        { role: "supporting art", layerId: "generated-art", priority: 2 }
+      ],
+      assetStrategy: [
+        {
+          role: "headline",
+          medium: "ogdoc-text",
+          textPolicy: "editable-required",
+          reason: "Primary social copy must remain editable in Studio."
+        }
+      ],
+      effectsPlan: [{ kind: "lighting", scope: "canvas", reason: "Guide attention to the headline." }],
+      negativeDirection: ["No baked headline text.", "No meaningless shapes.", "No repeated old structure."],
+      qualityChecklist: ["Text remains editable.", "Preview and export match.", "Readable at 1200x630."]
+    },
+    assetPlan: createDefaultAssetPlan({
+      generationMode: "template",
+      strategy: "common",
+      recipeId: recipeSelection.id,
+      imageGeneration: "unknown"
+    }),
+    recipeSelection,
+    negativeDirection: ["No baked headline text.", "No generic decoration."],
+    noisePolicy: "disallowed",
+    texturePolicy: "unknown"
+  };
+}

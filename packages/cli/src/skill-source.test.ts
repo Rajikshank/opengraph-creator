@@ -45,6 +45,7 @@ describe("OpenGraph Creator public skill source", () => {
     expect(skill).toContain("recipeSelection");
     expect(skill).toContain("opengraph-creator brief lint");
     expect(skill).toContain("opengraph-creator render check");
+    expect(skill).toContain('--document ".opengraph-creator/sessions/<id>/document.ogdoc"');
     expect(skill).toContain("routeVariantRules");
   });
 
@@ -93,6 +94,7 @@ describe("OpenGraph Creator public skill source", () => {
     expect(visualReference).toContain("Composition Archetype Router");
     expect(routerReference).toContain("Asset Strategy Router");
     expect(routerReference).toContain("opengraph-creator design lint");
+    expect(routerReference).toContain('--document ".opengraph-creator/sessions/<id>/document.ogdoc"');
     expect(recipeReference).toContain("Route Map");
     expect(ensureScript).toContain("opengraph-creator doctor --json");
     await expect(stat(`${skillRoot}/scripts/ensure-opengraph-creator.mjs`)).resolves.toMatchObject({ size: expect.any(Number) });

@@ -122,7 +122,7 @@ The skill and CLI use validation steps before Studio launch:
 
 ```bash
 opengraph-creator brief lint --source ".opengraph-creator/sessions/<id>/generation-brief.json" --repo . --id "<id>"
-opengraph-creator assets lint --brief ".opengraph-creator/sessions/<id>/generation-brief.json" --repo . --id "<id>"
+opengraph-creator assets lint --brief ".opengraph-creator/sessions/<id>/generation-brief.json" --document ".opengraph-creator/sessions/<id>/document.ogdoc" --repo . --id "<id>"
 opengraph-creator document validate --source ".opengraph-creator/sessions/<id>/document.ogdoc"
 opengraph-creator design lint --source ".opengraph-creator/sessions/<id>/document.ogdoc" --repo . --id "<id>"
 opengraph-creator render check --source ".opengraph-creator/sessions/<id>/document.ogdoc" --repo . --id "<id>"

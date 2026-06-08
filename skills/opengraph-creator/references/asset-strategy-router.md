@@ -47,7 +47,7 @@ After writing `generation-brief.json`, run:
 
 ```bash
 opengraph-creator brief lint --source ".opengraph-creator/sessions/<id>/generation-brief.json" --repo "<repo>" --id "<id>"
-opengraph-creator assets lint --brief ".opengraph-creator/sessions/<id>/generation-brief.json" --repo "<repo>" --id "<id>"
+opengraph-creator assets lint --brief ".opengraph-creator/sessions/<id>/generation-brief.json" --document ".opengraph-creator/sessions/<id>/document.ogdoc" --repo "<repo>" --id "<id>"
 ```
 
 After writing `document.ogdoc`, run:
