@@ -1103,7 +1103,8 @@ async function writeGenerationControlLog(
       ok: result.ok,
       errors: result.errors,
       warnings: result.warnings,
-      recovery: result.recovery
+      recovery: result.recovery,
+      data: result.data
     })}\n`,
     "utf8"
   );

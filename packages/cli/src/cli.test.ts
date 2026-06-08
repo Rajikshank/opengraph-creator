@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, readdir, stat, writeFile } from "node:fs/prom
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createDefaultProject, unpackStudioDocument } from "@opengraph-creator/core";
+import { createDefaultProject, createMultiPageProject, unpackStudioDocument } from "@opengraph-creator/core";
 import {
   applyMetadataPlanToRepo,
   createDoctorReport,
@@ -160,6 +160,35 @@ describe("OpenGraphCreator CLI helpers", () => {
     expect(svg).toContain("Exact project headline");
     expect(svg).toContain("Do not replace this copy");
     expect(svg).not.toContain("Rendered OG");
+  });
+
+  it("writes page render-plan evidence to the session recovery log when render check fails", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "OpenGraphCreator-render-log-"));
+    const projectPath = join(dir, "pages.og.json");
+    const sessionId = "render-log";
+    const project = createMultiPageProject(createDefaultProject({ name: "Render Log", strategy: "pages", pages: ["/", "/pricing"] }));
+    const pricing = project.pages?.find((page) => page.route === "/pricing");
+    if (!pricing) throw new Error("missing pricing page");
+    pricing.layers = pricing.layers.map((layer) => ({ ...layer, hidden: true }));
+    await writeFile(projectPath, JSON.stringify(project), "utf8");
+
+    const previousExitCode = process.exitCode;
+    process.exitCode = undefined;
+    await runCli(["render", "check", "--source", projectPath, "--repo", dir, "--id", sessionId]);
+    process.exitCode = previousExitCode;
+
+    const log = JSON.parse(await readFile(join(dir, ".opengraph-creator", "sessions", sessionId, "generation-errors.jsonl"), "utf8"));
+    expect(log).toMatchObject({
+      kind: "render.check",
+      ok: false,
+      data: {
+        renderPlans: [
+          expect.objectContaining({ route: "/", visibleNodeCount: expect.any(Number) }),
+          expect.objectContaining({ route: "/pricing", visibleNodeCount: 0 })
+        ]
+      }
+    });
+    expect(log.errors.join("\n")).toContain("/pricing");
   });
 
   it("applies confirmed Next.js metadata by creating the smallest metadata file", async () => {
