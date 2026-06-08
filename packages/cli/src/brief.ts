@@ -9,6 +9,7 @@ import {
   type LibraryPlan,
   type RecipeSelection
 } from "./generation-control.js";
+import { createBrandStoreFromScan, getRecentCompositionArchetypes, readBrandStore, type BrandStore } from "./brand-store.js";
 import { scanRepo, type RepoScanResult } from "./scan.js";
 import type { RouteContext } from "./scan.js";
 
@@ -54,14 +55,16 @@ export interface GenerationBrief {
 
 export async function createGenerationBrief(input: GenerationBriefInput): Promise<GenerationBrief> {
   const scan = await scanRepo(input.repo);
-  return createGenerationBriefFromScan(input, scan);
+  const brandStore = await readBrandStore(scan.root) ?? await createBrandStoreFromScan(scan);
+  const recentArchetypes = await getRecentCompositionArchetypes(scan.root);
+  return createGenerationBriefFromScan(input, scan, brandStore, recentArchetypes);
 }
 
-function createGenerationBriefFromScan(input: GenerationBriefInput, scan: RepoScanResult): GenerationBrief {
+function createGenerationBriefFromScan(input: GenerationBriefInput, scan: RepoScanResult, brandStore: BrandStore, recentArchetypes: string[]): GenerationBrief {
   const routes = scan.routes.length ? scan.routes : ["/"];
   const generationMode = input.generationMode ?? "template";
   const capabilities = defaultGenerationCapabilities;
-  const referenceResearch = buildReferenceResearch(input, scan);
+  const referenceResearch = buildReferenceResearch(input, scan, brandStore);
   const conceptThesis = buildConceptThesis(input, routes, scan);
   const styleThesis = buildStyleThesis(input, routes, scan);
   const semanticPalette = buildSemanticPalette(input, scan);
@@ -75,7 +78,7 @@ function createGenerationBriefFromScan(input: GenerationBriefInput, scan: RepoSc
     brandAssets: scan.brandAssets
   });
   const assetPlan = buildAssetPlan(input, recipeSelection);
-  const compositionPlanV2 = buildCompositionPlanV2(input, scan, routes, recipeSelection, assetPlan);
+  const compositionPlanV2 = buildCompositionPlanV2(input, scan, routes, recipeSelection, assetPlan, brandStore, recentArchetypes);
   const libraryPlan = createDefaultLibraryPlan();
   const negativeDirection = buildNegativeDirection(input);
   const designQualityChecklist = buildDesignQualityChecklist(input);
@@ -239,9 +242,10 @@ function buildCodexPrompt(input: GenerationBriefInput & {
     .join("\n");
 }
 
-function buildReferenceResearch(input: GenerationBriefInput, scan: RepoScanResult): string[] {
+function buildReferenceResearch(input: GenerationBriefInput, scan: RepoScanResult, brandStore?: BrandStore): string[] {
   return [
     "Inspect local brand assets, screenshots, existing metadata, and route copy before selecting a visual direction.",
+    brandStore ? `Use local brand store evidence from .opengraph-creator/brand/brand.json for ${brandStore.appName}.` : "Create a local brand store before generation when possible.",
     scan.brandAssets.length
       ? `Use detected brand assets as primary reference material: ${scan.brandAssets.join(", ")}.`
       : "If no brand assets exist, derive tone from route copy, product vocabulary, and framework context.",
@@ -282,13 +286,16 @@ function buildCompositionPlanV2(
   scan: RepoScanResult,
   routes: string[],
   recipeSelection: RecipeSelection,
-  assetPlan: AssetPlanItem[]
+  assetPlan: AssetPlanItem[],
+  brandStore: BrandStore,
+  recentArchetypes: string[]
 ): CompositionPlan {
   const conceptThesis = buildConceptThesis(input, routes, scan);
   const styleThesis = buildStyleThesis(input, routes, scan);
   const semanticPalette = buildSemanticPalette(input, scan);
   const brandEvidence = [
-    ...(scan.brandAssets.length ? scan.brandAssets.map((asset) => `Detected brand asset: ${asset}.`) : ["No brand asset detected; derive brand from route copy and app category."]),
+    `Local brand store: .opengraph-creator/brand/brand.json for ${brandStore.appName}.`,
+    ...brandStore.assets.map((asset) => `${asset.role}: ${asset.path}.`),
     ...(scan.routeContexts.length
       ? scan.routeContexts.slice(0, 4).map((route) => `Route ${route.route}: ${route.detectedTitle ?? route.detectedDescription ?? "content detected"}.`)
       : ["No route metadata detected; use documented assumptions from the question gate."])
@@ -316,7 +323,11 @@ function buildCompositionPlanV2(
     compositionArchetype: {
       id: recipeSelection.id,
       reason: recipeSelection.reason,
-      avoidRepeating: ["left-text-right-image", "generic-dashboard-card", "same badge stack and background treatment"]
+      avoidRepeating: [
+        ...brandStore.rules.blockedMotifs,
+        ...recentArchetypes.map((archetype) => `recent:${archetype}`),
+        "same badge stack and background treatment"
+      ]
     },
     focalHierarchy: [
       { role: "headline", layerId: "headline", priority: 1 },

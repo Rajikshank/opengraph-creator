@@ -53,6 +53,14 @@ When generating editable JSON:
 - `exportFormats`: requested final formats, defaulting to optimized 1200x630 PNG
 - `assumptions`: agent decisions when the user says "you decide"
 
+`.opengraph-creator/brand/` should record durable design evidence:
+
+- `brand.json`: local app name, framework, brand assets, route evidence, reference notes, blocked motifs, and required layer policies
+- `style-notes.md`: human-readable local brand notes for future agent sessions
+- `references/`: user-provided or local reference notes/assets only
+- `approved-assets/`: assets the user or repo clearly permits
+- `composition-history.json`: recent recipe/archetype choices so fresh generations avoid repeating the same structure
+
 When publishing page-specific work, read `publish-request.json` and wire every `pageImages` entry to the matching route metadata after the user confirms the handoff.
 
 When the session is restarted, read `generation-brief.json` only as archived context. A restart with `pendingAction: "agent-restart-from-question-gate"` means ask the Question Gate again before producing a new `.ogdoc`.

@@ -28,6 +28,7 @@ import {
   createAiImagePlan,
   type AgentImageOutputFormat
 } from "./ai-image.js";
+import { createBrandStoreFromScan, getBrandStorePaths, recordCompositionHistory } from "./brand-store.js";
 import { createGenerationBrief } from "./brief.js";
 import { checkRender, lintDesignDocument, lintGenerationBrief, type GenerationControlLintResult } from "./generation-control.js";
 import { createImportedSourceDocument, createImportedSourceProject } from "./import-source.js";
@@ -683,6 +684,33 @@ export async function runCli(argv: string[]): Promise<void> {
     const result = await scanRepo(args.repo ?? process.cwd());
     console.log(JSON.stringify(result, null, 2));
     return;
+  }
+
+  if (command === "brand") {
+    const [subcommand, ...brandRest] = rest;
+    const args = parseArgs(brandRest);
+    const repo = args.repo ?? process.cwd();
+    if (subcommand === "inspect") {
+      const scan = await scanRepo(repo);
+      const brand = await createBrandStoreFromScan(scan);
+      const paths = getBrandStorePaths(repo);
+      const output = { brand, paths };
+      console.log(args.json === "true" ? JSON.stringify(output, null, 2) : `Created ${paths.brandJson}`);
+      return;
+    }
+    if (subcommand === "record-composition") {
+      if (!args.session) throw new Error("--session is required");
+      if (!args.archetype) throw new Error("--archetype is required");
+      const history = await recordCompositionHistory(repo, {
+        sessionId: args.session,
+        archetypeId: args.archetype,
+        conceptThesis: args.concept ?? "Recorded composition archetype.",
+        createdAt: new Date().toISOString()
+      });
+      console.log(JSON.stringify(history, null, 2));
+      return;
+    }
+    throw new Error("Unknown brand command. Use inspect or record-composition.");
   }
 
   if (command === "brief") {
@@ -1507,6 +1535,8 @@ Commands:
   opengraph-creator save --project project.og.json
   opengraph-creator list
   opengraph-creator scan --repo <path>
+  opengraph-creator brand inspect --repo <path> --json true
+  opengraph-creator brand record-composition --repo <path> --session <id> --archetype <recipe-id> --concept "brief concept"
   opengraph-creator brief --repo <path> --name <app> --strategy common|pages|hybrid --mode template|pure-image --reference image.png --out .opengraph-creator/brief.json
   opengraph-creator brief lint --source .opengraph-creator/sessions/<id>/generation-brief.json --repo <path> --id <session-id>
   opengraph-creator assets lint --brief .opengraph-creator/sessions/<id>/generation-brief.json --repo <path> --id <session-id>
