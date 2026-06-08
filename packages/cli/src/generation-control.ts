@@ -1,6 +1,6 @@
 import type { CompositionPlan, Framework, OgLayer, OgProject } from "@opengraph-creator/core";
 import { getRenderableProject, lintCompositionPlan, validateStudioDocument } from "@opengraph-creator/core";
-import { renderProjectToSvg } from "@opengraph-creator/render";
+import { createRenderPlan, renderProjectToSvg } from "@opengraph-creator/render";
 import type { RouteContext } from "./scan.js";
 
 export type GenerationCapability = "available" | "unavailable" | "unknown";
@@ -74,6 +74,7 @@ export interface GenerationControlLintResult {
   errors: string[];
   warnings: string[];
   recovery: string[];
+  data?: Record<string, unknown>;
 }
 
 export interface GenerationBriefLike {
@@ -389,27 +390,59 @@ export function lintDesignDocument(project: OgProject, assets: Record<string, Ui
 export function checkRender(project: OgProject): GenerationControlLintResult {
   const errors: string[] = [];
   const warnings: string[] = [];
+  const renderPlans: Array<{
+    route: string;
+    activePageId?: string;
+    nodeCount: number;
+    visibleNodeCount: number;
+    effectScopes: string[];
+  }> = [];
   const recovery = [
     "Fix the .ogdoc project until renderProjectToSvg produces a nonblank 1200x630 SVG.",
     "Run opengraph-creator render check again before launching Studio or exporting."
   ];
 
-  try {
-    const renderable = project.pages?.length ? getRenderableProject(project, project.activePageId ?? project.pages[0]?.id) : project;
-    const svg = renderProjectToSvg(renderable);
-    if (!svg.includes("<svg")) errors.push("Renderer did not return an SVG document.");
-    if (!/width=["']1200["']/.test(svg) || !/height=["']630["']/.test(svg)) {
-      errors.push("Rendered SVG must be exactly 1200x630.");
+  for (const target of getRenderCheckTargets(project)) {
+    try {
+      const renderable = target.pageId ? getRenderableProject(project, target.pageId) : project;
+      const renderPlan = createRenderPlan(target.pageId ? { ...project, activePageId: target.pageId } : project);
+      const visibleNodeCount = renderPlan.nodes.filter((node) => !node.hidden).length;
+      const routeLabel = target.route ?? "/";
+      const prefix = target.route ? `${target.route}: ` : "";
+
+      renderPlans.push({
+        route: routeLabel,
+        activePageId: target.pageId,
+        nodeCount: renderPlan.nodes.length,
+        visibleNodeCount,
+        effectScopes: [...new Set(renderPlan.nodes.flatMap((node) => node.effectScopes))].sort()
+      });
+
+      const svg = renderProjectToSvg(renderable);
+      if (!svg.includes("<svg")) errors.push(`${prefix}Renderer did not return an SVG document.`);
+      if (!/width=["']1200["']/.test(svg) || !/height=["']630["']/.test(svg)) {
+        errors.push(`${prefix}Rendered SVG must be exactly 1200x630.`);
+      }
+      if (svg.length < 500) warnings.push(`${prefix}Rendered SVG is very small and may be blank or under-specified.`);
+      if (!/(<text|<image|<rect|<ellipse|<path|<foreignObject)/.test(svg)) {
+        errors.push(`${prefix}Rendered SVG does not contain visible drawing primitives.`);
+      }
+      if (visibleNodeCount === 0) {
+        errors.push(`${prefix}Export appears blank because the render plan has no visible nodes.`);
+      }
+    } catch (error) {
+      errors.push(`${target.route ? `${target.route}: ` : ""}Render failed: ${error instanceof Error ? error.message : String(error)}`);
     }
-    if (svg.length < 500) warnings.push("Rendered SVG is very small and may be blank or under-specified.");
-    if (!/(<text|<image|<rect|<ellipse|<path|<foreignObject)/.test(svg)) {
-      errors.push("Rendered SVG does not contain visible drawing primitives.");
-    }
-  } catch (error) {
-    errors.push(`Render failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 
-  return { ok: errors.length === 0, errors, warnings, recovery: errors.length ? recovery : [] };
+  return { ok: errors.length === 0, errors, warnings, recovery: errors.length ? recovery : [], data: { renderPlans } };
+}
+
+function getRenderCheckTargets(project: OgProject): Array<{ route?: string; pageId?: string }> {
+  if (project.pages?.length) {
+    return project.pages.map((page) => ({ route: page.route, pageId: page.id }));
+  }
+  return [{ route: project.targetPages[0] ?? "/" }];
 }
 
 function assertNonEmpty(value: unknown, label: string, errors: string[]): void {

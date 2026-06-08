@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createDefaultProject, type ImageLayer, type OgProject } from "@opengraph-creator/core";
+import { createDefaultProject, createMultiPageProject, type ImageLayer, type OgProject } from "@opengraph-creator/core";
 import {
   checkRender,
   createDefaultAssetPlan,
@@ -116,6 +116,31 @@ describe("generation control", () => {
   it("checks render output through the existing SVG renderer", () => {
     const project = createDefaultProject({ name: "Renderer Check", strategy: "common" });
     expect(checkRender(project)).toMatchObject({ ok: true, errors: [] });
+  });
+
+  it("checks every page variant instead of only the active page", () => {
+    const project = createMultiPageProject(createDefaultProject({ name: "Page Render Check", strategy: "pages", pages: ["/", "/pricing"] }));
+    const brokenPage = project.pages?.find((page) => page.route === "/pricing");
+    if (!brokenPage) throw new Error("missing pricing page");
+    brokenPage.layers = brokenPage.layers.map((layer) => ({ ...layer, hidden: true }));
+
+    const result = checkRender(project);
+
+    expect(result.ok).toBe(false);
+    expect(result.errors.join("\n")).toContain("/pricing");
+    expect(result.errors.join("\n")).toContain("Export appears blank");
+  });
+
+  it("reports render-plan evidence for common and page render checks", () => {
+    const project = createMultiPageProject(createDefaultProject({ name: "Plan Evidence", strategy: "hybrid", pages: ["/", "/features"] }));
+
+    const result = checkRender(project);
+
+    expect(result.ok).toBe(true);
+    expect(result.data?.renderPlans).toEqual([
+      expect.objectContaining({ route: "/", nodeCount: expect.any(Number), visibleNodeCount: expect.any(Number) }),
+      expect.objectContaining({ route: "/features", nodeCount: expect.any(Number), visibleNodeCount: expect.any(Number) })
+    ]);
   });
 });
 
