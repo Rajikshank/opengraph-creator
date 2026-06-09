@@ -47,10 +47,15 @@ await runOpenGraphCreator(["doctor", "--home", home, "--json"]);
 await runOpenGraphCreator(["install-skill", "--agent", "codex", "--home", home]);
 await runOpenGraphCreator(["session", "create", "--repo", appRepo, "--id", sessionId, "--agent", "codex", "--strategy", "hybrid", "--home", home]);
 await runOpenGraphCreator(["brief", "--repo", appRepo, "--name", "Workflow App", "--strategy", "hybrid", "--mode", "template", "--out", briefPath]);
+await runOpenGraphCreator(["brief", "lint", "--source", briefPath, "--repo", appRepo, "--id", sessionId]);
+await runOpenGraphCreator(["assets", "lint", "--brief", briefPath, "--repo", appRepo, "--id", sessionId]);
 await runOpenGraphCreator(["brief", "--repo", appRepo, "--name", "Workflow App", "--strategy", "common", "--mode", "pure-image", "--out", pureBriefPath]);
 await runOpenGraphCreator(["new", "--name", "Workflow App", "--strategy", "pages", "--mode", "pure-image", "--repo", appRepo, "--pages", "/,/pricing", "--out", projectPath, "--library", "true", "--home", home]);
 await runOpenGraphCreator(["document", "pack", "--project", projectPath, "--out", documentPath]);
 await runOpenGraphCreator(["document", "validate", "--source", documentPath]);
+await runOpenGraphCreator(["assets", "lint", "--brief", briefPath, "--document", documentPath, "--repo", appRepo, "--id", sessionId]);
+await runOpenGraphCreator(["design", "lint", "--source", documentPath, "--repo", appRepo, "--id", sessionId]);
+await runOpenGraphCreator(["render", "check", "--source", documentPath, "--repo", appRepo, "--id", sessionId]);
 await runOpenGraphCreator(["variants", "--project", projectPath, "--outDir", variantsDir, "--library", "true", "--home", home]);
 await runOpenGraphCreator(["render", "--project", projectPath, "--out", renderPath]);
 await runOpenGraphCreator(["export", "--project", projectPath, "--format", "webp", "--quality", "82", "--out", exportPath, "--session", sessionId, "--repo", appRepo]);
@@ -73,6 +78,10 @@ const plan = JSON.parse(await readFile(agentPlanPath, "utf8"));
 const previewPlan = JSON.parse(preview.stdout);
 const session = JSON.parse(await readFile(join(appRepo, ".opengraph-creator", "sessions", sessionId, "session.json"), "utf8"));
 const publishRequest = JSON.parse(await readFile(join(appRepo, ".opengraph-creator", "sessions", sessionId, "publish-request.json"), "utf8"));
+const generationLogs = (await readFile(join(appRepo, ".opengraph-creator", "sessions", sessionId, "generation-errors.jsonl"), "utf8"))
+  .trim()
+  .split("\n")
+  .map((line) => JSON.parse(line));
 
 assert(brief.codexPrompt.includes("Workflow App"), "brief did not include Codex prompt context");
 assert(brief.codexPrompt.includes("Route context:"), "brief did not include route context");
@@ -97,6 +106,13 @@ assert(publishRequest.pageImages?.some((item) => item.page === "/pricing" && ite
 assert(session.exports.some((item) => item.path === exportPath && item.format === "webp"), "session did not record workflow export");
 assert(session.exports.some((item) => item.path === "public/og/pricing.webp" && item.page === "/pricing"), "session did not record page-specific export");
 assert(session.publishRequests.some((item) => item.status === "confirmed"), "session did not record confirmed publish request");
+assert(generationLogs.some((item) => item.kind === "brief.lint" && item.ok), "brief lint did not write a recoverable session log entry");
+assert(generationLogs.some((item) => item.kind === "assets.lint" && item.ok), "assets lint did not write a recoverable session log entry");
+assert(generationLogs.some((item) => item.kind === "design.lint" && item.ok), "design lint did not write a recoverable session log entry");
+assert(
+  generationLogs.some((item) => item.kind === "render.check" && item.ok && item.data?.renderPlans?.length === 2),
+  "render check did not write page render-plan evidence to the session log"
+);
 
 console.log(
   JSON.stringify(
