@@ -2,7 +2,7 @@
 name: opengraph-creator
 description: Use when Codex, Claude Code, or OpenCode needs to create, revise, preview, export, or wire editable Open Graph images, social previews, per-page OG images, or .ogdoc Studio documents for an app, website, route, page, launch, blog post, SaaS project, or local repo.
 metadata:
-  opengraph_creator_skill_version: 0.1.8
+  opengraph_creator_skill_version: 0.1.9
 ---
 
 # OpenGraph Creator
